@@ -68,7 +68,6 @@ export class ProcessManager extends EventEmitter<ProcessManagerEvents> {
   }
 
   private spawnPty(sessionId: string, config: AgentConfig): string {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const pty = require("node-pty") as typeof import("node-pty");
 
     const ptyProcess = pty.spawn(config.command, config.args, {
