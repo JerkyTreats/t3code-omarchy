@@ -356,4 +356,63 @@ describe("wsNativeApi", () => {
     });
     expect(received).toHaveLength(1);
   });
+
+  it("dispatches agent output and exit events to subscribers", async () => {
+    setWindowSearch("?ws=ws%3A%2F%2F127.0.0.1%3A4410");
+    const { getOrCreateWsNativeApi } = await import("./wsNativeApi");
+    const api = getOrCreateWsNativeApi();
+
+    const outputEvents: unknown[] = [];
+    const exitEvents: unknown[] = [];
+    const unsubscribeOutput = api.agent.onOutput((event) => {
+      outputEvents.push(event);
+    });
+    const unsubscribeExit = api.agent.onExit((event) => {
+      exitEvents.push(event);
+    });
+
+    const request = api.todos.list();
+    const socket = MockWebSocket.instances[0];
+    await waitForCondition(() => (socket?.sentMessages.length ?? 0) > 0);
+    const requestEnvelope = JSON.parse(socket?.sentMessages[0] ?? "{}") as {
+      id: string;
+    };
+    socket?.emitMessage(
+      JSON.stringify({
+        type: "response",
+        id: requestEnvelope.id,
+        ok: true,
+        result: [],
+      }),
+    );
+    await expect(request).resolves.toEqual([]);
+
+    socket?.emitMessage(
+      JSON.stringify({
+        type: "event",
+        channel: "agent:output",
+        payload: {
+          sessionId: "agent-session-1",
+          stream: "stdout",
+          data: "hello",
+        },
+      }),
+    );
+    socket?.emitMessage(
+      JSON.stringify({
+        type: "event",
+        channel: "agent:exit",
+        payload: {
+          sessionId: "agent-session-1",
+          code: 0,
+          signal: null,
+        },
+      }),
+    );
+
+    await waitForCondition(() => outputEvents.length === 1 && exitEvents.length === 1);
+
+    unsubscribeOutput();
+    unsubscribeExit();
+  });
 });
