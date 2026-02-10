@@ -78,6 +78,7 @@ Runtime command semantics:
 - `If-None-Match` / `If-Modified-Since` preconditions are evaluated before range handling, so satisfied validators return `304` even when a `Range` header is present.
 - Static precondition headers `If-Match` and `If-Unmodified-Since` are enforced with `412 Precondition Failed` semantics.
 - `412` static precondition responses include validator headers (`ETag`, `Last-Modified`) and range capability metadata (`Accept-Ranges`, `Vary: Range`).
+- `416` unsatisfiable-range responses include both range metadata and validators (`Content-Range`, `Accept-Ranges`, `Vary: Range`, `ETag`, `Last-Modified`).
 
 ## Runtime modes
 
