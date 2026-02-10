@@ -562,17 +562,28 @@ export async function startRuntimeApiServer(
 
     if (method === "shell.openInEditor") {
       const parsed = shellOpenInEditorInputSchema.parse(params);
+      const targetPath = path.resolve(parsed.cwd);
+      let targetStats: fs.Stats;
+      try {
+        targetStats = fs.statSync(targetPath);
+      } catch {
+        throw new Error(`Editor target does not exist: ${targetPath}`);
+      }
+      if (!targetStats.isDirectory()) {
+        throw new Error(`Editor target is not a directory: ${targetPath}`);
+      }
+
       const editor = EDITORS.find((entry) => entry.id === parsed.editor);
       if (!editor) {
         throw new Error(`Unknown editor: ${parsed.editor}`);
       }
 
       if (!editor.command) {
-        openPathInFileManager(parsed.cwd);
+        openPathInFileManager(targetPath);
         return null;
       }
 
-      const child = spawn(editor.command, [parsed.cwd], {
+      const child = spawn(editor.command, [targetPath], {
         detached: true,
         stdio: "ignore",
       });

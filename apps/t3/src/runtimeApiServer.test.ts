@@ -870,6 +870,70 @@ describe("runtimeApiServer", () => {
     client.socket.close();
   });
 
+  it("returns structured errors when shell.openInEditor target is missing", async () => {
+    const server = await startRuntimeApiServer({
+      port: 0,
+      launchCwd: process.cwd(),
+    });
+    servers.push(server);
+
+    const client = await connectClient(server.wsUrl);
+    await client.nextMessage();
+
+    const missingPath = path.join(process.cwd(), `missing-editor-target-${Date.now()}`);
+    const response = await sendRequest(
+      client.socket,
+      client.nextMessage,
+      "shell-missing-path-1",
+      "shell.openInEditor",
+      {
+        cwd: missingPath,
+        editor: "file-manager",
+      },
+    );
+    expect(response.ok).toBe(false);
+    if (response.ok) {
+      throw new Error("Expected missing shell path request to fail.");
+    }
+    expect(response.error?.code).toBe("request_failed");
+    expect(response.error?.message).toContain("Editor target does not exist");
+
+    client.socket.close();
+  });
+
+  it("returns structured errors when shell.openInEditor target is not a directory", async () => {
+    const server = await startRuntimeApiServer({
+      port: 0,
+      launchCwd: process.cwd(),
+    });
+    servers.push(server);
+
+    const client = await connectClient(server.wsUrl);
+    await client.nextMessage();
+
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), "t3-shell-target-file-"));
+    const filePath = path.join(tempDir, "target.txt");
+    writeFileSync(filePath, "not-a-dir", "utf8");
+    const response = await sendRequest(
+      client.socket,
+      client.nextMessage,
+      "shell-file-path-1",
+      "shell.openInEditor",
+      {
+        cwd: filePath,
+        editor: "cursor",
+      },
+    );
+    expect(response.ok).toBe(false);
+    if (response.ok) {
+      throw new Error("Expected file-path shell target request to fail.");
+    }
+    expect(response.error?.code).toBe("request_failed");
+    expect(response.error?.message).toContain("Editor target is not a directory");
+
+    client.socket.close();
+  });
+
   it("returns structured errors for invalid terminal.run payloads", async () => {
     const server = await startRuntimeApiServer({
       port: 0,
