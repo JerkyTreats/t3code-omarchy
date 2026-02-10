@@ -78,6 +78,7 @@ Runtime command semantics:
 - `If-None-Match` / `If-Modified-Since` preconditions are evaluated before range handling, so satisfied validators return `304` even when a `Range` header is present.
 - Static precondition headers `If-Match` and `If-Unmodified-Since` are enforced with `412 Precondition Failed` semantics.
 - Failed `If-Match` checks take precedence over cache validators (e.g. matching `If-None-Match` still results in `412` if `If-Match` fails).
+- Failed `If-Unmodified-Since` checks also return `412` before cache-based `304` handling.
 - Wildcard validators are supported where applicable (`If-None-Match: *`, `If-Match: *`).
 - Strong/weak validator semantics follow HTTP rules: weak ETags participate in `If-None-Match` weak comparison, but are rejected for strong-only checks (`If-Match`, `If-Range`).
 - `412` static precondition responses include validator headers (`ETag`, `Last-Modified`) and range capability metadata (`Accept-Ranges`, `Vary: Range`).
