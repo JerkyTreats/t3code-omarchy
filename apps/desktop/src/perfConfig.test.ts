@@ -356,4 +356,52 @@ describe("toggle fallback consistency", () => {
       }),
     ).toBe(true);
   });
+
+  it("accepts the same explicit truthy aliases for all perf toggles", () => {
+    const truthyAliases = ["1", "true", "TRUE", " yes ", "ON"];
+    for (const value of truthyAliases) {
+      expect(
+        shouldRunTerminalPerfInteractions({
+          T3CODE_DESKTOP_PERF_RUN_TERMINAL: value,
+          CI: "true",
+        }),
+      ).toBe(true);
+      expect(
+        shouldRunOptionalRendererPerfInteractions({
+          T3CODE_DESKTOP_PERF_RUN_OPTIONAL_RENDERER: value,
+          CI: "true",
+        }),
+      ).toBe(true);
+      expect(
+        shouldRunBenchmarkThreadSweep({
+          T3CODE_DESKTOP_PERF_RUN_BENCHMARK_SWEEP: value,
+          CI: "true",
+        }),
+      ).toBe(true);
+    }
+  });
+
+  it("accepts the same explicit falsy aliases for all perf toggles", () => {
+    const falsyAliases = ["0", "false", "FALSE", " no ", "OFF"];
+    for (const value of falsyAliases) {
+      expect(
+        shouldRunTerminalPerfInteractions({
+          T3CODE_DESKTOP_PERF_RUN_TERMINAL: value,
+          CI: "false",
+        }),
+      ).toBe(false);
+      expect(
+        shouldRunOptionalRendererPerfInteractions({
+          T3CODE_DESKTOP_PERF_RUN_OPTIONAL_RENDERER: value,
+          CI: "false",
+        }),
+      ).toBe(false);
+      expect(
+        shouldRunBenchmarkThreadSweep({
+          T3CODE_DESKTOP_PERF_RUN_BENCHMARK_SWEEP: value,
+          CI: "false",
+        }),
+      ).toBe(false);
+    }
+  });
 });
