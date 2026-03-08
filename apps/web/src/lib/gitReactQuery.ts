@@ -6,11 +6,13 @@ const GIT_STATUS_STALE_TIME_MS = 5_000;
 const GIT_STATUS_REFETCH_INTERVAL_MS = 15_000;
 const GIT_BRANCHES_STALE_TIME_MS = 15_000;
 const GIT_BRANCHES_REFETCH_INTERVAL_MS = 60_000;
+const GIT_REPOSITORY_CONTEXT_STALE_TIME_MS = 30_000;
 
 export const gitQueryKeys = {
   all: ["git"] as const,
   status: (cwd: string | null) => ["git", "status", cwd] as const,
   branches: (cwd: string | null) => ["git", "branches", cwd] as const,
+  repositoryContext: (cwd: string | null) => ["git", "repository-context", cwd] as const,
 };
 
 export const gitMutationKeys = {
@@ -53,6 +55,21 @@ export function gitBranchesQueryOptions(cwd: string | null) {
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
     refetchInterval: GIT_BRANCHES_REFETCH_INTERVAL_MS,
+  });
+}
+
+export function gitRepositoryContextQueryOptions(cwd: string | null) {
+  return queryOptions({
+    queryKey: gitQueryKeys.repositoryContext(cwd),
+    queryFn: async () => {
+      const api = ensureNativeApi();
+      if (!cwd) throw new Error("Git repository context is unavailable.");
+      return api.git.repositoryContext({ cwd });
+    },
+    enabled: cwd !== null,
+    staleTime: GIT_REPOSITORY_CONTEXT_STALE_TIME_MS,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
 }
 

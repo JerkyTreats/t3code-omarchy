@@ -826,6 +826,64 @@ const makeGitCore = Effect.gen(function* () {
       Effect.map((trimmed) => (trimmed.length > 0 ? trimmed : null)),
     );
 
+  const getRepositoryContext: GitCoreShape["getRepositoryContext"] = (cwd) =>
+    Effect.gen(function* () {
+      const repoRootResult = yield* executeGit(
+        "GitCore.getRepositoryContext.repoRoot",
+        cwd,
+        ["rev-parse", "--path-format=absolute", "--show-toplevel"],
+        {
+          allowNonZeroExit: true,
+          timeoutMs: 5_000,
+        },
+      );
+
+      if (repoRootResult.code !== 0) {
+        const stderr = repoRootResult.stderr.trim();
+        if (stderr.toLowerCase().includes("not a git repository")) {
+          return {
+            isRepo: false,
+            repoRoot: null,
+            gitDir: null,
+            commonDir: null,
+            isWorktree: false,
+          };
+        }
+        return yield* createGitCommandError(
+          "GitCore.getRepositoryContext.repoRoot",
+          cwd,
+          ["rev-parse", "--path-format=absolute", "--show-toplevel"],
+          stderr.length > 0 ? stderr : "Unable to resolve git repository root.",
+        );
+      }
+
+      const repoRoot = repoRootResult.stdout.trim();
+      const [gitDir, commonDir] = yield* Effect.all(
+        [
+          runGitStdout("GitCore.getRepositoryContext.gitDir", cwd, [
+            "rev-parse",
+            "--path-format=absolute",
+            "--git-dir",
+          ]).pipe(Effect.map((stdout) => stdout.trim())),
+          runGitStdout("GitCore.getRepositoryContext.commonDir", cwd, [
+            "rev-parse",
+            "--path-format=absolute",
+            "--git-common-dir",
+          ]).pipe(Effect.map((stdout) => stdout.trim())),
+        ],
+        { concurrency: "unbounded" },
+      );
+
+      return {
+        isRepo: true,
+        repoRoot: repoRoot.length > 0 ? repoRoot : null,
+        gitDir: gitDir.length > 0 ? gitDir : null,
+        commonDir: commonDir.length > 0 ? commonDir : null,
+        isWorktree: gitDir.length > 0 && commonDir.length > 0 && gitDir !== commonDir,
+      };
+    });
+
+
   const listBranches: GitCoreShape["listBranches"] = (input) =>
     Effect.gen(function* () {
       const branchRecencyPromise = readBranchRecency(input.cwd).pipe(
@@ -1195,6 +1253,7 @@ const makeGitCore = Effect.gen(function* () {
     pullCurrentBranch,
     readRangeContext,
     readConfigValue,
+    getRepositoryContext,
     listBranches,
     createWorktree,
     removeWorktree,

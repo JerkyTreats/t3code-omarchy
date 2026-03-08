@@ -279,6 +279,25 @@ function createGitHubCliWithFakeGh(scenario: FakeGhScenario = {}): {
             return value.length > 0 ? value : null;
           }),
         ),
+      getAuthStatus: () =>
+        Effect.succeed({
+          state: "success",
+          active: true,
+          host: "github.com",
+          login: "test",
+          tokenSource: "keyring",
+          scopes: ["repo"],
+          gitProtocol: "https" as const,
+        }),
+      loginWithBrowser: () => Effect.void,
+      getRepository: () =>
+        Effect.succeed({
+          nameWithOwner: "pingdotgg/codething-mvp",
+          url: "https://github.com/pingdotgg/codething-mvp",
+          description: null,
+          defaultBranch: scenario.defaultBranch ?? "main",
+        }),
+      listIssues: () => Effect.succeed([]),
     },
     ghCalls,
   };

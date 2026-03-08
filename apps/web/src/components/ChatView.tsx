@@ -47,12 +47,16 @@ import {
   type VirtualItem,
   useVirtualizer,
 } from "@tanstack/react-virtual";
-import { gitBranchesQueryOptions, gitCreateWorktreeMutationOptions } from "~/lib/gitReactQuery";
+import {
+  gitBranchesQueryOptions,
+  gitCreateWorktreeMutationOptions,
+  gitRepositoryContextQueryOptions,
+} from "~/lib/gitReactQuery";
 import { projectSearchEntriesQueryOptions } from "~/lib/projectReactQuery";
 import { serverConfigQueryOptions, serverQueryKeys } from "~/lib/serverReactQuery";
 
 import { isElectron } from "../env";
-import { parseDiffRouteSearch, stripDiffSearchParams } from "../diffRouteSearch";
+import { parseDiffRouteSearch, stripDiffSearchParams, stripGitHubSearchParams } from "../diffRouteSearch";
 import {
   type ComposerSlashCommand,
   type ComposerTrigger,
@@ -107,6 +111,7 @@ import {
   type TurnDiffSummary,
 } from "../types";
 import { basenameOfPath, getVscodeIconUrlForEntry } from "../vscode-icons";
+import { useMediaQuery } from "../hooks/useMediaQuery";
 import { useTheme } from "../hooks/useTheme";
 import { useTurnDiffSummaries } from "../hooks/useTurnDiffSummaries";
 import {
@@ -116,6 +121,7 @@ import {
 } from "../lib/turnDiffTree";
 import BranchToolbar from "./BranchToolbar";
 import GitActionsControl from "./GitActionsControl";
+import GitHubPanel from "./GitHubPanel";
 import {
   isOpenFavoriteEditorShortcut,
   resolveShortcutCommand,
@@ -124,6 +130,8 @@ import {
 import ChatMarkdown from "./ChatMarkdown";
 import ThreadTerminalDrawer from "./ThreadTerminalDrawer";
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
+import { Sheet, SheetPopup } from "./ui/sheet";
+import { Sidebar, SidebarProvider, SidebarRail } from "./ui/sidebar";
 import {
   BotIcon,
   CameraIcon,
@@ -267,6 +275,8 @@ const COMPOSER_PATH_QUERY_DEBOUNCE_MS = 120;
 const SCRIPT_TERMINAL_COLS = 120;
 const SCRIPT_TERMINAL_ROWS = 30;
 const WORKTREE_BRANCH_PREFIX = "t3code";
+const GITHUB_PANEL_SHEET_MEDIA_QUERY = "(max-width: 1180px)";
+const GITHUB_PANEL_INLINE_DEFAULT_WIDTH = "clamp(24rem,36vw,34rem)";
 
 function readLastInvokedScriptByProjectFromStorage(): Record<string, string> {
   const stored = localStorage.getItem(LAST_INVOKED_SCRIPT_BY_PROJECT_KEY);
@@ -771,6 +781,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
     [rawSearch],
   );
   const diffOpen = diffSearch.diff === "1";
+  const githubOpen = diffSearch.github === "1";
   const activeThreadId = activeThread?.id ?? null;
   const activeLatestTurn = activeThread?.latestTurn ?? null;
   const latestTurnSettled = isLatestTurnSettled(activeLatestTurn, activeThread?.session ?? null);
@@ -1178,7 +1189,9 @@ export default function ChatView({ threadId }: ChatViewProps) {
     latestTurnSettled,
     timelineEntries,
   ]);
-  const gitCwd = activeThread?.worktreePath ?? activeProject?.cwd ?? null;
+  const projectGitContextQuery = useQuery(gitRepositoryContextQueryOptions(activeProject?.cwd ?? null));
+  const projectGitCwd = projectGitContextQuery.data?.repoRoot ?? activeProject?.cwd ?? null;
+  const gitCwd = activeThread?.worktreePath ?? projectGitCwd;
   const composerTriggerKind = composerTrigger?.kind ?? null;
   const pathTriggerQuery = composerTrigger?.kind === "path" ? composerTrigger.query : "";
   const isPathTrigger = composerTriggerKind === "path";
@@ -1299,7 +1312,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
     });
   }, [activeProjectCwd, activeThreadWorktreePath]);
   // Default true while loading to avoid toolbar flicker.
-  const isGitRepo = branchesQuery.data?.isRepo ?? true;
+  const isGitRepo = projectGitContextQuery.data?.isRepo ?? branchesQuery.data?.isRepo ?? true;
   const splitTerminalShortcutLabel = useMemo(
     () => shortcutLabelForCommand(keybindings, "terminal.split"),
     [keybindings],
@@ -1316,13 +1329,47 @@ export default function ChatView({ threadId }: ChatViewProps) {
     () => shortcutLabelForCommand(keybindings, "diff.toggle"),
     [keybindings],
   );
+  const shouldUseGitHubSheet = useMediaQuery(GITHUB_PANEL_SHEET_MEDIA_QUERY);
+  const closeGitHubPanel = useCallback(() => {
+    void navigate({
+      to: "/$threadId",
+      params: { threadId },
+      replace: true,
+      search: (previous) => stripGitHubSearchParams(previous),
+    });
+  }, [navigate, threadId]);
+  const onToggleGitHub = useCallback(() => {
+    void navigate({
+      to: "/$threadId",
+      params: { threadId },
+      replace: true,
+      search: (previous) => {
+        const withoutPanels = stripDiffSearchParams(stripGitHubSearchParams(previous));
+        return githubOpen ? withoutPanels : { ...withoutPanels, github: "1" };
+      },
+    });
+  }, [githubOpen, navigate, threadId]);
+  const onGitHubPanelOpenChange = useCallback(
+    (open: boolean) => {
+      if (open) {
+        if (!githubOpen) {
+          onToggleGitHub();
+        }
+        return;
+      }
+      if (githubOpen) {
+        closeGitHubPanel();
+      }
+    },
+    [closeGitHubPanel, githubOpen, onToggleGitHub],
+  );
   const onToggleDiff = useCallback(() => {
     void navigate({
       to: "/$threadId",
       params: { threadId },
       replace: true,
       search: (previous) => {
-        const rest = stripDiffSearchParams(previous);
+        const rest = stripGitHubSearchParams(stripDiffSearchParams(previous));
         return diffOpen ? rest : { ...rest, diff: "1" };
       },
     });
@@ -3437,7 +3484,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
     );
   }
 
-  return (
+  const chatContent = (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden bg-background">
       {/* Top bar */}
       <header
@@ -3447,7 +3494,6 @@ export default function ChatView({ threadId }: ChatViewProps) {
         )}
       >
         <ChatHeader
-          activeThreadId={activeThread.id}
           activeThreadTitle={activeThread.title}
           activeProjectName={activeProject?.name}
           isGitRepo={isGitRepo}
@@ -3460,13 +3506,16 @@ export default function ChatView({ threadId }: ChatViewProps) {
           availableEditors={availableEditors}
           diffToggleShortcutLabel={diffPanelShortcutLabel}
           gitCwd={gitCwd}
+          projectGitCwd={projectGitCwd}
           diffOpen={diffOpen}
+          githubOpen={githubOpen}
           onRunProjectScript={(script) => {
             void runProjectScript(script);
           }}
           onAddProjectScript={saveProjectScript}
           onUpdateProjectScript={updateProjectScript}
           onToggleDiff={onToggleDiff}
+          onToggleGitHub={onToggleGitHub}
         />
       </header>
 
@@ -4044,10 +4093,47 @@ export default function ChatView({ threadId }: ChatViewProps) {
       )}
     </div>
   );
+
+  if (shouldUseGitHubSheet) {
+    return (
+      <>
+        {chatContent}
+        <Sheet open={githubOpen} onOpenChange={onGitHubPanelOpenChange}>
+          <SheetPopup
+            side="right"
+            showCloseButton={false}
+            keepMounted
+            className="w-[min(88vw,680px)] max-w-[680px] p-0"
+          >
+            <GitHubPanel gitCwd={gitCwd} projectGitCwd={projectGitCwd} activeThreadId={activeThread.id} />
+          </SheetPopup>
+        </Sheet>
+      </>
+    );
+  }
+
+  return (
+    <SidebarProvider
+      defaultOpen={false}
+      open={githubOpen}
+      onOpenChange={onGitHubPanelOpenChange}
+      className="w-full min-h-0 flex-1 bg-transparent"
+      style={{ "--sidebar-width": GITHUB_PANEL_INLINE_DEFAULT_WIDTH } as React.CSSProperties}
+    >
+      {chatContent}
+      <Sidebar
+        side="right"
+        collapsible="offcanvas"
+        className="border-l border-border bg-card text-foreground"
+      >
+        <GitHubPanel gitCwd={gitCwd} projectGitCwd={projectGitCwd} activeThreadId={activeThread.id} />
+        <SidebarRail />
+      </Sidebar>
+    </SidebarProvider>
+  );
 }
 
 interface ChatHeaderProps {
-  activeThreadId: ThreadId;
   activeThreadTitle: string;
   activeProjectName: string | undefined;
   isGitRepo: boolean;
@@ -4058,15 +4144,17 @@ interface ChatHeaderProps {
   availableEditors: ReadonlyArray<EditorId>;
   diffToggleShortcutLabel: string | null;
   gitCwd: string | null;
+  projectGitCwd: string | null;
   diffOpen: boolean;
+  githubOpen: boolean;
   onRunProjectScript: (script: ProjectScript) => void;
   onAddProjectScript: (input: NewProjectScriptInput) => Promise<void>;
   onUpdateProjectScript: (scriptId: string, input: NewProjectScriptInput) => Promise<void>;
   onToggleDiff: () => void;
+  onToggleGitHub: () => void;
 }
 
 const ChatHeader = memo(function ChatHeader({
-  activeThreadId,
   activeThreadTitle,
   activeProjectName,
   isGitRepo,
@@ -4077,11 +4165,14 @@ const ChatHeader = memo(function ChatHeader({
   availableEditors,
   diffToggleShortcutLabel,
   gitCwd,
+  projectGitCwd,
   diffOpen,
+  githubOpen,
   onRunProjectScript,
   onAddProjectScript,
   onUpdateProjectScript,
   onToggleDiff,
+  onToggleGitHub,
 }: ChatHeaderProps) {
   return (
     <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -4122,7 +4213,9 @@ const ChatHeader = memo(function ChatHeader({
             openInCwd={openInCwd}
           />
         )}
-        {activeProjectName && <GitActionsControl gitCwd={gitCwd} activeThreadId={activeThreadId} />}
+        {activeProjectName && (
+          <GitActionsControl gitCwd={projectGitCwd ?? gitCwd} open={githubOpen} onToggle={onToggleGitHub} />
+        )}
         <Tooltip>
           <TooltipTrigger
             render={

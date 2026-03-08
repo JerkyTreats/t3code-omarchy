@@ -16,6 +16,7 @@ import type {
   GitInitInput,
   GitListBranchesInput,
   GitListBranchesResult,
+  GitRepositoryContextResult,
   GitPullResult,
   GitRemoveWorktreeInput,
   GitStatusInput,
@@ -109,6 +110,13 @@ export interface GitCoreShape {
     cwd: string,
     key: string,
   ) => Effect.Effect<string | null, GitCommandError>;
+
+  /**
+   * Resolve repository root and git dir metadata for a cwd.
+   */
+  readonly getRepositoryContext: (
+    cwd: string,
+  ) => Effect.Effect<GitRepositoryContextResult, GitCommandError>;
 
   /**
    * List local + remote branches and branch metadata.

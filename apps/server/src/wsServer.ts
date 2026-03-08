@@ -46,6 +46,7 @@ import { WebSocketServer, type WebSocket } from "ws";
 
 import { createLogger } from "./logger";
 import { GitManager } from "./git/Services/GitManager.ts";
+import { GitHubManager } from "./git/Services/GitHubManager.ts";
 import { TerminalManager } from "./terminal/Services/Manager.ts";
 import { Keybindings } from "./keybindings";
 import { searchWorkspaceEntries } from "./workspaceEntries";
@@ -213,6 +214,7 @@ export type ServerCoreRuntimeServices =
 export type ServerRuntimeServices =
   | ServerCoreRuntimeServices
   | GitManager
+  | GitHubManager
   | GitCore
   | TerminalManager
   | Keybindings
@@ -251,6 +253,7 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
   const availableEditors = resolveAvailableEditors();
 
   const gitManager = yield* GitManager;
+  const gitHubManager = yield* GitHubManager;
   const terminalManager = yield* TerminalManager;
   const keybindingsManager = yield* Keybindings;
   const providerHealth = yield* ProviderHealth;
@@ -844,6 +847,26 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
       case WS_METHODS.gitInit: {
         const body = stripRequestTag(request.body);
         return yield* git.initRepo(body);
+      }
+
+      case WS_METHODS.gitRepositoryContext: {
+        const body = stripRequestTag(request.body);
+        return yield* git.getRepositoryContext(body.cwd);
+      }
+
+      case WS_METHODS.githubStatus: {
+        const body = stripRequestTag(request.body);
+        return yield* gitHubManager.status(body);
+      }
+
+      case WS_METHODS.githubLogin: {
+        const body = stripRequestTag(request.body);
+        return yield* gitHubManager.login(body);
+      }
+
+      case WS_METHODS.githubListIssues: {
+        const body = stripRequestTag(request.body);
+        return yield* gitHubManager.listIssues(body);
       }
 
       case WS_METHODS.terminalOpen: {

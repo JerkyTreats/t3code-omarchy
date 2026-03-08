@@ -6,6 +6,8 @@ import type {
   GitInitInput,
   GitListBranchesInput,
   GitListBranchesResult,
+  GitRepositoryContextInput,
+  GitRepositoryContextResult,
   GitPullInput,
   GitPullResult,
   GitRemoveWorktreeInput,
@@ -14,6 +16,13 @@ import type {
   GitStatusInput,
   GitStatusResult,
 } from "./git";
+import type {
+  GitHubListIssuesInput,
+  GitHubListIssuesResult,
+  GitHubLoginInput,
+  GitHubStatusInput,
+  GitHubStatusResult,
+} from "./github";
 import type {
   ProjectSearchEntriesInput,
   ProjectSearchEntriesResult,
@@ -140,10 +149,16 @@ export interface NativeApi {
     createBranch: (input: GitCreateBranchInput) => Promise<void>;
     checkout: (input: GitCheckoutInput) => Promise<void>;
     init: (input: GitInitInput) => Promise<void>;
+    repositoryContext: (input: GitRepositoryContextInput) => Promise<GitRepositoryContextResult>;
     // Stacked action API
     pull: (input: GitPullInput) => Promise<GitPullResult>;
     status: (input: GitStatusInput) => Promise<GitStatusResult>;
     runStackedAction: (input: GitRunStackedActionInput) => Promise<GitRunStackedActionResult>;
+  };
+  github: {
+    status: (input: GitHubStatusInput) => Promise<GitHubStatusResult>;
+    login: (input: GitHubLoginInput) => Promise<GitHubStatusResult>;
+    listIssues: (input: GitHubListIssuesInput) => Promise<GitHubListIssuesResult>;
   };
   contextMenu: {
     show: <T extends string>(

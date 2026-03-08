@@ -14,6 +14,12 @@ Desktop chat includes a `Screenshot` button that triggers the Omarchy screenshot
 
 When T3 appearance is set to `System`, the desktop app inherits the active Omarchy theme palette and light or dark mode from the current Omarchy theme.
 
+### GitHub Panel
+
+Desktop chat now includes a project scoped GitHub panel in the header. 
+
+It surfaces local Git actions such as commit and push, verifies `gh` authentication, and lists repository issues.
+
 ## How to use
 
 > [!WARNING]

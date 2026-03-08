@@ -93,6 +93,11 @@ export const GitInitInput = Schema.Struct({
 });
 export type GitInitInput = typeof GitInitInput.Type;
 
+export const GitRepositoryContextInput = Schema.Struct({
+  cwd: TrimmedNonEmptyStringSchema,
+});
+export type GitRepositoryContextInput = typeof GitRepositoryContextInput.Type;
+
 // RPC Results
 
 const GitStatusPr = Schema.Struct({
@@ -130,6 +135,15 @@ export const GitListBranchesResult = Schema.Struct({
   isRepo: Schema.Boolean,
 });
 export type GitListBranchesResult = typeof GitListBranchesResult.Type;
+
+export const GitRepositoryContextResult = Schema.Struct({
+  isRepo: Schema.Boolean,
+  repoRoot: Schema.NullOr(TrimmedNonEmptyStringSchema),
+  gitDir: Schema.NullOr(TrimmedNonEmptyStringSchema),
+  commonDir: Schema.NullOr(TrimmedNonEmptyStringSchema),
+  isWorktree: Schema.Boolean,
+});
+export type GitRepositoryContextResult = typeof GitRepositoryContextResult.Type;
 
 export const GitCreateWorktreeResult = Schema.Struct({
   worktree: GitWorktree,

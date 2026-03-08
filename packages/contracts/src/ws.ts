@@ -15,11 +15,13 @@ import {
   GitCreateWorktreeInput,
   GitInitInput,
   GitListBranchesInput,
+  GitRepositoryContextInput,
   GitPullInput,
   GitRemoveWorktreeInput,
   GitRunStackedActionInput,
   GitStatusInput,
 } from "./git";
+import { GitHubListIssuesInput, GitHubLoginInput, GitHubStatusInput } from "./github";
 import {
   TerminalClearInput,
   TerminalCloseInput,
@@ -55,6 +57,12 @@ export const WS_METHODS = {
   gitCreateBranch: "git.createBranch",
   gitCheckout: "git.checkout",
   gitInit: "git.init",
+  gitRepositoryContext: "git.repositoryContext",
+
+  // GitHub methods
+  githubStatus: "github.status",
+  githubLogin: "github.login",
+  githubListIssues: "github.listIssues",
 
   // Terminal methods
   terminalOpen: "terminal.open",
@@ -117,6 +125,12 @@ const WebSocketRequestBody = Schema.Union([
   tagRequestBody(WS_METHODS.gitCreateBranch, GitCreateBranchInput),
   tagRequestBody(WS_METHODS.gitCheckout, GitCheckoutInput),
   tagRequestBody(WS_METHODS.gitInit, GitInitInput),
+  tagRequestBody(WS_METHODS.gitRepositoryContext, GitRepositoryContextInput),
+
+  // GitHub methods
+  tagRequestBody(WS_METHODS.githubStatus, GitHubStatusInput),
+  tagRequestBody(WS_METHODS.githubLogin, GitHubLoginInput),
+  tagRequestBody(WS_METHODS.githubListIssues, GitHubListIssuesInput),
 
   // Terminal methods
   tagRequestBody(WS_METHODS.terminalOpen, TerminalOpenInput),

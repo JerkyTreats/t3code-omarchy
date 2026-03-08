@@ -1,0 +1,80 @@
+import { Schema } from "effect";
+
+import { IsoDateTime, PositiveInt, TrimmedNonEmptyString } from "./baseSchemas";
+
+const GitHubHostname = TrimmedNonEmptyString;
+const GitHubProtocol = Schema.Literals(["https", "ssh"]);
+const GitHubIssueListState = Schema.Literals(["open", "closed", "all"]);
+const GitHubIssueState = Schema.Literals(["open", "closed"]);
+
+export const GitHubRepository = Schema.Struct({
+  nameWithOwner: TrimmedNonEmptyString,
+  url: Schema.String,
+  description: Schema.NullOr(Schema.String),
+  defaultBranch: Schema.NullOr(TrimmedNonEmptyString),
+});
+export type GitHubRepository = typeof GitHubRepository.Type;
+
+export const GitHubIssueLabel = Schema.Struct({
+  name: TrimmedNonEmptyString,
+  color: Schema.NullOr(TrimmedNonEmptyString),
+});
+export type GitHubIssueLabel = typeof GitHubIssueLabel.Type;
+
+export const GitHubIssueAssignee = Schema.Struct({
+  login: TrimmedNonEmptyString,
+});
+export type GitHubIssueAssignee = typeof GitHubIssueAssignee.Type;
+
+export const GitHubIssue = Schema.Struct({
+  number: PositiveInt,
+  title: TrimmedNonEmptyString,
+  state: GitHubIssueState,
+  url: Schema.String,
+  createdAt: IsoDateTime,
+  updatedAt: IsoDateTime,
+  labels: Schema.Array(GitHubIssueLabel),
+  assignees: Schema.Array(GitHubIssueAssignee),
+  author: Schema.NullOr(TrimmedNonEmptyString),
+});
+export type GitHubIssue = typeof GitHubIssue.Type;
+
+export const GitHubStatusInput = Schema.Struct({
+  cwd: Schema.NullOr(TrimmedNonEmptyString),
+  hostname: Schema.optional(GitHubHostname),
+});
+export type GitHubStatusInput = typeof GitHubStatusInput.Type;
+
+export const GitHubLoginInput = Schema.Struct({
+  cwd: Schema.NullOr(TrimmedNonEmptyString),
+  hostname: Schema.optional(GitHubHostname),
+  gitProtocol: Schema.optional(GitHubProtocol),
+});
+export type GitHubLoginInput = typeof GitHubLoginInput.Type;
+
+export const GitHubListIssuesInput = Schema.Struct({
+  cwd: Schema.NullOr(TrimmedNonEmptyString),
+  state: Schema.optional(GitHubIssueListState),
+  limit: Schema.optional(PositiveInt),
+});
+export type GitHubListIssuesInput = typeof GitHubListIssuesInput.Type;
+
+export const GitHubStatusResult = Schema.Struct({
+  installed: Schema.Boolean,
+  authenticated: Schema.Boolean,
+  hostname: GitHubHostname,
+  accountLogin: Schema.NullOr(TrimmedNonEmptyString),
+  gitProtocol: Schema.NullOr(GitHubProtocol),
+  tokenSource: Schema.NullOr(TrimmedNonEmptyString),
+  scopes: Schema.Array(TrimmedNonEmptyString),
+  repo: Schema.NullOr(GitHubRepository),
+});
+export type GitHubStatusResult = typeof GitHubStatusResult.Type;
+
+export const GitHubListIssuesResult = Schema.Struct({
+  repo: Schema.NullOr(GitHubRepository),
+  issues: Schema.Array(GitHubIssue),
+});
+export type GitHubListIssuesResult = typeof GitHubListIssuesResult.Type;
+
+export type GitHubIssueListState = typeof GitHubIssueListState.Type;

@@ -170,6 +170,12 @@ export function createWsNativeApi(): NativeApi {
       createBranch: (input) => transport.request(WS_METHODS.gitCreateBranch, input),
       checkout: (input) => transport.request(WS_METHODS.gitCheckout, input),
       init: (input) => transport.request(WS_METHODS.gitInit, input),
+      repositoryContext: (input) => transport.request(WS_METHODS.gitRepositoryContext, input),
+    },
+    github: {
+      status: (input) => transport.request(WS_METHODS.githubStatus, input),
+      login: (input) => transport.request(WS_METHODS.githubLogin, input),
+      listIssues: (input) => transport.request(WS_METHODS.githubListIssues, input),
     },
     contextMenu: {
       show: async <T extends string>(
