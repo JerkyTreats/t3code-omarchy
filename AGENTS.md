@@ -11,6 +11,20 @@ T3 Code is a minimal web GUI for using code agents like Codex and Claude Code (c
 
 This repository is a VERY EARLY WIP. Proposing sweeping changes that improve long-term maintainability is encouraged.
 
+## Governance Index
+
+- [Commit Policy](governance/commit_policy.md)
+- [Compatibility Policy](governance/compatibility_policy.md)
+- [Docs Style Policy](governance/docs_style_policy.md)
+- [Policy Proposal Flow](governance/policy_proposal_flow.md)
+- [Complex Change Workflow Governance](governance/complex_change_workflow.md)
+
+## Governance Rules
+
+- For any request that asks for a commit or amend, review [Commit Policy](governance/commit_policy.md) before running `git commit` or `git commit --amend`.
+- For any request to edit `AGENTS.md` or files under `governance/`, review [Policy Proposal Flow](governance/policy_proposal_flow.md) before editing.
+- Complex workflow mode is opt in and not enforced by CI.
+
 ## Core Priorities
 
 1. Performance first.
