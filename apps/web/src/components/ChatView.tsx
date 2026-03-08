@@ -154,7 +154,6 @@ import {
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
-import { Separator } from "./ui/separator";
 import { Group, GroupSeparator } from "./ui/group";
 import {
   Menu,
@@ -3692,6 +3691,61 @@ export default function ChatView({ threadId }: ChatViewProps) {
                   ))}
                 </div>
               )}
+              {!isComposerApprovalState ? (
+                <div className="pointer-events-none absolute right-3 top-3 z-10 flex items-center gap-1.5 sm:right-4 sm:top-3.5">
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <Button
+                          variant="outline"
+                          size="icon-sm"
+                          className="pointer-events-auto rounded-full border-border/60 bg-background/80 text-muted-foreground/75 shadow-xs/5 backdrop-blur-sm hover:bg-background hover:text-foreground"
+                          onClick={() =>
+                            void handleRuntimeModeChange(
+                              runtimeMode === "full-access"
+                                ? "approval-required"
+                                : "full-access",
+                            )
+                          }
+                          aria-label={
+                            runtimeMode === "full-access"
+                              ? "Switch to approval required mode"
+                              : "Switch to full access mode"
+                          }
+                        >
+                          {runtimeMode === "full-access" ? <LockOpenIcon /> : <LockIcon />}
+                        </Button>
+                      }
+                    />
+                    <TooltipPopup side="top">
+                      {runtimeMode === "full-access"
+                        ? "Full access active — click to require approvals"
+                        : "Approval required — click for full access"}
+                    </TooltipPopup>
+                  </Tooltip>
+
+                  {canCaptureDesktopScreenshot ? (
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <Button
+                            variant="outline"
+                            size="icon-sm"
+                            className="pointer-events-auto rounded-full border-border/60 bg-background/80 text-muted-foreground/75 shadow-xs/5 backdrop-blur-sm hover:bg-background hover:text-foreground"
+                            onClick={() => {
+                              void captureComposerScreenshot();
+                            }}
+                            aria-label="Capture screenshot and attach to draft"
+                          >
+                            <CameraIcon />
+                          </Button>
+                        }
+                      />
+                      <TooltipPopup side="top">Capture screenshot and attach to draft</TooltipPopup>
+                    </Tooltip>
+                  ) : null}
+                </div>
+              ) : null}
               <ComposerPromptEditor
                 ref={composerEditorRef}
                 value={
@@ -3717,6 +3771,13 @@ export default function ChatView({ threadId }: ChatViewProps) {
                         : "Ask anything, @tag files/folders, or use /model"
                 }
                 disabled={isConnecting || isComposerApprovalState}
+                className={cn(
+                  !isComposerApprovalState
+                    ? canCaptureDesktopScreenshot
+                      ? "pr-24 sm:pr-30"
+                      : "pr-13 sm:pr-16"
+                    : null,
+                )}
               />
             </div>
 
@@ -3732,36 +3793,35 @@ export default function ChatView({ threadId }: ChatViewProps) {
             ) : (
               <div className="flex flex-wrap items-center justify-between gap-2 px-2.5 pb-2.5 sm:flex-nowrap sm:gap-0 sm:px-3 sm:pb-3">
                 <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:min-w-max sm:overflow-visible">
-                  {/* Provider/model picker */}
-                  <ProviderModelPicker
-                    provider={selectedProvider}
-                    model={selectedModelForPickerWithCustomFallback}
-                    lockedProvider={lockedProvider}
-                    modelOptionsByProvider={modelOptionsByProvider}
-                    serviceTierSetting={selectedServiceTierSetting}
-                    onProviderModelChange={onProviderModelSelect}
-                  />
+                  <div className="inline-flex shrink-0 items-center rounded-full border border-border/60 bg-muted/25 p-1 shadow-xs/5 backdrop-blur-sm">
+                    <ProviderModelPicker
+                      provider={selectedProvider}
+                      model={selectedModelForPickerWithCustomFallback}
+                      lockedProvider={lockedProvider}
+                      modelOptionsByProvider={modelOptionsByProvider}
+                      serviceTierSetting={selectedServiceTierSetting}
+                      compactLabel
+                      hideProviderIcon
+                      triggerClassName="rounded-full px-3 text-foreground/90 hover:bg-background/70 hover:text-foreground"
+                      onProviderModelChange={onProviderModelSelect}
+                    />
 
-                  {selectedProvider === "codex" && selectedEffort != null ? (
-                    <>
-                      <Separator orientation="vertical" className="mx-0.5 hidden h-4 sm:block" />
+                    {selectedProvider === "codex" && selectedEffort != null ? (
                       <CodexTraitsPicker
                         effort={selectedEffort}
                         fastModeEnabled={selectedCodexFastModeEnabled}
                         options={reasoningOptions}
+                        triggerClassName="rounded-full bg-background/55 px-3 font-semibold text-foreground/82 hover:bg-background/85 hover:text-foreground"
                         onEffortChange={onEffortSelect}
                         onFastModeChange={onCodexFastModeChange}
                       />
-                    </>
-                  ) : null}
-
-                  {/* Divider */}
-                  <Separator orientation="vertical" className="mx-0.5 hidden h-4 sm:block" />
+                    ) : null}
+                  </div>
 
                   {/* Interaction mode toggle */}
                   <Button
                     variant="ghost"
-                    className="shrink-0 whitespace-nowrap px-2 text-muted-foreground/70 hover:text-foreground/80 sm:px-3"
+                    className="shrink-0 rounded-full whitespace-nowrap px-3 text-muted-foreground/70 hover:bg-muted/40 hover:text-foreground/80"
                     size="sm"
                     type="button"
                     onClick={toggleInteractionMode}
@@ -3776,51 +3836,6 @@ export default function ChatView({ threadId }: ChatViewProps) {
                       {interactionMode === "plan" ? "Plan" : "Chat"}
                     </span>
                   </Button>
-
-                  {/* Divider */}
-                  <Separator orientation="vertical" className="mx-0.5 hidden h-4 sm:block" />
-
-                  {/* Runtime mode toggle */}
-                  <Button
-                    variant="ghost"
-                    className="shrink-0 whitespace-nowrap px-2 text-muted-foreground/70 hover:text-foreground/80 sm:px-3"
-                    size="sm"
-                    type="button"
-                    onClick={() =>
-                      void handleRuntimeModeChange(
-                        runtimeMode === "full-access" ? "approval-required" : "full-access",
-                      )
-                    }
-                    title={
-                      runtimeMode === "full-access"
-                        ? "Full access — click to require approvals"
-                        : "Approval required — click for full access"
-                    }
-                  >
-                    {runtimeMode === "full-access" ? <LockOpenIcon /> : <LockIcon />}
-                    <span className="sr-only sm:not-sr-only">
-                      {runtimeMode === "full-access" ? "Full access" : "Supervised"}
-                    </span>
-                  </Button>
-
-                  {canCaptureDesktopScreenshot ? (
-                    <>
-                      <Separator orientation="vertical" className="mx-0.5 hidden h-4 sm:block" />
-                      <Button
-                        variant="ghost"
-                        className="shrink-0 whitespace-nowrap px-2 text-muted-foreground/70 hover:text-foreground/80 sm:px-3"
-                        size="sm"
-                        type="button"
-                        onClick={() => {
-                          void captureComposerScreenshot();
-                        }}
-                        title="Capture screenshot and attach to draft"
-                      >
-                        <CameraIcon />
-                        <span className="sr-only sm:not-sr-only">Screenshot</span>
-                      </Button>
-                    </>
-                  ) : null}
                 </div>
 
                 {/* Right side: send / stop button */}
@@ -5514,6 +5529,22 @@ function resolveModelForProviderPicker(
   return null;
 }
 
+function formatProviderModelTriggerLabel(
+  provider: ProviderKind,
+  label: string,
+  compactLabel: boolean,
+): string {
+  if (!compactLabel) {
+    return label;
+  }
+
+  if (provider === "codex") {
+    return label.replace(/^gpt[-\s]?/i, "");
+  }
+
+  return label;
+}
+
 const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   provider: ProviderKind;
   model: ModelSlug;
@@ -5521,12 +5552,20 @@ const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   modelOptionsByProvider: Record<ProviderKind, ReadonlyArray<{ slug: string; name: string }>>;
   serviceTierSetting: AppServiceTier;
   disabled?: boolean;
+  compactLabel?: boolean;
+  hideProviderIcon?: boolean;
+  triggerClassName?: string;
   onProviderModelChange: (provider: ProviderKind, model: ModelSlug) => void;
 }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const selectedProviderOptions = props.modelOptionsByProvider[props.provider];
   const selectedModelLabel =
     selectedProviderOptions.find((option) => option.slug === props.model)?.name ?? props.model;
+  const triggerLabel = formatProviderModelTriggerLabel(
+    props.provider,
+    selectedModelLabel,
+    props.compactLabel ?? false,
+  );
   const ProviderIcon = PROVIDER_ICON_BY_PROVIDER[props.provider];
 
   return (
@@ -5545,17 +5584,23 @@ const ProviderModelPicker = memo(function ProviderModelPicker(props: {
           <Button
             size="sm"
             variant="ghost"
-            className="shrink-0 whitespace-nowrap px-2 text-muted-foreground/70 hover:text-foreground/80 sm:px-3"
+            className={cn(
+              "shrink-0 whitespace-nowrap px-2 text-muted-foreground/70 hover:text-foreground/80 sm:px-3",
+              props.compactLabel ? "font-semibold text-foreground/88 hover:text-foreground" : null,
+              props.triggerClassName,
+            )}
             disabled={props.disabled}
           />
         }
       >
         <span className="flex min-w-0 items-center gap-2">
-          <ProviderIcon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground/70" />
+          {!props.hideProviderIcon ? (
+            <ProviderIcon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground/70" />
+          ) : null}
           {props.provider === "codex" && shouldShowFastTierIcon(props.model, props.serviceTierSetting) ? (
             <ZapIcon className="size-3.5 shrink-0 text-amber-500" />
           ) : null}
-          <span className="truncate">{selectedModelLabel}</span>
+          <span className="truncate">{triggerLabel}</span>
           <ChevronDownIcon aria-hidden="true" className="size-3 opacity-60" />
         </span>
       </MenuTrigger>
@@ -5651,6 +5696,7 @@ const CodexTraitsPicker = memo(function CodexTraitsPicker(props: {
   effort: CodexReasoningEffort;
   fastModeEnabled: boolean;
   options: ReadonlyArray<CodexReasoningEffort>;
+  triggerClassName?: string;
   onEffortChange: (effort: CodexReasoningEffort) => void;
   onFastModeChange: (enabled: boolean) => void;
 }) {
@@ -5681,7 +5727,10 @@ const CodexTraitsPicker = memo(function CodexTraitsPicker(props: {
           <Button
             size="sm"
             variant="ghost"
-            className="shrink-0 whitespace-nowrap px-2 text-muted-foreground/70 hover:text-foreground/80 sm:px-3"
+            className={cn(
+              "shrink-0 whitespace-nowrap px-2 text-muted-foreground/70 hover:text-foreground/80 sm:px-3",
+              props.triggerClassName,
+            )}
           />
         }
       >
