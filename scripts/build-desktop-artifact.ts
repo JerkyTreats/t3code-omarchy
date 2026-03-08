@@ -616,13 +616,13 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
     buildVersion: appVersion,
     t3codeCommitHash: commitHash,
     private: true,
-    description: "T3 Chat Omarchy desktop build",
+    description: "T3 Code Omarchy desktop build",
     author: "T3 Tools",
     main: "apps/desktop/dist-electron/main.js",
     build: yield* createBuildConfig(
       options.platform,
       options.target,
-      desktopPackageJson.productName ?? "T3 Chat Omarchy",
+      desktopPackageJson.productName ?? "T3 Code Omarchy",
       options.signed,
     ),
     dependencies: {

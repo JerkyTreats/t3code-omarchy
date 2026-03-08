@@ -7,6 +7,8 @@ const CONTEXT_MENU_CHANNEL = "desktop:context-menu";
 const OPEN_EXTERNAL_CHANNEL = "desktop:open-external";
 const CAPTURE_SCREENSHOT_CHANNEL = "desktop:capture-screenshot";
 const MENU_ACTION_CHANNEL = "desktop:menu-action";
+const SYSTEM_THEME_CHANNEL = "desktop:system-theme";
+const SYSTEM_THEME_GET_CHANNEL = "desktop:system-theme-get";
 const UPDATE_STATE_CHANNEL = "desktop:update-state";
 const UPDATE_GET_STATE_CHANNEL = "desktop:update-get-state";
 const UPDATE_DOWNLOAD_CHANNEL = "desktop:update-download";
@@ -20,6 +22,7 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   showContextMenu: (items, position) => ipcRenderer.invoke(CONTEXT_MENU_CHANNEL, items, position),
   openExternal: (url: string) => ipcRenderer.invoke(OPEN_EXTERNAL_CHANNEL, url),
   captureScreenshot: () => ipcRenderer.invoke(CAPTURE_SCREENSHOT_CHANNEL),
+  getSystemTheme: () => ipcRenderer.invoke(SYSTEM_THEME_GET_CHANNEL),
   onMenuAction: (listener) => {
     const wrappedListener = (_event: Electron.IpcRendererEvent, action: unknown) => {
       if (typeof action !== "string") return;
@@ -29,6 +32,17 @@ contextBridge.exposeInMainWorld("desktopBridge", {
     ipcRenderer.on(MENU_ACTION_CHANNEL, wrappedListener);
     return () => {
       ipcRenderer.removeListener(MENU_ACTION_CHANNEL, wrappedListener);
+    };
+  },
+  onSystemTheme: (listener) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, theme: unknown) => {
+      if (theme !== null && typeof theme !== "object") return;
+      listener(theme as Parameters<typeof listener>[0]);
+    };
+
+    ipcRenderer.on(SYSTEM_THEME_CHANNEL, wrappedListener);
+    return () => {
+      ipcRenderer.removeListener(SYSTEM_THEME_CHANNEL, wrappedListener);
     };
   },
   getUpdateState: () => ipcRenderer.invoke(UPDATE_GET_STATE_CHANNEL),

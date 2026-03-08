@@ -120,6 +120,163 @@
   }
 }
 
+:root[data-system-theme-source="omarchy"] {
+  --primary: var(--desktop-system-theme-accent);
+  --ring: var(--desktop-system-theme-accent);
+  --destructive: var(--desktop-system-theme-color1);
+  --info: var(--desktop-system-theme-color4);
+  --success: var(--desktop-system-theme-color2);
+  --warning: var(--desktop-system-theme-color3);
+}
+
+:root[data-system-theme-source="omarchy"][data-system-theme-mode="dark"] {
+  color-scheme: dark;
+  --background: var(--desktop-system-theme-background);
+  --foreground: var(--desktop-system-theme-foreground);
+  --card: color-mix(
+    in srgb,
+    var(--desktop-system-theme-background) 92%,
+    var(--desktop-system-theme-foreground)
+  );
+  --card-foreground: var(--desktop-system-theme-foreground);
+  --popover: color-mix(
+    in srgb,
+    var(--desktop-system-theme-background) 94%,
+    var(--desktop-system-theme-foreground)
+  );
+  --popover-foreground: var(--desktop-system-theme-foreground);
+  --primary-foreground: var(
+    --desktop-system-theme-selection-foreground,
+    var(--desktop-system-theme-background)
+  );
+  --secondary: color-mix(
+    in srgb,
+    var(--desktop-system-theme-selection-background, var(--desktop-system-theme-color0)) 62%,
+    var(--desktop-system-theme-background)
+  );
+  --secondary-foreground: var(--desktop-system-theme-foreground);
+  --muted: color-mix(
+    in srgb,
+    var(--desktop-system-theme-selection-background, var(--desktop-system-theme-color8)) 52%,
+    var(--desktop-system-theme-background)
+  );
+  --muted-foreground: color-mix(
+    in srgb,
+    var(--desktop-system-theme-foreground) 72%,
+    var(--desktop-system-theme-background)
+  );
+  --accent: color-mix(
+    in srgb,
+    var(--desktop-system-theme-accent) 22%,
+    var(--desktop-system-theme-background)
+  );
+  --accent-foreground: var(--desktop-system-theme-foreground);
+  --border: color-mix(
+    in srgb,
+    var(--desktop-system-theme-foreground) 12%,
+    var(--desktop-system-theme-background)
+  );
+  --input: color-mix(
+    in srgb,
+    var(--desktop-system-theme-foreground) 16%,
+    var(--desktop-system-theme-background)
+  );
+  --destructive-foreground: color-mix(
+    in srgb,
+    var(--desktop-system-theme-color1) 78%,
+    var(--desktop-system-theme-foreground)
+  );
+  --info-foreground: color-mix(
+    in srgb,
+    var(--desktop-system-theme-color4) 78%,
+    var(--desktop-system-theme-foreground)
+  );
+  --success-foreground: color-mix(
+    in srgb,
+    var(--desktop-system-theme-color2) 78%,
+    var(--desktop-system-theme-foreground)
+  );
+  --warning-foreground: color-mix(
+    in srgb,
+    var(--desktop-system-theme-color3) 78%,
+    var(--desktop-system-theme-foreground)
+  );
+}
+
+:root[data-system-theme-source="omarchy"][data-system-theme-mode="light"] {
+  color-scheme: light;
+  --background: var(--desktop-system-theme-background);
+  --foreground: var(--desktop-system-theme-foreground);
+  --card: color-mix(
+    in srgb,
+    var(--desktop-system-theme-background) 96%,
+    var(--desktop-system-theme-color0, var(--desktop-system-theme-foreground))
+  );
+  --card-foreground: var(--desktop-system-theme-foreground);
+  --popover: color-mix(
+    in srgb,
+    var(--desktop-system-theme-background) 98%,
+    var(--desktop-system-theme-color0, var(--desktop-system-theme-foreground))
+  );
+  --popover-foreground: var(--desktop-system-theme-foreground);
+  --primary-foreground: var(
+    --desktop-system-theme-selection-foreground,
+    var(--desktop-system-theme-background)
+  );
+  --secondary: color-mix(
+    in srgb,
+    var(--desktop-system-theme-selection-background, var(--desktop-system-theme-color7)) 32%,
+    var(--desktop-system-theme-background)
+  );
+  --secondary-foreground: var(--desktop-system-theme-foreground);
+  --muted: color-mix(
+    in srgb,
+    var(--desktop-system-theme-selection-background, var(--desktop-system-theme-color7)) 22%,
+    var(--desktop-system-theme-background)
+  );
+  --muted-foreground: color-mix(
+    in srgb,
+    var(--desktop-system-theme-foreground) 74%,
+    var(--desktop-system-theme-background)
+  );
+  --accent: color-mix(
+    in srgb,
+    var(--desktop-system-theme-accent) 16%,
+    var(--desktop-system-theme-background)
+  );
+  --accent-foreground: var(--desktop-system-theme-foreground);
+  --border: color-mix(
+    in srgb,
+    var(--desktop-system-theme-foreground) 14%,
+    var(--desktop-system-theme-background)
+  );
+  --input: color-mix(
+    in srgb,
+    var(--desktop-system-theme-foreground) 18%,
+    var(--desktop-system-theme-background)
+  );
+  --destructive-foreground: color-mix(
+    in srgb,
+    var(--desktop-system-theme-color1) 82%,
+    var(--desktop-system-theme-background)
+  );
+  --info-foreground: color-mix(
+    in srgb,
+    var(--desktop-system-theme-color4) 82%,
+    var(--desktop-system-theme-background)
+  );
+  --success-foreground: color-mix(
+    in srgb,
+    var(--desktop-system-theme-color2) 82%,
+    var(--desktop-system-theme-background)
+  );
+  --warning-foreground: color-mix(
+    in srgb,
+    var(--desktop-system-theme-color3) 82%,
+    var(--desktop-system-theme-background)
+  );
+}
+
 body {
   font-family:
     "DM Sans",

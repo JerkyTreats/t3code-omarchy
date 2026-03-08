@@ -84,6 +84,13 @@ export interface DesktopScreenshotCapture {
   dataUrl: string;
 }
 
+export interface DesktopSystemTheme {
+  source: "omarchy";
+  name: string;
+  mode: "light" | "dark";
+  colors: Record<string, string>;
+}
+
 export interface DesktopBridge {
   getWsUrl: () => string | null;
   pickFolder: () => Promise<string | null>;
@@ -94,7 +101,9 @@ export interface DesktopBridge {
   ) => Promise<T | null>;
   openExternal: (url: string) => Promise<boolean>;
   captureScreenshot: () => Promise<DesktopScreenshotCapture | null>;
+  getSystemTheme: () => Promise<DesktopSystemTheme | null>;
   onMenuAction: (listener: (action: string) => void) => () => void;
+  onSystemTheme: (listener: (theme: DesktopSystemTheme | null) => void) => () => void;
   getUpdateState: () => Promise<DesktopUpdateState>;
   downloadUpdate: () => Promise<DesktopUpdateActionResult>;
   installUpdate: () => Promise<DesktopUpdateActionResult>;

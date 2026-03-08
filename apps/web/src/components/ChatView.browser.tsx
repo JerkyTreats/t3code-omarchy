@@ -618,7 +618,9 @@ describe("ChatView timeline estimator parity (full app)", () => {
           sizeBytes: 68,
           dataUrl: SCREENSHOT_DATA_URL,
         }),
+        getSystemTheme: async () => null,
         onMenuAction: () => () => undefined,
+        onSystemTheme: () => () => undefined,
         getUpdateState: async () => ({
           enabled: false,
           status: "disabled",

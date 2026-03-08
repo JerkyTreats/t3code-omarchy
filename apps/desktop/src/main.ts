@@ -9,6 +9,7 @@ import type { MenuItemConstructorOptions } from "electron";
 import * as Effect from "effect/Effect";
 import type {
   DesktopScreenshotCapture,
+  DesktopSystemTheme,
   DesktopUpdateActionResult,
   DesktopUpdateState,
 } from "@t3tools/contracts";
@@ -36,6 +37,7 @@ import {
   reduceDesktopUpdateStateOnUpdateAvailable,
 } from "./updateMachine";
 import { captureDesktopScreenshot } from "./screenshotCapture";
+import { readDesktopSystemTheme, watchDesktopSystemTheme } from "./omarchyTheme";
 
 fixPath();
 
@@ -45,6 +47,8 @@ const CONTEXT_MENU_CHANNEL = "desktop:context-menu";
 const OPEN_EXTERNAL_CHANNEL = "desktop:open-external";
 const CAPTURE_SCREENSHOT_CHANNEL = "desktop:capture-screenshot";
 const MENU_ACTION_CHANNEL = "desktop:menu-action";
+const SYSTEM_THEME_CHANNEL = "desktop:system-theme";
+const SYSTEM_THEME_GET_CHANNEL = "desktop:system-theme-get";
 const UPDATE_STATE_CHANNEL = "desktop:update-state";
 const UPDATE_GET_STATE_CHANNEL = "desktop:update-get-state";
 const UPDATE_DOWNLOAD_CHANNEL = "desktop:update-download";
@@ -54,7 +58,7 @@ const STATE_DIR =
 const DESKTOP_SCHEME = "t3";
 const ROOT_DIR = Path.resolve(__dirname, "../../..");
 const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
-const APP_DISPLAY_NAME = isDevelopment ? "T3 Chat Omarchy (Dev)" : "T3 Chat Omarchy (Alpha)";
+const APP_DISPLAY_NAME = isDevelopment ? "T3 Code Omarchy (Dev)" : "T3 Code Omarchy (Alpha)";
 const APP_USER_MODEL_ID = "com.t3tools.t3code";
 const COMMIT_HASH_PATTERN = /^[0-9a-f]{7,40}$/i;
 const COMMIT_HASH_DISPLAY_LENGTH = 12;
@@ -235,6 +239,8 @@ let updateCheckInFlight = false;
 let updateDownloadInFlight = false;
 let updaterConfigured = false;
 let updateState: DesktopUpdateState = initialUpdateState();
+let desktopSystemTheme: DesktopSystemTheme | null = readDesktopSystemTheme();
+let stopWatchingDesktopSystemTheme: (() => void) | null = null;
 
 function resolveUpdaterErrorContext(): DesktopUpdateErrorContext {
   if (updateDownloadInFlight) return "download";
@@ -631,6 +637,21 @@ function emitUpdateState(): void {
 function setUpdateState(patch: Partial<DesktopUpdateState>): void {
   updateState = { ...updateState, ...patch };
   emitUpdateState();
+}
+
+function emitDesktopSystemTheme(): void {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (window.isDestroyed()) continue;
+    window.webContents.send(SYSTEM_THEME_CHANNEL, desktopSystemTheme);
+  }
+}
+
+function setDesktopSystemTheme(nextTheme: DesktopSystemTheme | null): void {
+  if (JSON.stringify(nextTheme) === JSON.stringify(desktopSystemTheme)) {
+    return;
+  }
+  desktopSystemTheme = nextTheme;
+  emitDesktopSystemTheme();
 }
 
 function shouldEnableAutoUpdates(): boolean {
@@ -1077,6 +1098,9 @@ function registerIpcHandlers(): void {
     return screenshot satisfies DesktopScreenshotCapture | null;
   });
 
+  ipcMain.removeHandler(SYSTEM_THEME_GET_CHANNEL);
+  ipcMain.handle(SYSTEM_THEME_GET_CHANNEL, async () => desktopSystemTheme);
+
   ipcMain.removeHandler(UPDATE_GET_STATE_CHANNEL);
   ipcMain.handle(UPDATE_GET_STATE_CHANNEL, async () => updateState);
 
@@ -1142,6 +1166,7 @@ function createWindow(): BrowserWindow {
   });
   window.webContents.on("did-finish-load", () => {
     window.setTitle(APP_DISPLAY_NAME);
+    emitDesktopSystemTheme();
     emitUpdateState();
   });
   window.once("ready-to-show", () => {
@@ -1181,6 +1206,11 @@ async function bootstrap(): Promise<void> {
 
   registerIpcHandlers();
   writeDesktopLogHeader("bootstrap ipc handlers registered");
+  stopWatchingDesktopSystemTheme?.();
+  stopWatchingDesktopSystemTheme = watchDesktopSystemTheme((nextTheme) => {
+    setDesktopSystemTheme(nextTheme);
+  });
+  writeDesktopLogHeader("bootstrap desktop theme watcher registered");
   startBackend();
   writeDesktopLogHeader("bootstrap backend start requested");
   mainWindow = createWindow();
@@ -1191,6 +1221,8 @@ app.on("before-quit", () => {
   isQuitting = true;
   writeDesktopLogHeader("before-quit received");
   clearUpdatePollTimer();
+  stopWatchingDesktopSystemTheme?.();
+  stopWatchingDesktopSystemTheme = null;
   stopBackend();
   restoreStdIoCapture?.();
 });

@@ -26,7 +26,7 @@ const THEME_OPTIONS = [
   {
     value: "system",
     label: "System",
-    description: "Match your OS appearance setting.",
+    description: "Follow Omarchy on desktop, otherwise follow the OS appearance setting.",
   },
   {
     value: "light",
@@ -87,7 +87,7 @@ function patchCustomModels(provider: ProviderKind, models: string[]) {
 }
 
 function SettingsRouteView() {
-  const { theme, setTheme, resolvedTheme } = useTheme();
+  const { theme, setTheme, resolvedTheme, systemTheme } = useTheme();
   const { settings, defaults, updateSettings } = useAppSettings();
   const serverConfigQuery = useQuery(serverConfigQueryOptions());
   const [isOpeningKeybindings, setIsOpeningKeybindings] = useState(false);
@@ -203,7 +203,7 @@ function SettingsRouteView() {
               <div className="mb-4">
                 <h2 className="text-sm font-medium text-foreground">Appearance</h2>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Choose how T3 Code handles light and dark mode.
+                  Choose how T3 Code handles light and dark mode and desktop theme sync.
                 </p>
               </div>
 
@@ -240,6 +240,14 @@ function SettingsRouteView() {
               <p className="mt-4 text-xs text-muted-foreground">
                 Active theme: <span className="font-medium text-foreground">{resolvedTheme}</span>
               </p>
+              {theme === "system" && systemTheme ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Desktop theme:{" "}
+                  <span className="font-medium text-foreground">
+                    {systemTheme.name} via {systemTheme.source}
+                  </span>
+                </p>
+              ) : null}
             </section>
 
             <section className="rounded-2xl border border-border bg-card p-5">
