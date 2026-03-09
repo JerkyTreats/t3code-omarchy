@@ -12,7 +12,7 @@ Track the phased overhaul for GitHub panel correctness, workspace awareness, rep
 
 | Phase | Goal | Status | Checks | Commit | Notes |
 | --- | --- | --- | --- | --- | --- |
-| 1 | Define canonical panel context and scope ownership | IN_PROGRESS | TODO | TODO | Make repo scope and workspace scope explicit |
+| 1 | Define canonical panel context and scope ownership | DONE | PASS | `refactor(web): define canonical github panel context` | Repo scope and workspace scope are explicit |
 | 2 | Reset stale panel state and query results on context change | TODO | TODO | TODO | Eliminate stale repo, branch, and merge UI |
 | 3 | Make project and thread switching rules explicit | TODO | TODO | TODO | Ensure panel follows the intended active entity |
 | 4 | Split panel into repo and workspace sections and improve responsiveness | TODO | TODO | TODO | Improve overflow handling, stacking, and density |
@@ -28,11 +28,11 @@ Create one canonical context model for the GitHub panel and make ownership of re
 
 | Step | Change | Files | Done criteria |
 | --- | --- | --- | --- |
-| 1.1 | Add a pure `GitPanelContext` resolver with explicit repo root, workspace cwd, project id, workspace kind, and context key | `apps/web/src/lib/gitPanelContext.ts` | Helper exists, is typed, and has no UI dependencies |
-| 1.2 | Update `ChatView` to derive and pass the canonical panel context | `apps/web/src/components/ChatView.tsx` | Panel inputs come from one resolved context object |
-| 1.3 | Refactor `GitHubPanel` props to use explicit `repoRoot` and `workspaceCwd` naming | `apps/web/src/components/GitHubPanel.tsx` | Repo queries and workspace queries no longer share ambiguous names |
-| 1.4 | Key the panel by context identity at the mount site | `apps/web/src/components/ChatView.tsx` | Panel remounts when thread, repo, or workspace identity changes |
-| 1.5 | Add focused tests for the resolver if adjacent test patterns exist | `apps/web/src/lib` | Core context transitions are covered or consciously deferred |
+| 1.1 | Add a pure `GitPanelContext` resolver with explicit repo root, workspace cwd, project id, workspace kind, and context key | `apps/web/src/lib/gitPanelContext.ts` | DONE |
+| 1.2 | Update `ChatView` to derive and pass the canonical panel context | `apps/web/src/components/ChatView.tsx` | DONE |
+| 1.3 | Refactor `GitHubPanel` props to use explicit `repoRoot` and `workspaceCwd` naming | `apps/web/src/components/GitHubPanel.tsx` | DONE |
+| 1.4 | Key the panel by context identity at the mount site | `apps/web/src/components/ChatView.tsx` | DONE |
+| 1.5 | Add focused tests for the resolver if adjacent test patterns exist | `apps/web/src/lib` | DONE |
 
 ### Implementation notes
 
@@ -45,6 +45,7 @@ Create one canonical context model for the GitHub panel and make ownership of re
 
 - `bun lint`
 - `bun typecheck`
+- `bun run test -- --run src/lib/gitPanelContext.test.ts` from `apps/web`
 
 ## Phase 2
 

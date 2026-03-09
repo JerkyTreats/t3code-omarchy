@@ -61,8 +61,9 @@ import { useStore } from "~/store";
 import { formatWorktreePathForDisplay } from "~/worktreeCleanup";
 
 interface GitActionsControlProps {
-  gitCwd: string | null;
-  projectGitCwd: string | null;
+  workspaceCwd: string | null;
+  repoCwd: string | null;
+  repoRoot: string | null;
   activeThreadId: ThreadId | null;
 }
 
@@ -155,7 +156,12 @@ function formatGitHubTimestamp(value: string): string {
   }).format(date);
 }
 
-export default function GitHubPanel({ gitCwd, projectGitCwd, activeThreadId }: GitActionsControlProps) {
+export default function GitHubPanel({
+  workspaceCwd,
+  repoCwd,
+  repoRoot,
+  activeThreadId,
+}: GitActionsControlProps) {
   const navigate = useNavigate();
   const threads = useStore((store) => store.threads);
   const activeServerThread = useMemo(
@@ -182,10 +188,12 @@ export default function GitHubPanel({ gitCwd, projectGitCwd, activeThreadId }: G
   const [mergeSourceBranch, setMergeSourceBranch] = useState("");
   const [lastMergeResult, setLastMergeResult] = useState<GitMergeBranchesResult | null>(null);
 
-  const { data: gitStatus = null, error: gitStatusError } = useQuery(gitStatusQueryOptions(gitCwd));
+  const { data: gitStatus = null, error: gitStatusError } = useQuery(
+    gitStatusQueryOptions(workspaceCwd),
+  );
 
-  const { data: branchList = null } = useQuery(gitBranchesQueryOptions(gitCwd));
-  const githubStatusQuery = useQuery(githubStatusQueryOptions(projectGitCwd));
+  const { data: branchList = null } = useQuery(gitBranchesQueryOptions(workspaceCwd));
+  const githubStatusQuery = useQuery(githubStatusQueryOptions(repoCwd));
   // Default to true while loading so we don't flash init controls.
   const isRepo = branchList?.isRepo ?? true;
   const currentBranch = branchList?.branches.find((branch) => branch.current)?.name ?? null;
@@ -199,13 +207,13 @@ export default function GitHubPanel({ gitCwd, projectGitCwd, activeThreadId }: G
 
   const gitStatusForActions = isGitStatusOutOfSync ? null : gitStatus;
 
-  const initMutation = useMutation(gitInitMutationOptions({ cwd: gitCwd, queryClient }));
-  const loginMutation = useMutation(githubLoginMutationOptions({ cwd: projectGitCwd, queryClient }));
+  const initMutation = useMutation(gitInitMutationOptions({ cwd: workspaceCwd, queryClient }));
+  const loginMutation = useMutation(githubLoginMutationOptions({ cwd: repoCwd, queryClient }));
   const createWorktreeMutation = useMutation(gitCreateWorktreeMutationOptions({ queryClient }));
 
   const githubIssuesQuery = useQuery(
     githubIssuesQueryOptions({
-      cwd: projectGitCwd,
+      cwd: repoCwd,
       state: issueState,
       limit: 20,
       enabled:
@@ -217,19 +225,22 @@ export default function GitHubPanel({ gitCwd, projectGitCwd, activeThreadId }: G
   const isGitHubAuthenticated = githubStatusQuery.data?.authenticated === true;
 
   const runImmediateGitActionMutation = useMutation(
-    gitRunStackedActionMutationOptions({ cwd: gitCwd, queryClient }),
+    gitRunStackedActionMutationOptions({ cwd: workspaceCwd, queryClient }),
   );
-  const pullMutation = useMutation(gitPullMutationOptions({ cwd: gitCwd, queryClient }));
+  const pullMutation = useMutation(gitPullMutationOptions({ cwd: workspaceCwd, queryClient }));
   const mergeBranchesMutation = useMutation(
-    gitMergeBranchesMutationOptions({ cwd: gitCwd, queryClient }),
+    gitMergeBranchesMutationOptions({ cwd: workspaceCwd, queryClient }),
   );
-  const abortMergeMutation = useMutation(gitAbortMergeMutationOptions({ cwd: gitCwd, queryClient }));
+  const abortMergeMutation = useMutation(
+    gitAbortMergeMutationOptions({ cwd: workspaceCwd, queryClient }),
+  );
 
   const isRunStackedActionRunning =
-    useIsMutating({ mutationKey: gitMutationKeys.runStackedAction(gitCwd) }) > 0;
-  const isPullRunning = useIsMutating({ mutationKey: gitMutationKeys.pull(gitCwd) }) > 0;
-  const isMergeRunning = useIsMutating({ mutationKey: gitMutationKeys.mergeBranches(gitCwd) }) > 0;
-  const isAbortMergeRunning = useIsMutating({ mutationKey: gitMutationKeys.abortMerge(gitCwd) }) > 0;
+    useIsMutating({ mutationKey: gitMutationKeys.runStackedAction(workspaceCwd) }) > 0;
+  const isPullRunning = useIsMutating({ mutationKey: gitMutationKeys.pull(workspaceCwd) }) > 0;
+  const isMergeRunning = useIsMutating({ mutationKey: gitMutationKeys.mergeBranches(workspaceCwd) }) > 0;
+  const isAbortMergeRunning =
+    useIsMutating({ mutationKey: gitMutationKeys.abortMerge(workspaceCwd) }) > 0;
   const isGitActionRunning = isRunStackedActionRunning || isPullRunning;
   const localBranches = useMemo(
     () => (branchList?.branches ?? []).filter((branch) => !branch.isRemote),
@@ -240,14 +251,16 @@ export default function GitHubPanel({ gitCwd, projectGitCwd, activeThreadId }: G
     () => localBranches.find((branch) => branch.name === activeWorkspaceBranch) ?? null,
     [activeWorkspaceBranch, localBranches],
   );
-  const isPrimaryWorkspace = projectGitCwd !== null && gitCwd === projectGitCwd;
+  const isPrimaryWorkspace = repoRoot !== null && workspaceCwd === repoRoot;
   const activeWorkspaceName =
-    isPrimaryWorkspace || !gitCwd ? "Primary checkout" : formatWorktreePathForDisplay(gitCwd);
+    isPrimaryWorkspace || !workspaceCwd
+      ? "Primary checkout"
+      : formatWorktreePathForDisplay(workspaceCwd);
   const activeWorkspaceScopeCopy = isPrimaryWorkspace
     ? "This thread works in the primary checkout."
     : "This thread works in a dedicated workspace.";
   const activeWorkspaceHasConflicts =
-    lastMergeResult?.status === "conflicted" && lastMergeResult.targetWorktreePath === gitCwd;
+    lastMergeResult?.status === "conflicted" && lastMergeResult.targetWorktreePath === workspaceCwd;
   const isDefaultBranch = useMemo(() => {
     const branchName = gitStatusForActions?.branch;
     if (!branchName) return false;
@@ -290,11 +303,12 @@ export default function GitHubPanel({ gitCwd, projectGitCwd, activeThreadId }: G
   useEffect(() => {
     if (
       lastMergeResult &&
-      (lastMergeResult.targetWorktreePath !== gitCwd || lastMergeResult.targetBranch !== activeWorkspaceBranch)
+      (lastMergeResult.targetWorktreePath !== workspaceCwd ||
+        lastMergeResult.targetBranch !== activeWorkspaceBranch)
     ) {
       setLastMergeResult(null);
     }
-  }, [activeWorkspaceBranch, gitCwd, lastMergeResult]);
+  }, [activeWorkspaceBranch, lastMergeResult, workspaceCwd]);
 
   const openPathInEditor = useCallback(
     (targetPath: string) => {
@@ -361,13 +375,13 @@ export default function GitHubPanel({ gitCwd, projectGitCwd, activeThreadId }: G
   );
 
   const createDedicatedWorkspace = useCallback(async () => {
-    if (!projectGitCwd || !activeWorkspaceBranch) {
+    if (!repoCwd || !activeWorkspaceBranch) {
       return;
     }
 
     try {
       const result = await createWorktreeMutation.mutateAsync({
-        cwd: projectGitCwd,
+        cwd: repoCwd,
         branch: activeWorkspaceBranch,
         newBranch: buildTemporaryWorktreeBranchName(),
       });
@@ -390,7 +404,7 @@ export default function GitHubPanel({ gitCwd, projectGitCwd, activeThreadId }: G
     activeWorkspaceBranch,
     createWorktreeMutation,
     focusDraftThread,
-    projectGitCwd,
+    repoCwd,
     threadToastData,
   ]);
 
@@ -428,12 +442,12 @@ export default function GitHubPanel({ gitCwd, projectGitCwd, activeThreadId }: G
   }, [activeWorkspaceBranch, mergeBranchesMutation, mergeSourceBranch, threadToastData]);
 
   const abortActiveMerge = useCallback(async () => {
-    if (!gitCwd) {
+    if (!workspaceCwd) {
       return;
     }
 
     try {
-      const result = await abortMergeMutation.mutateAsync(gitCwd);
+      const result = await abortMergeMutation.mutateAsync(workspaceCwd);
       if (result.status === "aborted") {
         setLastMergeResult(null);
       }
@@ -451,7 +465,7 @@ export default function GitHubPanel({ gitCwd, projectGitCwd, activeThreadId }: G
         data: threadToastData,
       });
     }
-  }, [abortMergeMutation, gitCwd, threadToastData]);
+  }, [abortMergeMutation, threadToastData, workspaceCwd]);
 
   const openExistingPr = useCallback(async () => {
     const api = readNativeApi();
@@ -783,7 +797,7 @@ export default function GitHubPanel({ gitCwd, projectGitCwd, activeThreadId }: G
 
   const openChangedFileInEditor = useCallback(
     (filePath: string) => {
-      if (!gitCwd) {
+      if (!workspaceCwd) {
         toastManager.add({
           type: "error",
           title: "Editor opening is unavailable.",
@@ -791,9 +805,9 @@ export default function GitHubPanel({ gitCwd, projectGitCwd, activeThreadId }: G
         });
         return;
       }
-      openPathInEditor(resolvePathLinkTarget(filePath, gitCwd));
+      openPathInEditor(resolvePathLinkTarget(filePath, workspaceCwd));
     },
-    [gitCwd, openPathInEditor, threadToastData],
+    [openPathInEditor, threadToastData, workspaceCwd],
   );
 
   const pullLatest = useCallback(() => {
@@ -892,7 +906,7 @@ export default function GitHubPanel({ gitCwd, projectGitCwd, activeThreadId }: G
       ? "Project context is unavailable."
       : !gitStatusForActions
         ? "Git status is unavailable."
-      : !projectGitCwd || !activeWorkspaceBranch
+      : !repoCwd || !activeWorkspaceBranch
         ? "Checkout a branch before creating a dedicated workspace."
         : gitStatusForActions.hasWorkingTreeChanges
           ? "Primary checkout is dirty. Commit or stash changes first."
@@ -911,7 +925,7 @@ export default function GitHubPanel({ gitCwd, projectGitCwd, activeThreadId }: G
           ? "Merge in progress."
           : null;
 
-  if (!gitCwd) return null;
+  if (!workspaceCwd) return null;
 
   return (
     <>
@@ -1033,12 +1047,12 @@ export default function GitHubPanel({ gitCwd, projectGitCwd, activeThreadId }: G
                               </div>
                             </div>
                           </div>
-                          <p className="truncate text-xs text-muted-foreground">{gitCwd}</p>
+                          <p className="truncate text-xs text-muted-foreground">{workspaceCwd}</p>
                         </div>
                         <Button
                           variant="outline"
                           size="xs"
-                          onClick={() => openPathInEditor(gitCwd)}
+                          onClick={() => openPathInEditor(workspaceCwd)}
                         >
                           Open
                         </Button>

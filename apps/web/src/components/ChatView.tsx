@@ -52,6 +52,7 @@ import {
   gitCreateWorktreeMutationOptions,
   gitRepositoryContextQueryOptions,
 } from "~/lib/gitReactQuery";
+import { resolveGitPanelContext } from "~/lib/gitPanelContext";
 import { buildTemporaryWorktreeBranchName } from "~/gitWorktree";
 import { projectSearchEntriesQueryOptions } from "~/lib/projectReactQuery";
 import { serverConfigQueryOptions, serverQueryKeys } from "~/lib/serverReactQuery";
@@ -1183,8 +1184,24 @@ export default function ChatView({ threadId }: ChatViewProps) {
     timelineEntries,
   ]);
   const projectGitContextQuery = useQuery(gitRepositoryContextQueryOptions(activeProject?.cwd ?? null));
-  const projectGitCwd = projectGitContextQuery.data?.repoRoot ?? activeProject?.cwd ?? null;
-  const gitCwd = activeThread?.worktreePath ?? projectGitCwd;
+  const gitPanelContext = useMemo(
+    () =>
+      resolveGitPanelContext({
+        activeProjectId: activeProject?.id ?? null,
+        activeProjectCwd: activeProject?.cwd ?? null,
+        activeThreadId: activeThread?.id ?? null,
+        activeThreadWorktreePath: activeThread?.worktreePath ?? null,
+        repoRoot: projectGitContextQuery.data?.repoRoot ?? null,
+      }),
+    [
+      activeProject?.cwd,
+      activeProject?.id,
+      activeThread?.id,
+      activeThread?.worktreePath,
+      projectGitContextQuery.data?.repoRoot,
+    ],
+  );
+  const gitCwd = gitPanelContext.workspaceCwd;
   const composerTriggerKind = composerTrigger?.kind ?? null;
   const pathTriggerQuery = composerTrigger?.kind === "path" ? composerTrigger.query : "";
   const isPathTrigger = composerTriggerKind === "path";
@@ -3498,8 +3515,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
           keybindings={keybindings}
           availableEditors={availableEditors}
           diffToggleShortcutLabel={diffPanelShortcutLabel}
-          gitCwd={gitCwd}
-          projectGitCwd={projectGitCwd}
+          gitActionsCwd={gitPanelContext.repoCwd ?? gitPanelContext.workspaceCwd}
           diffOpen={diffOpen}
           githubOpen={githubOpen}
           onRunProjectScript={(script) => {
@@ -4114,7 +4130,13 @@ export default function ChatView({ threadId }: ChatViewProps) {
             keepMounted
             className="w-[min(88vw,680px)] max-w-[680px] p-0"
           >
-            <GitHubPanel gitCwd={gitCwd} projectGitCwd={projectGitCwd} activeThreadId={activeThread.id} />
+            <GitHubPanel
+              key={gitPanelContext.contextKey}
+              workspaceCwd={gitPanelContext.workspaceCwd}
+              repoCwd={gitPanelContext.repoCwd}
+              repoRoot={gitPanelContext.repoRoot}
+              activeThreadId={activeThread.id}
+            />
           </SheetPopup>
         </Sheet>
       </>
@@ -4135,7 +4157,13 @@ export default function ChatView({ threadId }: ChatViewProps) {
         collapsible="offcanvas"
         className="border-l border-border bg-card text-foreground"
       >
-        <GitHubPanel gitCwd={gitCwd} projectGitCwd={projectGitCwd} activeThreadId={activeThread.id} />
+        <GitHubPanel
+          key={gitPanelContext.contextKey}
+          workspaceCwd={gitPanelContext.workspaceCwd}
+          repoCwd={gitPanelContext.repoCwd}
+          repoRoot={gitPanelContext.repoRoot}
+          activeThreadId={activeThread.id}
+        />
         <SidebarRail />
       </Sidebar>
     </SidebarProvider>
@@ -4152,8 +4180,7 @@ interface ChatHeaderProps {
   keybindings: ResolvedKeybindingsConfig;
   availableEditors: ReadonlyArray<EditorId>;
   diffToggleShortcutLabel: string | null;
-  gitCwd: string | null;
-  projectGitCwd: string | null;
+  gitActionsCwd: string | null;
   diffOpen: boolean;
   githubOpen: boolean;
   onRunProjectScript: (script: ProjectScript) => void;
@@ -4173,8 +4200,7 @@ const ChatHeader = memo(function ChatHeader({
   keybindings,
   availableEditors,
   diffToggleShortcutLabel,
-  gitCwd,
-  projectGitCwd,
+  gitActionsCwd,
   diffOpen,
   githubOpen,
   onRunProjectScript,
@@ -4223,7 +4249,11 @@ const ChatHeader = memo(function ChatHeader({
           />
         )}
         {activeProjectName && (
-          <GitActionsControl gitCwd={projectGitCwd ?? gitCwd} open={githubOpen} onToggle={onToggleGitHub} />
+          <GitActionsControl
+            gitCwd={gitActionsCwd}
+            open={githubOpen}
+            onToggle={onToggleGitHub}
+          />
         )}
         <Tooltip>
           <TooltipTrigger
