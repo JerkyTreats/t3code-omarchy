@@ -17,6 +17,7 @@ Track the phased overhaul for GitHub panel correctness, workspace awareness, rep
 | 3 | Make project and thread switching rules explicit | DONE | PASS | `refactor(web): align project clicks with panel scope` | Project header clicks now activate that project thread context |
 | 4 | Split panel into repo and workspace sections and improve responsiveness | DONE | PASS | `refactor(web): reorganize github panel layout for workspace flows` | Repo scope is explicit and narrow layouts stack cleanly |
 | 5 | Integrate promotion state and next action guidance | DONE | PASS | `feat(web): show workspace promotion state guidance` | First slice derives workspace promotion state from available Git facts |
+| 6 | Compact panel composition and review architecture cleanliness | DONE | PASS | `refactor(web): compact github panel composition` | Final pass compacted repeated panel layout and recorded the architecture review |
 
 ## Phase 1
 
@@ -138,6 +139,46 @@ Integrate promotion state into the active workspace card and make next action gu
 - `bun lint`
 - `bun typecheck`
 
+## Phase 6
+
+### Goal
+
+Compact the GitHub panel composition, reduce repeated layout code, and complete a focused review of architecture, cleanliness, and maintainability before closing the rollout.
+
+### Detailed implementation plan
+
+| Step | Change | Files | Done criteria |
+| --- | --- | --- | --- |
+| 6.1 | Add small reusable panel primitives for repeated section and field layout | `apps/web/src/components/GitHubPanel.tsx` | DONE |
+| 6.2 | Centralize active workspace summary presentation to reduce duplicated display logic | `apps/web/src/components/GitHubPanel.tsx` | DONE |
+| 6.3 | Compact merge and workspace presentation without losing clarity on narrow widths | `apps/web/src/components/GitHubPanel.tsx` | DONE |
+| 6.4 | Review the changed panel architecture for scope boundaries, cleanliness, and maintainability | `.plans/github-panel-context-promotion-phases.md`, `apps/web/src/components/GitHubPanel.tsx` | DONE |
+| 6.5 | Re run required checks and capture review outcome in the plan | `.plans/github-panel-context-promotion-phases.md` | DONE |
+
+### Review requirements
+
+- Compact repeated render markup where the same layout pattern appears more than once
+- Preserve the repo scope versus workspace scope boundary from earlier phases
+- Prefer local extraction over broad new component sprawl unless a split clearly improves ownership
+- Review the final code for readability, naming, duplication, and responsiveness regressions
+- Record review findings and any intentional deferrals in this plan file before closing the phase
+
+### Validation
+
+- Verify repository and active workspace sections still read clearly after compaction
+- Verify narrow layouts still wrap branch, path, and action content cleanly
+- `bun lint`
+- `bun typecheck`
+- `bun run test -- --run src/lib/workspacePromotionState.test.ts src/lib/gitPanelContext.test.ts` from `apps/web`
+
+### Review outcome
+
+- Kept repo scope and workspace scope separated. Repo data still reads from `repoCwd`, while workspace actions still bind to `workspaceCwd`.
+- Compacted repeated repository, workspace, auth, and issues card markup into local panel primitives inside `apps/web/src/components/GitHubPanel.tsx`.
+- Centralized active workspace presentation into one derived summary so labels, badges, next action copy, and merge target copy stay aligned.
+- Kept the compaction local to the panel file instead of splitting more files. The mutation and query ownership is still tightly coupled to this component.
+- Deferred a larger file split for now. The current helper extraction improved readability without scattering ownership across many small files.
+
 ## Commit strategy
 
 Use one focused commit per phase.
@@ -150,3 +191,4 @@ Recommended subjects:
 - `refactor(web): align project switching with panel scope rules`
 - `design(web): reorganize github panel layout for responsive workspace flows`
 - `feat(web): derive workspace promotion state in github panel`
+- `refactor(web): compact github panel composition`
