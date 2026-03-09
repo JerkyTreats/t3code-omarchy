@@ -64,6 +64,7 @@ interface GitActionsControlProps {
   workspaceCwd: string | null;
   repoCwd: string | null;
   repoRoot: string | null;
+  scopeKind: "project" | "thread";
   activeThreadId: ThreadId | null;
 }
 
@@ -160,6 +161,7 @@ export default function GitHubPanel({
   workspaceCwd,
   repoCwd,
   repoRoot,
+  scopeKind,
   activeThreadId,
 }: GitActionsControlProps) {
   const navigate = useNavigate();
@@ -988,6 +990,38 @@ export default function GitHubPanel({
                 <section className="space-y-3">
                   <div className="flex items-center justify-between gap-2">
                     <h3 className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                      Repository
+                    </h3>
+                  </div>
+                  <div className="space-y-3 rounded-xl border border-border bg-muted/30 p-3">
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                          Repo
+                        </p>
+                        <p className="break-all text-sm font-medium text-foreground">
+                          {githubStatusQuery.data?.repo?.nameWithOwner ?? "Repository unavailable"}
+                        </p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                          Scope
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
+                          <Badge variant="outline">
+                            {scopeKind === "thread" ? "Thread scoped" : "Project scoped"}
+                          </Badge>
+                          <Badge variant="outline">{repoRoot ? "Repo root" : "Project cwd"}</Badge>
+                        </div>
+                      </div>
+                    </div>
+                    <p className="break-all text-xs text-muted-foreground">{repoRoot ?? repoCwd}</p>
+                  </div>
+                </section>
+
+                <section className="space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
                       Active workspace
                     </h3>
                   </div>
@@ -1002,14 +1036,14 @@ export default function GitHubPanel({
                     </p>
                   ) : (
                     <div className="space-y-3 rounded-xl border border-border bg-muted/30 p-3">
-                      <div className="flex items-start justify-between gap-3">
+                      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                         <div className="min-w-0 flex-1 space-y-3">
-                          <div className="grid gap-3 sm:grid-cols-2">
+                          <div className="grid gap-3 md:grid-cols-2">
                             <div className="space-y-1">
                               <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
                                 Workspace
                               </p>
-                              <p className="truncate text-sm font-medium text-foreground">
+                              <p className="break-all text-sm font-medium text-foreground">
                                 {activeWorkspaceName}
                               </p>
                             </div>
@@ -1027,7 +1061,7 @@ export default function GitHubPanel({
                               <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
                                 Branch
                               </p>
-                              <p className="truncate text-sm font-medium text-foreground">
+                              <p className="break-all text-sm font-medium text-foreground">
                                 {activeWorkspaceBranch ?? "Detached HEAD"}
                               </p>
                             </div>
@@ -1058,15 +1092,17 @@ export default function GitHubPanel({
                               </div>
                             </div>
                           </div>
-                          <p className="truncate text-xs text-muted-foreground">{workspaceCwd}</p>
+                          <p className="break-all text-xs text-muted-foreground">{workspaceCwd}</p>
                         </div>
-                        <Button
-                          variant="outline"
-                          size="xs"
-                          onClick={() => openPathInEditor(workspaceCwd)}
-                        >
-                          Open
-                        </Button>
+                        <div className="flex shrink-0 flex-wrap gap-2 lg:justify-end">
+                          <Button
+                            variant="outline"
+                            size="xs"
+                            onClick={() => openPathInEditor(workspaceCwd)}
+                          >
+                            Open
+                          </Button>
+                        </div>
                       </div>
 
                       {isPrimaryWorkspace && (
@@ -1110,7 +1146,7 @@ export default function GitHubPanel({
                             </p>
                           </div>
 
-                          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
                             <label className="space-y-1 text-sm">
                               <span className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
                                 Source branch
@@ -1134,9 +1170,10 @@ export default function GitHubPanel({
                               </select>
                             </label>
 
-                            <div className="flex flex-wrap gap-2">
+                            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                               <Button
                                 size="sm"
+                                className="w-full sm:w-auto"
                                 disabled={mergeDisabledReason !== null}
                                 onClick={() => {
                                   void runLocalMerge();
@@ -1148,6 +1185,7 @@ export default function GitHubPanel({
                                 <Button
                                   variant="outline"
                                   size="sm"
+                                  className="w-full sm:w-auto"
                                   disabled={isAbortMergeRunning}
                                   onClick={() => {
                                     void abortActiveMerge();

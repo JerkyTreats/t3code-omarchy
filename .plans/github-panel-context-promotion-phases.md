@@ -15,7 +15,7 @@ Track the phased overhaul for GitHub panel correctness, workspace awareness, rep
 | 1 | Define canonical panel context and scope ownership | DONE | PASS | `refactor(web): define canonical github panel context` | Repo scope and workspace scope are explicit |
 | 2 | Reset stale panel state and query results on context change | DONE | PASS | `fix(web): reset github panel state on context changes` | Context switches now clear local panel state and force a fresh fetch |
 | 3 | Make project and thread switching rules explicit | DONE | PASS | `refactor(web): align project clicks with panel scope` | Project header clicks now activate that project thread context |
-| 4 | Split panel into repo and workspace sections and improve responsiveness | TODO | TODO | TODO | Improve overflow handling, stacking, and density |
+| 4 | Split panel into repo and workspace sections and improve responsiveness | DONE | PASS | `refactor(web): reorganize github panel layout for workspace flows` | Repo scope is explicit and narrow layouts stack cleanly |
 | 5 | Integrate promotion state and next action guidance | TODO | TODO | TODO | Apply the workflow spec to the active workspace card |
 
 ## Phase 1
@@ -101,11 +101,11 @@ Separate repo and workspace concerns in the layout and make the panel responsive
 
 | Step | Change | Files | Done criteria |
 | --- | --- | --- | --- |
-| 4.1 | Split the panel into repo, workspace, actions, auth, and issues sections | `apps/web/src/components/GitHubPanel.tsx` and child components | Each section has one clear scope |
-| 4.2 | Rework long branch and path presentation | `apps/web/src/components/GitHubPanel.tsx` | Long values no longer collide with buttons or badges |
-| 4.3 | Stack merge controls and action groups for narrow widths | `apps/web/src/components/GitHubPanel.tsx` | Narrow sheet and rail layouts stay readable |
-| 4.4 | Collapse low priority metadata behind a disclosure area | `apps/web/src/components/GitHubPanel.tsx` | High value actions remain visible without overload |
-| 4.5 | Polish loading and refresh affordances on context switch | `apps/web/src/components/GitHubPanel.tsx` | State changes feel intentional rather than stale |
+| 4.1 | Split the panel into repo, workspace, actions, auth, and issues sections | `apps/web/src/components/GitHubPanel.tsx` and child components | DONE |
+| 4.2 | Rework long branch and path presentation | `apps/web/src/components/GitHubPanel.tsx` | DONE |
+| 4.3 | Stack merge controls and action groups for narrow widths | `apps/web/src/components/GitHubPanel.tsx` | DONE |
+| 4.4 | Collapse low priority metadata behind a disclosure area | `apps/web/src/components/GitHubPanel.tsx` | DEFERRED |
+| 4.5 | Polish loading and refresh affordances on context switch | `apps/web/src/components/GitHubPanel.tsx` | DONE |
 
 ### Validation
 
