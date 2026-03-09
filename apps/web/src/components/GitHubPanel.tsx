@@ -201,6 +201,17 @@ export default function GitHubPanel({
     !!gitStatus?.branch && !!currentBranch && gitStatus.branch !== currentBranch;
 
   useEffect(() => {
+    setIssueState("open");
+    setMergeSourceBranch("");
+    setLastMergeResult(null);
+    setPendingDefaultBranchAction(null);
+    setDialogCommitMessage("");
+    setIsCommitDialogOpen(false);
+    void invalidateGitQueries(queryClient);
+    void invalidateGitHubQueries(queryClient);
+  }, [activeThreadId, queryClient, repoCwd, workspaceCwd]);
+
+  useEffect(() => {
     if (!isGitStatusOutOfSync) return;
     void invalidateGitQueries(queryClient);
   }, [isGitStatusOutOfSync, queryClient]);

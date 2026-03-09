@@ -13,7 +13,7 @@ Track the phased overhaul for GitHub panel correctness, workspace awareness, rep
 | Phase | Goal | Status | Checks | Commit | Notes |
 | --- | --- | --- | --- | --- | --- |
 | 1 | Define canonical panel context and scope ownership | DONE | PASS | `refactor(web): define canonical github panel context` | Repo scope and workspace scope are explicit |
-| 2 | Reset stale panel state and query results on context change | TODO | TODO | TODO | Eliminate stale repo, branch, and merge UI |
+| 2 | Reset stale panel state and query results on context change | DONE | PASS | `fix(web): reset github panel state on context changes` | Context switches now clear local panel state and force a fresh fetch |
 | 3 | Make project and thread switching rules explicit | TODO | TODO | TODO | Ensure panel follows the intended active entity |
 | 4 | Split panel into repo and workspace sections and improve responsiveness | TODO | TODO | TODO | Improve overflow handling, stacking, and density |
 | 5 | Integrate promotion state and next action guidance | TODO | TODO | TODO | Apply the workflow spec to the active workspace card |
@@ -57,10 +57,10 @@ Eliminate stale panel state after thread changes, project changes, worktree crea
 
 | Step | Change | Files | Done criteria |
 | --- | --- | --- | --- |
-| 2.1 | Reset merge and issue filter state when panel context changes | `apps/web/src/components/GitHubPanel.tsx` | Old source branch and issue state do not leak across contexts |
-| 2.2 | Audit Git and GitHub query invalidation after branch and worktree mutations | `apps/web/src/lib/gitReactQuery.ts`, `apps/web/src/lib/githubReactQuery.ts` | Mutations invalidate all affected context queries |
-| 2.3 | Review `keepMounted` behavior and tighten remount rules | `apps/web/src/components/ChatView.tsx` | Panel does not preserve stale context after navigation |
-| 2.4 | Fix live branch display to prefer current Git facts over stale thread metadata | `apps/web/src/components/GitHubPanel.tsx`, `apps/web/src/components/BranchToolbar.tsx`, `apps/web/src/components/ChatView.tsx` | Visible branch labels match the active workspace |
+| 2.1 | Reset merge and issue filter state when panel context changes | `apps/web/src/components/GitHubPanel.tsx` | DONE |
+| 2.2 | Audit Git and GitHub query invalidation after branch and worktree mutations | `apps/web/src/lib/gitReactQuery.ts`, `apps/web/src/lib/githubReactQuery.ts` | DONE |
+| 2.3 | Review `keepMounted` behavior and tighten remount rules | `apps/web/src/components/ChatView.tsx` | DONE |
+| 2.4 | Fix live branch display to prefer current Git facts over stale thread metadata | `apps/web/src/components/GitHubPanel.tsx`, `apps/web/src/components/BranchToolbar.tsx`, `apps/web/src/components/ChatView.tsx` | DONE |
 
 ### Validation
 
