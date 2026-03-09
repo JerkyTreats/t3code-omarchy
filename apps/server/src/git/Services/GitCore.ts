@@ -9,6 +9,7 @@
 import { ServiceMap } from "effect";
 import type { Effect, Scope } from "effect";
 import type {
+  GitAbortMergeResult,
   GitCheckoutInput,
   GitCreateBranchInput,
   GitCreateWorktreeInput,
@@ -16,6 +17,8 @@ import type {
   GitInitInput,
   GitListBranchesInput,
   GitListBranchesResult,
+  GitMergeBranchesInput,
+  GitMergeBranchesResult,
   GitRepositoryContextResult,
   GitPullResult,
   GitRemoveWorktreeInput,
@@ -153,6 +156,18 @@ export interface GitCoreShape {
    * Create a local branch.
    */
   readonly createBranch: (input: GitCreateBranchInput) => Effect.Effect<void, GitCommandError>;
+
+  /**
+   * Merge one local branch into the target branch currently checked out in cwd.
+   */
+  readonly mergeBranches: (
+    input: GitMergeBranchesInput,
+  ) => Effect.Effect<GitMergeBranchesResult, GitCommandError>;
+
+  /**
+   * Abort an in-progress merge in the provided cwd.
+   */
+  readonly abortMerge: (cwd: string) => Effect.Effect<GitAbortMergeResult, GitCommandError>;
 
   /**
    * Checkout an existing branch and refresh its upstream metadata in background.

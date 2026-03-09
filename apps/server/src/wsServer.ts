@@ -839,6 +839,16 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
         return yield* git.createBranch(body);
       }
 
+      case WS_METHODS.gitMergeBranches: {
+        const body = stripRequestTag(request.body);
+        return yield* git.mergeBranches(body);
+      }
+
+      case WS_METHODS.gitAbortMerge: {
+        const body = stripRequestTag(request.body);
+        return yield* git.abortMerge(body.cwd);
+      }
+
       case WS_METHODS.gitCheckout: {
         const body = stripRequestTag(request.body);
         return yield* Effect.scoped(git.checkoutBranch(body));

@@ -52,6 +52,7 @@ import {
   gitCreateWorktreeMutationOptions,
   gitRepositoryContextQueryOptions,
 } from "~/lib/gitReactQuery";
+import { buildTemporaryWorktreeBranchName } from "~/gitWorktree";
 import { projectSearchEntriesQueryOptions } from "~/lib/projectReactQuery";
 import { serverConfigQueryOptions, serverQueryKeys } from "~/lib/serverReactQuery";
 
@@ -273,7 +274,6 @@ const EMPTY_PENDING_USER_INPUT_ANSWERS: Record<string, PendingUserInputDraftAnsw
 const COMPOSER_PATH_QUERY_DEBOUNCE_MS = 120;
 const SCRIPT_TERMINAL_COLS = 120;
 const SCRIPT_TERMINAL_ROWS = 30;
-const WORKTREE_BRANCH_PREFIX = "t3code";
 const GITHUB_PANEL_SHEET_MEDIA_QUERY = "(max-width: 1180px)";
 const GITHUB_PANEL_INLINE_DEFAULT_WIDTH = "clamp(24rem,36vw,34rem)";
 
@@ -458,12 +458,6 @@ function fileFromDataUrl(input: { dataUrl: string; name: string; mimeType: strin
   const payload = commaIndex >= 0 ? input.dataUrl.slice(commaIndex + 1) : "";
   const bytes = Uint8Array.from(atob(payload), (char) => char.charCodeAt(0));
   return new File([bytes], input.name, { type: input.mimeType });
-}
-
-function buildTemporaryWorktreeBranchName(): string {
-  // Keep the 8-hex suffix shape for backend temporary-branch detection.
-  const token = crypto.randomUUID().slice(0, 8).toLowerCase();
-  return `${WORKTREE_BRANCH_PREFIX}/${token}`;
 }
 
 function cloneComposerImageForRetry(image: ComposerImageAttachment): ComposerImageAttachment {

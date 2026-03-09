@@ -247,6 +247,16 @@ const makeGitCore = Effect.gen(function* () {
       Effect.map((result) => result.stdout),
     );
 
+  const readConflictedFiles = (cwd: string) =>
+    runGitStdout("GitCore.readConflictedFiles", cwd, ["diff", "--name-only", "--diff-filter=U"], true).pipe(
+      Effect.map((stdout) =>
+        stdout
+          .split("\n")
+          .map((line) => line.trim())
+          .filter((line) => line.length > 0),
+      ),
+    );
+
   const branchExists = (cwd: string, branch: string): Effect.Effect<boolean, GitCommandError> =>
     executeGit(
       "GitCore.branchExists",
@@ -1119,6 +1129,127 @@ const makeGitCore = Effect.gen(function* () {
       );
     });
 
+  const mergeBranches: GitCoreShape["mergeBranches"] = (input) =>
+    Effect.gen(function* () {
+      if (input.sourceBranch === input.targetBranch) {
+        return yield* createGitCommandError(
+          "GitCore.mergeBranches",
+          input.cwd,
+          ["merge", input.sourceBranch],
+          "Source and target branches must be different.",
+        );
+      }
+
+      const currentBranch = yield* runGitStdout(
+        "GitCore.mergeBranches.currentBranch",
+        input.cwd,
+        ["branch", "--show-current"],
+      ).pipe(Effect.map((stdout) => stdout.trim()));
+
+      if (currentBranch.length === 0) {
+        return yield* createGitCommandError(
+          "GitCore.mergeBranches",
+          input.cwd,
+          ["merge", input.sourceBranch],
+          "Detached HEAD: checkout a target branch before merging.",
+        );
+      }
+
+      if (currentBranch !== input.targetBranch) {
+        return yield* createGitCommandError(
+          "GitCore.mergeBranches",
+          input.cwd,
+          ["merge", input.sourceBranch],
+          `Target branch ${input.targetBranch} is not checked out in ${input.cwd}.`,
+        );
+      }
+
+      const targetStatus = yield* status({ cwd: input.cwd });
+      if (targetStatus.hasWorkingTreeChanges) {
+        return yield* createGitCommandError(
+          "GitCore.mergeBranches",
+          input.cwd,
+          ["merge", input.sourceBranch],
+          `Target workspace for ${input.targetBranch} has local changes.`,
+        );
+      }
+
+      const mergeArgs = ["merge", "--no-ff", "--no-edit", input.sourceBranch] as const;
+      const mergeResult = yield* executeGit(
+        "GitCore.mergeBranches.merge",
+        input.cwd,
+        mergeArgs,
+        {
+          timeoutMs: 30_000,
+          allowNonZeroExit: true,
+        },
+      );
+
+      if (mergeResult.code === 0) {
+        const mergeCommitSha = yield* runGitStdout(
+          "GitCore.mergeBranches.revParseHead",
+          input.cwd,
+          ["rev-parse", "HEAD"],
+        ).pipe(Effect.map((stdout) => stdout.trim()));
+        return {
+          status: "merged" as const,
+          sourceBranch: input.sourceBranch,
+          targetBranch: input.targetBranch,
+          targetWorktreePath: input.cwd,
+          conflictedFiles: [],
+          mergeCommitSha,
+        };
+      }
+
+      const conflictedFiles = yield* readConflictedFiles(input.cwd);
+      if (conflictedFiles.length > 0) {
+        return {
+          status: "conflicted" as const,
+          sourceBranch: input.sourceBranch,
+          targetBranch: input.targetBranch,
+          targetWorktreePath: input.cwd,
+          conflictedFiles,
+        };
+      }
+
+      return yield* createGitCommandError(
+        "GitCore.mergeBranches",
+        input.cwd,
+        mergeArgs,
+        mergeResult.stderr.trim() || "git merge failed",
+      );
+    });
+
+  const abortMerge: GitCoreShape["abortMerge"] = (cwd) =>
+    Effect.gen(function* () {
+      const mergeHeadResult = yield* executeGit(
+        "GitCore.abortMerge.mergeHead",
+        cwd,
+        ["rev-parse", "-q", "--verify", "MERGE_HEAD"],
+        {
+          timeoutMs: 5_000,
+          allowNonZeroExit: true,
+        },
+      );
+
+      if (mergeHeadResult.code !== 0) {
+        return {
+          status: "skipped_no_merge_in_progress" as const,
+          cwd,
+        };
+      }
+
+      yield* executeGit("GitCore.abortMerge.abort", cwd, ["merge", "--abort"], {
+        timeoutMs: 15_000,
+        fallbackErrorMessage: "git merge --abort failed",
+      });
+
+      return {
+        status: "aborted" as const,
+        cwd,
+      };
+    });
+
   const renameBranch: GitCoreShape["renameBranch"] = (input) =>
     Effect.gen(function* () {
       if (input.oldBranch === input.newBranch) {
@@ -1259,6 +1390,8 @@ const makeGitCore = Effect.gen(function* () {
     removeWorktree,
     renameBranch,
     createBranch,
+    mergeBranches,
+    abortMerge,
     checkoutBranch,
     initRepo,
     listLocalBranchNames,

@@ -109,6 +109,8 @@ const makeIsolatedGitCore = (gitService: GitServiceShape) =>
       removeWorktree: (input) => core.removeWorktree(input),
       renameBranch: (input) => core.renameBranch(input),
       createBranch: (input) => core.createBranch(input),
+      mergeBranches: (input) => core.mergeBranches(input),
+      abortMerge: (cwd) => core.abortMerge(cwd),
       checkoutBranch: (input) => core.checkoutBranch(input),
       initRepo: (input) => core.initRepo(input),
       listLocalBranchNames: (cwd) => core.listLocalBranchNames(cwd),
