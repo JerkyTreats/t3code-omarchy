@@ -16,7 +16,7 @@ Track the phased overhaul for GitHub panel correctness, workspace awareness, rep
 | 2 | Reset stale panel state and query results on context change | DONE | PASS | `fix(web): reset github panel state on context changes` | Context switches now clear local panel state and force a fresh fetch |
 | 3 | Make project and thread switching rules explicit | DONE | PASS | `refactor(web): align project clicks with panel scope` | Project header clicks now activate that project thread context |
 | 4 | Split panel into repo and workspace sections and improve responsiveness | DONE | PASS | `refactor(web): reorganize github panel layout for workspace flows` | Repo scope is explicit and narrow layouts stack cleanly |
-| 5 | Integrate promotion state and next action guidance | TODO | TODO | TODO | Apply the workflow spec to the active workspace card |
+| 5 | Integrate promotion state and next action guidance | DONE | PASS | `feat(web): show workspace promotion state guidance` | First slice derives workspace promotion state from available Git facts |
 
 ## Phase 1
 
@@ -125,11 +125,11 @@ Integrate promotion state into the active workspace card and make next action gu
 
 | Step | Change | Files | Done criteria |
 | --- | --- | --- | --- |
-| 5.1 | Add a pure promotion state calculator from Git facts | `apps/web/src/lib/workspacePromotionState.ts` | State derives from facts rather than local UI state |
-| 5.2 | Add overlays for publish and review status | `apps/web/src/components/GitHubPanel.tsx` | Delivery overlays appear without replacing core promotion state |
-| 5.3 | Show next suggested action by state | `apps/web/src/components/GitHubPanel.tsx` | Each state has one obvious next step |
-| 5.4 | Surface conflict resolution as a first class state | `apps/web/src/components/GitHubPanel.tsx` | Conflict actions outrank normal merge actions |
-| 5.5 | Draft short thread guidance on state changes | `apps/web/src/components/GitHubPanel.tsx` or adjacent helper | Conversation guidance aligns with workspace state |
+| 5.1 | Add a pure promotion state calculator from Git facts | `apps/web/src/lib/workspacePromotionState.ts` | DONE |
+| 5.2 | Add overlays for publish and review status | `apps/web/src/components/GitHubPanel.tsx` | DONE |
+| 5.3 | Show next suggested action by state | `apps/web/src/components/GitHubPanel.tsx` | DONE |
+| 5.4 | Surface conflict resolution as a first class state | `apps/web/src/components/GitHubPanel.tsx` | DONE |
+| 5.5 | Draft short thread guidance on state changes | `apps/web/src/components/GitHubPanel.tsx` or adjacent helper | DEFERRED |
 
 ### Validation
 

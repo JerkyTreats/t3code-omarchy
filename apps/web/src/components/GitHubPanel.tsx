@@ -54,6 +54,7 @@ import {
 } from "~/lib/gitReactQuery";
 import { buildTemporaryWorktreeBranchName } from "~/gitWorktree";
 import { newThreadId } from "~/lib/utils";
+import { deriveWorkspacePromotionState } from "~/lib/workspacePromotionState";
 import { preferredTerminalEditor, resolvePathLinkTarget } from "~/terminal-links";
 import { readNativeApi } from "~/nativeApi";
 import { useComposerDraftStore } from "~/composerDraftStore";
@@ -259,6 +260,10 @@ export default function GitHubPanel({
     () => (branchList?.branches ?? []).filter((branch) => !branch.isRemote),
     [branchList?.branches],
   );
+  const defaultBranch = useMemo(
+    () => localBranches.find((branch) => branch.isDefault)?.name ?? null,
+    [localBranches],
+  );
   const activeWorkspaceBranch = gitStatusForActions?.branch ?? currentBranch;
   const activeWorkspaceBranchMeta = useMemo(
     () => localBranches.find((branch) => branch.name === activeWorkspaceBranch) ?? null,
@@ -280,6 +285,32 @@ export default function GitHubPanel({
     const current = branchList?.branches.find((branch) => branch.name === branchName);
     return current?.isDefault ?? (branchName === "main" || branchName === "master");
   }, [branchList?.branches, gitStatusForActions?.branch]);
+  const activeTargetBranch = gitStatusForActions?.pr?.baseBranch ?? defaultBranch;
+  const promotionState = useMemo(
+    () =>
+      deriveWorkspacePromotionState({
+        branch: activeWorkspaceBranch,
+        targetBranch: activeTargetBranch,
+        isPrimaryWorkspace,
+        hasWorkingTreeChanges: gitStatusForActions?.hasWorkingTreeChanges ?? false,
+        hasConflicts: activeWorkspaceHasConflicts,
+        hasUpstream: gitStatusForActions?.hasUpstream ?? false,
+        aheadCount: gitStatusForActions?.aheadCount ?? 0,
+        behindCount: gitStatusForActions?.behindCount ?? 0,
+        hasOpenPr: gitStatusForActions?.pr?.state === "open",
+      }),
+    [
+      activeTargetBranch,
+      activeWorkspaceBranch,
+      activeWorkspaceHasConflicts,
+      gitStatusForActions?.aheadCount,
+      gitStatusForActions?.behindCount,
+      gitStatusForActions?.hasUpstream,
+      gitStatusForActions?.hasWorkingTreeChanges,
+      gitStatusForActions?.pr?.state,
+      isPrimaryWorkspace,
+    ],
+  );
 
   const gitActionMenuItems = useMemo(
     () => buildMenuItems(gitStatusForActions, isGitActionRunning),
@@ -1077,6 +1108,7 @@ export default function GitHubPanel({
                                 ) : (
                                   <Badge variant="success">Clean</Badge>
                                 )}
+                                <Badge variant="outline">{promotionState.label}</Badge>
                                 {activeWorkspaceBranchMeta?.isDefault && (
                                   <Badge variant="outline">Default branch</Badge>
                                 )}
@@ -1090,6 +1122,15 @@ export default function GitHubPanel({
                                   <Badge variant="outline">PR open</Badge>
                                 )}
                               </div>
+                            </div>
+                            <div className="space-y-1 md:col-span-2">
+                              <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                                Next action
+                              </p>
+                              <p className="text-sm font-medium text-foreground">
+                                {promotionState.nextAction}
+                              </p>
+                              <p className="text-xs text-muted-foreground">{promotionState.detail}</p>
                             </div>
                           </div>
                           <p className="break-all text-xs text-muted-foreground">{workspaceCwd}</p>
