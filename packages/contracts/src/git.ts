@@ -122,6 +122,11 @@ const GitStatusPr = Schema.Struct({
   state: GitStatusPrState,
 });
 
+const GitStatusMerge = Schema.Struct({
+  inProgress: Schema.Boolean,
+  conflictedFiles: Schema.Array(TrimmedNonEmptyStringSchema),
+});
+
 export const GitStatusResult = Schema.Struct({
   branch: TrimmedNonEmptyStringSchema.pipe(Schema.NullOr),
   hasWorkingTreeChanges: Schema.Boolean,
@@ -139,6 +144,7 @@ export const GitStatusResult = Schema.Struct({
   hasUpstream: Schema.Boolean,
   aheadCount: NonNegativeInt,
   behindCount: NonNegativeInt,
+  merge: GitStatusMerge,
   pr: Schema.NullOr(GitStatusPr),
 });
 export type GitStatusResult = typeof GitStatusResult.Type;

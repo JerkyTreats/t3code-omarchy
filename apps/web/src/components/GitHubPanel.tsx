@@ -1,7 +1,7 @@
 import type { GitMergeBranchesResult, GitStackedAction, GitStatusResult, ThreadId } from "@t3tools/contracts";
 import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ComponentProps, type ReactNode } from "react";
 import {
   CloudUploadIcon,
   ExternalLinkIcon,
@@ -31,6 +31,7 @@ import {
   DialogPopup,
   DialogTitle,
 } from "~/components/ui/dialog";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "~/components/ui/collapsible";
 import { ScrollArea } from "~/components/ui/scroll-area";
 import { Textarea } from "~/components/ui/textarea";
 import { toastManager } from "~/components/ui/toast";
@@ -53,7 +54,8 @@ import {
   invalidateGitQueries,
 } from "~/lib/gitReactQuery";
 import { buildTemporaryWorktreeBranchName } from "~/gitWorktree";
-import { newThreadId } from "~/lib/utils";
+import { cn, newThreadId } from "~/lib/utils";
+import { deriveWorkspacePromotionState } from "~/lib/workspacePromotionState";
 import { preferredTerminalEditor, resolvePathLinkTarget } from "~/terminal-links";
 import { readNativeApi } from "~/nativeApi";
 import { useComposerDraftStore } from "~/composerDraftStore";
@@ -61,8 +63,10 @@ import { useStore } from "~/store";
 import { formatWorktreePathForDisplay } from "~/worktreeCleanup";
 
 interface GitActionsControlProps {
-  gitCwd: string | null;
-  projectGitCwd: string | null;
+  workspaceCwd: string | null;
+  repoCwd: string | null;
+  repoRoot: string | null;
+  scopeKind: "project" | "thread";
   activeThreadId: ThreadId | null;
 }
 
@@ -76,6 +80,57 @@ interface PendingDefaultBranchAction {
 }
 
 type GitActionToastId = ReturnType<typeof toastManager.add>;
+type PanelBadgeVariant = ComponentProps<typeof Badge>["variant"];
+
+interface PanelCardProps {
+  children: ReactNode;
+  className?: string;
+}
+
+interface PanelFieldProps {
+  label: string;
+  children: ReactNode;
+  className?: string;
+}
+
+interface PanelBadgeConfig {
+  label: string;
+  variant: PanelBadgeVariant;
+}
+
+const PANEL_CARD_CLASS = "space-y-3 rounded-xl border border-border bg-muted/30 p-3";
+const PANEL_INSET_CARD_CLASS = "rounded-lg border border-border bg-background p-3";
+const PANEL_FIELD_LABEL_CLASS =
+  "text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground";
+
+function PanelCard({ children, className }: PanelCardProps) {
+  return <div className={cn(PANEL_CARD_CLASS, className)}>{children}</div>;
+}
+
+function PanelInsetCard({ children, className }: PanelCardProps) {
+  return <div className={cn(PANEL_INSET_CARD_CLASS, className)}>{children}</div>;
+}
+
+function PanelField({ label, children, className }: PanelFieldProps) {
+  return (
+    <div className={cn("space-y-1", className)}>
+      <p className={PANEL_FIELD_LABEL_CLASS}>{label}</p>
+      {children}
+    </div>
+  );
+}
+
+function PanelBadgeList({ items }: { items: PanelBadgeConfig[] }) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {items.map((item) => (
+        <Badge key={`${item.variant}-${item.label}`} variant={item.variant}>
+          {item.label}
+        </Badge>
+      ))}
+    </div>
+  );
+}
 
 function getMenuActionDisabledReason(
   item: GitActionMenuItem,
@@ -155,7 +210,13 @@ function formatGitHubTimestamp(value: string): string {
   }).format(date);
 }
 
-export default function GitHubPanel({ gitCwd, projectGitCwd, activeThreadId }: GitActionsControlProps) {
+export default function GitHubPanel({
+  workspaceCwd,
+  repoCwd,
+  repoRoot,
+  scopeKind,
+  activeThreadId,
+}: GitActionsControlProps) {
   const navigate = useNavigate();
   const threads = useStore((store) => store.threads);
   const activeServerThread = useMemo(
@@ -181,16 +242,33 @@ export default function GitHubPanel({ gitCwd, projectGitCwd, activeThreadId }: G
     useState<PendingDefaultBranchAction | null>(null);
   const [mergeSourceBranch, setMergeSourceBranch] = useState("");
   const [lastMergeResult, setLastMergeResult] = useState<GitMergeBranchesResult | null>(null);
+  const [repoDetailsOpen, setRepoDetailsOpen] = useState(false);
+  const [workspaceDetailsOpen, setWorkspaceDetailsOpen] = useState(false);
 
-  const { data: gitStatus = null, error: gitStatusError } = useQuery(gitStatusQueryOptions(gitCwd));
+  const { data: gitStatus = null, error: gitStatusError } = useQuery(
+    gitStatusQueryOptions(workspaceCwd),
+  );
 
-  const { data: branchList = null } = useQuery(gitBranchesQueryOptions(gitCwd));
-  const githubStatusQuery = useQuery(githubStatusQueryOptions(projectGitCwd));
+  const { data: branchList = null } = useQuery(gitBranchesQueryOptions(workspaceCwd));
+  const githubStatusQuery = useQuery(githubStatusQueryOptions(repoCwd));
   // Default to true while loading so we don't flash init controls.
   const isRepo = branchList?.isRepo ?? true;
   const currentBranch = branchList?.branches.find((branch) => branch.current)?.name ?? null;
   const isGitStatusOutOfSync =
     !!gitStatus?.branch && !!currentBranch && gitStatus.branch !== currentBranch;
+
+  useEffect(() => {
+    setIssueState("open");
+    setMergeSourceBranch("");
+    setLastMergeResult(null);
+    setPendingDefaultBranchAction(null);
+    setDialogCommitMessage("");
+    setIsCommitDialogOpen(false);
+    setRepoDetailsOpen(false);
+    setWorkspaceDetailsOpen(false);
+    void invalidateGitQueries(queryClient);
+    void invalidateGitHubQueries(queryClient);
+  }, [activeThreadId, queryClient, repoCwd, workspaceCwd]);
 
   useEffect(() => {
     if (!isGitStatusOutOfSync) return;
@@ -199,13 +277,13 @@ export default function GitHubPanel({ gitCwd, projectGitCwd, activeThreadId }: G
 
   const gitStatusForActions = isGitStatusOutOfSync ? null : gitStatus;
 
-  const initMutation = useMutation(gitInitMutationOptions({ cwd: gitCwd, queryClient }));
-  const loginMutation = useMutation(githubLoginMutationOptions({ cwd: projectGitCwd, queryClient }));
+  const initMutation = useMutation(gitInitMutationOptions({ cwd: workspaceCwd, queryClient }));
+  const loginMutation = useMutation(githubLoginMutationOptions({ cwd: repoCwd, queryClient }));
   const createWorktreeMutation = useMutation(gitCreateWorktreeMutationOptions({ queryClient }));
 
   const githubIssuesQuery = useQuery(
     githubIssuesQueryOptions({
-      cwd: projectGitCwd,
+      cwd: repoCwd,
       state: issueState,
       limit: 20,
       enabled:
@@ -217,43 +295,145 @@ export default function GitHubPanel({ gitCwd, projectGitCwd, activeThreadId }: G
   const isGitHubAuthenticated = githubStatusQuery.data?.authenticated === true;
 
   const runImmediateGitActionMutation = useMutation(
-    gitRunStackedActionMutationOptions({ cwd: gitCwd, queryClient }),
+    gitRunStackedActionMutationOptions({ cwd: workspaceCwd, queryClient }),
   );
-  const pullMutation = useMutation(gitPullMutationOptions({ cwd: gitCwd, queryClient }));
+  const pullMutation = useMutation(gitPullMutationOptions({ cwd: workspaceCwd, queryClient }));
   const mergeBranchesMutation = useMutation(
-    gitMergeBranchesMutationOptions({ cwd: gitCwd, queryClient }),
+    gitMergeBranchesMutationOptions({ cwd: workspaceCwd, queryClient }),
   );
-  const abortMergeMutation = useMutation(gitAbortMergeMutationOptions({ cwd: gitCwd, queryClient }));
+  const abortMergeMutation = useMutation(
+    gitAbortMergeMutationOptions({ cwd: workspaceCwd, queryClient }),
+  );
 
   const isRunStackedActionRunning =
-    useIsMutating({ mutationKey: gitMutationKeys.runStackedAction(gitCwd) }) > 0;
-  const isPullRunning = useIsMutating({ mutationKey: gitMutationKeys.pull(gitCwd) }) > 0;
-  const isMergeRunning = useIsMutating({ mutationKey: gitMutationKeys.mergeBranches(gitCwd) }) > 0;
-  const isAbortMergeRunning = useIsMutating({ mutationKey: gitMutationKeys.abortMerge(gitCwd) }) > 0;
+    useIsMutating({ mutationKey: gitMutationKeys.runStackedAction(workspaceCwd) }) > 0;
+  const isPullRunning = useIsMutating({ mutationKey: gitMutationKeys.pull(workspaceCwd) }) > 0;
+  const isMergeRunning = useIsMutating({ mutationKey: gitMutationKeys.mergeBranches(workspaceCwd) }) > 0;
+  const isAbortMergeRunning =
+    useIsMutating({ mutationKey: gitMutationKeys.abortMerge(workspaceCwd) }) > 0;
   const isGitActionRunning = isRunStackedActionRunning || isPullRunning;
   const localBranches = useMemo(
     () => (branchList?.branches ?? []).filter((branch) => !branch.isRemote),
     [branchList?.branches],
+  );
+  const defaultBranch = useMemo(
+    () => localBranches.find((branch) => branch.isDefault)?.name ?? null,
+    [localBranches],
   );
   const activeWorkspaceBranch = gitStatusForActions?.branch ?? currentBranch;
   const activeWorkspaceBranchMeta = useMemo(
     () => localBranches.find((branch) => branch.name === activeWorkspaceBranch) ?? null,
     [activeWorkspaceBranch, localBranches],
   );
-  const isPrimaryWorkspace = projectGitCwd !== null && gitCwd === projectGitCwd;
-  const activeWorkspaceName =
-    isPrimaryWorkspace || !gitCwd ? "Primary checkout" : formatWorktreePathForDisplay(gitCwd);
-  const activeWorkspaceScopeCopy = isPrimaryWorkspace
-    ? "This thread works in the primary checkout."
-    : "This thread works in a dedicated workspace.";
-  const activeWorkspaceHasConflicts =
-    lastMergeResult?.status === "conflicted" && lastMergeResult.targetWorktreePath === gitCwd;
+  const isPrimaryWorkspace = repoRoot !== null && workspaceCwd === repoRoot;
+  const activeWorkspaceMerge =
+    gitStatusForActions?.merge ?? ({ inProgress: false, conflictedFiles: [] } as const);
+  const activeWorkspaceHasConflicts = activeWorkspaceMerge.conflictedFiles.length > 0;
   const isDefaultBranch = useMemo(() => {
     const branchName = gitStatusForActions?.branch;
     if (!branchName) return false;
     const current = branchList?.branches.find((branch) => branch.name === branchName);
     return current?.isDefault ?? (branchName === "main" || branchName === "master");
   }, [branchList?.branches, gitStatusForActions?.branch]);
+  const activeTargetBranch = gitStatusForActions?.pr?.baseBranch ?? defaultBranch;
+  const promotionState = useMemo(
+    () =>
+      deriveWorkspacePromotionState({
+        branch: activeWorkspaceBranch,
+        targetBranch: activeTargetBranch,
+        isPrimaryWorkspace,
+        hasWorkingTreeChanges: gitStatusForActions?.hasWorkingTreeChanges ?? false,
+        mergeInProgress: activeWorkspaceMerge.inProgress,
+        conflictedFiles: activeWorkspaceMerge.conflictedFiles,
+        hasUpstream: gitStatusForActions?.hasUpstream ?? false,
+        aheadCount: gitStatusForActions?.aheadCount ?? 0,
+        behindCount: gitStatusForActions?.behindCount ?? 0,
+        hasOpenPr: gitStatusForActions?.pr?.state === "open",
+      }),
+    [
+      activeTargetBranch,
+      activeWorkspaceBranch,
+      activeWorkspaceMerge.conflictedFiles,
+      activeWorkspaceMerge.inProgress,
+      gitStatusForActions?.aheadCount,
+      gitStatusForActions?.behindCount,
+      gitStatusForActions?.hasUpstream,
+      gitStatusForActions?.hasWorkingTreeChanges,
+      gitStatusForActions?.pr?.state,
+      isPrimaryWorkspace,
+    ],
+  );
+  const repositoryScopeBadges = useMemo<PanelBadgeConfig[]>(
+    () => [
+      {
+        label: scopeKind === "thread" ? "Thread scoped" : "Project scoped",
+        variant: "outline",
+      },
+      { label: repoRoot ? "Repo root" : "Project cwd", variant: "outline" },
+    ],
+    [repoRoot, scopeKind],
+  );
+  const activeWorkspaceSummary = useMemo(() => {
+    const statusBadges: PanelBadgeConfig[] = [];
+
+    if (activeWorkspaceHasConflicts) {
+      statusBadges.push({ label: "Conflicts", variant: "error" });
+    } else if (activeWorkspaceMerge.inProgress) {
+      statusBadges.push({ label: "Merge in progress", variant: "outline" });
+    } else if (gitStatusForActions?.hasWorkingTreeChanges) {
+      statusBadges.push({ label: "Dirty", variant: "warning" });
+    } else {
+      statusBadges.push({ label: "Clean", variant: "success" });
+    }
+
+    statusBadges.push({ label: promotionState.label, variant: "outline" });
+
+    if (activeWorkspaceBranchMeta?.isDefault) {
+      statusBadges.push({ label: "Default branch", variant: "outline" });
+    }
+    if (gitStatusForActions && gitStatusForActions.aheadCount > 0) {
+      statusBadges.push({ label: `Ahead ${gitStatusForActions.aheadCount}`, variant: "secondary" });
+    }
+    if (gitStatusForActions && gitStatusForActions.behindCount > 0) {
+      statusBadges.push({ label: `Behind ${gitStatusForActions.behindCount}`, variant: "secondary" });
+    }
+    if (gitStatusForActions?.pr?.state === "open") {
+      statusBadges.push({ label: "PR open", variant: "outline" });
+    }
+
+    return {
+      name:
+        isPrimaryWorkspace || !workspaceCwd
+          ? "Primary checkout"
+          : formatWorktreePathForDisplay(workspaceCwd),
+      scopeCopy: isPrimaryWorkspace
+        ? "This thread works in the primary checkout."
+        : "This thread works in a dedicated workspace.",
+      typeLabel: isPrimaryWorkspace ? "Primary" : "Dedicated",
+      typeVariant: (isPrimaryWorkspace ? "outline" : "secondary") as PanelBadgeVariant,
+      branchLabel: activeWorkspaceBranch ?? "Detached HEAD",
+      pathLabel: workspaceCwd,
+      targetBranchLabel: activeWorkspaceBranch ?? "Detached HEAD",
+      statusBadges,
+      nextAction: promotionState.nextAction,
+      detail: promotionState.detail,
+      guidanceTitle: promotionState.guidanceTitle,
+      guidanceBody: promotionState.guidanceBody,
+    };
+  }, [
+    activeWorkspaceBranch,
+    activeWorkspaceBranchMeta?.isDefault,
+    activeWorkspaceHasConflicts,
+    activeWorkspaceMerge.inProgress,
+    gitStatusForActions,
+    isPrimaryWorkspace,
+    promotionState.detail,
+    promotionState.guidanceBody,
+    promotionState.guidanceTitle,
+    promotionState.label,
+    promotionState.nextAction,
+    workspaceCwd,
+  ]);
 
   const gitActionMenuItems = useMemo(
     () => buildMenuItems(gitStatusForActions, isGitActionRunning),
@@ -290,11 +470,12 @@ export default function GitHubPanel({ gitCwd, projectGitCwd, activeThreadId }: G
   useEffect(() => {
     if (
       lastMergeResult &&
-      (lastMergeResult.targetWorktreePath !== gitCwd || lastMergeResult.targetBranch !== activeWorkspaceBranch)
+      (lastMergeResult.targetWorktreePath !== workspaceCwd ||
+        lastMergeResult.targetBranch !== activeWorkspaceBranch)
     ) {
       setLastMergeResult(null);
     }
-  }, [activeWorkspaceBranch, gitCwd, lastMergeResult]);
+  }, [activeWorkspaceBranch, lastMergeResult, workspaceCwd]);
 
   const openPathInEditor = useCallback(
     (targetPath: string) => {
@@ -361,13 +542,13 @@ export default function GitHubPanel({ gitCwd, projectGitCwd, activeThreadId }: G
   );
 
   const createDedicatedWorkspace = useCallback(async () => {
-    if (!projectGitCwd || !activeWorkspaceBranch) {
+    if (!repoCwd || !activeWorkspaceBranch) {
       return;
     }
 
     try {
       const result = await createWorktreeMutation.mutateAsync({
-        cwd: projectGitCwd,
+        cwd: repoCwd,
         branch: activeWorkspaceBranch,
         newBranch: buildTemporaryWorktreeBranchName(),
       });
@@ -390,7 +571,7 @@ export default function GitHubPanel({ gitCwd, projectGitCwd, activeThreadId }: G
     activeWorkspaceBranch,
     createWorktreeMutation,
     focusDraftThread,
-    projectGitCwd,
+    repoCwd,
     threadToastData,
   ]);
 
@@ -428,12 +609,12 @@ export default function GitHubPanel({ gitCwd, projectGitCwd, activeThreadId }: G
   }, [activeWorkspaceBranch, mergeBranchesMutation, mergeSourceBranch, threadToastData]);
 
   const abortActiveMerge = useCallback(async () => {
-    if (!gitCwd) {
+    if (!workspaceCwd) {
       return;
     }
 
     try {
-      const result = await abortMergeMutation.mutateAsync(gitCwd);
+      const result = await abortMergeMutation.mutateAsync(workspaceCwd);
       if (result.status === "aborted") {
         setLastMergeResult(null);
       }
@@ -451,7 +632,7 @@ export default function GitHubPanel({ gitCwd, projectGitCwd, activeThreadId }: G
         data: threadToastData,
       });
     }
-  }, [abortMergeMutation, gitCwd, threadToastData]);
+  }, [abortMergeMutation, threadToastData, workspaceCwd]);
 
   const openExistingPr = useCallback(async () => {
     const api = readNativeApi();
@@ -783,7 +964,7 @@ export default function GitHubPanel({ gitCwd, projectGitCwd, activeThreadId }: G
 
   const openChangedFileInEditor = useCallback(
     (filePath: string) => {
-      if (!gitCwd) {
+      if (!workspaceCwd) {
         toastManager.add({
           type: "error",
           title: "Editor opening is unavailable.",
@@ -791,9 +972,9 @@ export default function GitHubPanel({ gitCwd, projectGitCwd, activeThreadId }: G
         });
         return;
       }
-      openPathInEditor(resolvePathLinkTarget(filePath, gitCwd));
+      openPathInEditor(resolvePathLinkTarget(filePath, workspaceCwd));
     },
-    [gitCwd, openPathInEditor, threadToastData],
+    [openPathInEditor, threadToastData, workspaceCwd],
   );
 
   const pullLatest = useCallback(() => {
@@ -892,7 +1073,7 @@ export default function GitHubPanel({ gitCwd, projectGitCwd, activeThreadId }: G
       ? "Project context is unavailable."
       : !gitStatusForActions
         ? "Git status is unavailable."
-      : !projectGitCwd || !activeWorkspaceBranch
+      : !repoCwd || !activeWorkspaceBranch
         ? "Checkout a branch before creating a dedicated workspace."
         : gitStatusForActions.hasWorkingTreeChanges
           ? "Primary checkout is dirty. Commit or stash changes first."
@@ -905,13 +1086,17 @@ export default function GitHubPanel({ gitCwd, projectGitCwd, activeThreadId }: G
     ? "Checkout a branch before merging."
     : mergeSourceBranch.length === 0
       ? "Create another local branch to merge into this workspace."
+      : activeWorkspaceHasConflicts
+        ? "Resolve or abort the current merge before starting another merge."
+        : activeWorkspaceMerge.inProgress
+          ? "Finish or abort the current merge before starting another merge."
       : gitStatusForActions.hasWorkingTreeChanges
         ? "Active workspace is dirty. Clean it before merging."
         : isMergeRunning
           ? "Merge in progress."
           : null;
 
-  if (!gitCwd) return null;
+  if (!workspaceCwd) return null;
 
   return (
     <>
@@ -963,89 +1148,118 @@ export default function GitHubPanel({ gitCwd, projectGitCwd, activeThreadId }: G
                 <section className="space-y-3">
                   <div className="flex items-center justify-between gap-2">
                     <h3 className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                      Repository
+                    </h3>
+                  </div>
+                  <PanelCard>
+                    <PanelField label="Repo">
+                      <p className="break-all text-sm font-medium text-foreground">
+                        {githubStatusQuery.data?.repo?.nameWithOwner ?? "Repository unavailable"}
+                      </p>
+                    </PanelField>
+                    <Collapsible open={repoDetailsOpen} onOpenChange={setRepoDetailsOpen}>
+                      <CollapsibleTrigger className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">
+                        {repoDetailsOpen ? "Hide details" : "Show details"}
+                      </CollapsibleTrigger>
+                      <CollapsibleContent className="pt-3">
+                        <div className="grid gap-3 md:grid-cols-2">
+                          <PanelField label="Scope">
+                            <PanelBadgeList items={repositoryScopeBadges} />
+                          </PanelField>
+                        </div>
+                        <p className="mt-3 break-all text-xs text-muted-foreground">{repoRoot ?? repoCwd}</p>
+                      </CollapsibleContent>
+                    </Collapsible>
+                  </PanelCard>
+                </section>
+
+                <section className="space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
                       Active workspace
                     </h3>
                   </div>
                   <p className="text-xs text-muted-foreground">
                     All git actions in this panel apply to this workspace.
                   </p>
-                  <p className="text-xs text-muted-foreground">{activeWorkspaceScopeCopy}</p>
+                  <p className="text-xs text-muted-foreground">{activeWorkspaceSummary.scopeCopy}</p>
 
                   {!isRepo ? (
                     <p className="text-sm text-muted-foreground">
                       Initialize Git to unlock workspace controls.
                     </p>
                   ) : (
-                    <div className="space-y-3 rounded-xl border border-border bg-muted/30 p-3">
-                      <div className="flex items-start justify-between gap-3">
+                    <PanelCard>
+                      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                         <div className="min-w-0 flex-1 space-y-3">
-                          <div className="grid gap-3 sm:grid-cols-2">
-                            <div className="space-y-1">
-                              <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                                Workspace
+                          <div className="grid gap-3 md:grid-cols-2">
+                            <PanelField label="Workspace">
+                              <p className="break-all text-sm font-medium text-foreground">
+                                {activeWorkspaceSummary.name}
                               </p>
-                              <p className="truncate text-sm font-medium text-foreground">
-                                {activeWorkspaceName}
+                            </PanelField>
+                            <PanelField label="Type">
+                              <PanelBadgeList
+                                items={[
+                                  {
+                                    label: activeWorkspaceSummary.typeLabel,
+                                    variant: activeWorkspaceSummary.typeVariant,
+                                  },
+                                ]}
+                              />
+                            </PanelField>
+                            <PanelField label="Branch">
+                              <p className="break-all text-sm font-medium text-foreground">
+                                {activeWorkspaceSummary.branchLabel}
                               </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                                Type
+                            </PanelField>
+                            <PanelField label="Status">
+                              <PanelBadgeList items={activeWorkspaceSummary.statusBadges} />
+                            </PanelField>
+                            <PanelField label="Next action" className="md:col-span-2">
+                              <p className="text-sm font-medium text-foreground">
+                                {activeWorkspaceSummary.nextAction}
                               </p>
-                              <div className="flex flex-wrap gap-1.5">
-                                <Badge variant={isPrimaryWorkspace ? "outline" : "secondary"}>
-                                  {isPrimaryWorkspace ? "Primary" : "Dedicated"}
-                                </Badge>
-                              </div>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                                Branch
-                              </p>
-                              <p className="truncate text-sm font-medium text-foreground">
-                                {activeWorkspaceBranch ?? "Detached HEAD"}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                                Status
-                              </p>
-                              <div className="flex flex-wrap gap-1.5">
-                                {activeWorkspaceHasConflicts ? (
-                                  <Badge variant="error">Conflicts</Badge>
-                                ) : gitStatusForActions?.hasWorkingTreeChanges ? (
-                                  <Badge variant="warning">Dirty</Badge>
-                                ) : (
-                                  <Badge variant="success">Clean</Badge>
-                                )}
-                                {activeWorkspaceBranchMeta?.isDefault && (
-                                  <Badge variant="outline">Default branch</Badge>
-                                )}
-                                {gitStatusForActions && gitStatusForActions.aheadCount > 0 && (
-                                  <Badge variant="secondary">Ahead {gitStatusForActions.aheadCount}</Badge>
-                                )}
-                                {gitStatusForActions && gitStatusForActions.behindCount > 0 && (
-                                  <Badge variant="secondary">Behind {gitStatusForActions.behindCount}</Badge>
-                                )}
-                                {gitStatusForActions?.pr?.state === "open" && (
-                                  <Badge variant="outline">PR open</Badge>
-                                )}
-                              </div>
-                            </div>
+                              <p className="text-xs text-muted-foreground">{activeWorkspaceSummary.detail}</p>
+                            </PanelField>
                           </div>
-                          <p className="truncate text-xs text-muted-foreground">{gitCwd}</p>
+                          <Collapsible open={workspaceDetailsOpen} onOpenChange={setWorkspaceDetailsOpen}>
+                            <CollapsibleTrigger className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">
+                              {workspaceDetailsOpen ? "Hide details" : "Show details"}
+                            </CollapsibleTrigger>
+                            <CollapsibleContent className="pt-3">
+                              <PanelField label="Path">
+                                <p className="break-all text-xs text-muted-foreground">
+                                  {activeWorkspaceSummary.pathLabel}
+                                </p>
+                              </PanelField>
+                            </CollapsibleContent>
+                          </Collapsible>
                         </div>
-                        <Button
-                          variant="outline"
-                          size="xs"
-                          onClick={() => openPathInEditor(gitCwd)}
-                        >
-                          Open
-                        </Button>
+                        <div className="flex shrink-0 flex-wrap gap-2 lg:justify-end">
+                          <Button
+                            variant="outline"
+                            size="xs"
+                            onClick={() => openPathInEditor(workspaceCwd)}
+                          >
+                            Open
+                          </Button>
+                        </div>
                       </div>
 
+                      <PanelInsetCard>
+                        <PanelField label="Workflow guidance">
+                          <p className="text-sm font-medium text-foreground">
+                            {activeWorkspaceSummary.guidanceTitle}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {activeWorkspaceSummary.guidanceBody}
+                          </p>
+                        </PanelField>
+                      </PanelInsetCard>
+
                       {isPrimaryWorkspace && (
-                        <div className="rounded-lg border border-border bg-background p-3">
+                        <PanelInsetCard>
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <div>
                               <p className="text-sm font-medium text-foreground">Create dedicated workspace</p>
@@ -1070,22 +1284,22 @@ export default function GitHubPanel({ gitCwd, projectGitCwd, activeThreadId }: G
                               {createWorktreeDisabledReason}
                             </p>
                           )}
-                        </div>
+                        </PanelInsetCard>
                       )}
 
-                      <div className="rounded-lg border border-border bg-background p-3">
+                      <PanelInsetCard>
                         <div className="space-y-3">
                           <div>
                             <p className="text-sm font-medium text-foreground">Merge into active workspace</p>
                             <p className="mt-1 text-xs text-muted-foreground">
-                              Target workspace: {activeWorkspaceName}
+                              Target workspace: {activeWorkspaceSummary.name}
                             </p>
                             <p className="mt-1 text-xs text-muted-foreground">
-                              Target branch: {activeWorkspaceBranch ?? "Detached HEAD"}
+                              Target branch: {activeWorkspaceSummary.targetBranchLabel}
                             </p>
                           </div>
 
-                          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
                             <label className="space-y-1 text-sm">
                               <span className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
                                 Source branch
@@ -1109,9 +1323,10 @@ export default function GitHubPanel({ gitCwd, projectGitCwd, activeThreadId }: G
                               </select>
                             </label>
 
-                            <div className="flex flex-wrap gap-2">
+                            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                               <Button
                                 size="sm"
+                                className="w-full sm:w-auto"
                                 disabled={mergeDisabledReason !== null}
                                 onClick={() => {
                                   void runLocalMerge();
@@ -1123,6 +1338,7 @@ export default function GitHubPanel({ gitCwd, projectGitCwd, activeThreadId }: G
                                 <Button
                                   variant="outline"
                                   size="sm"
+                                  className="w-full sm:w-auto"
                                   disabled={isAbortMergeRunning}
                                   onClick={() => {
                                     void abortActiveMerge();
@@ -1138,8 +1354,22 @@ export default function GitHubPanel({ gitCwd, projectGitCwd, activeThreadId }: G
                             <p className="text-xs text-muted-foreground">{mergeDisabledReason}</p>
                           )}
 
-                          {lastMergeResult && (
-                            <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm">
+                          {activeWorkspaceHasConflicts ? (
+                            <PanelCard className="text-sm">
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="font-medium">Resolve conflicted files before continuing promotion.</p>
+                                <Badge variant="error">Conflicted</Badge>
+                              </div>
+                              <div className="mt-3 flex flex-wrap gap-1.5">
+                                {activeWorkspaceMerge.conflictedFiles.map((file) => (
+                                  <Badge key={file} variant="outline">
+                                    {file}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </PanelCard>
+                          ) : lastMergeResult ? (
+                            <PanelCard className="text-sm">
                               <div className="flex items-center justify-between gap-2">
                                 <p className="font-medium">
                                   {lastMergeResult.status === "merged"
@@ -1159,11 +1389,11 @@ export default function GitHubPanel({ gitCwd, projectGitCwd, activeThreadId }: G
                                   ))}
                                 </div>
                               )}
-                            </div>
-                          )}
+                            </PanelCard>
+                          ) : null}
                         </div>
-                      </div>
-                    </div>
+                      </PanelInsetCard>
+                    </PanelCard>
                   )}
                 </section>
 
@@ -1293,7 +1523,7 @@ export default function GitHubPanel({ gitCwd, projectGitCwd, activeThreadId }: G
                       GitHub CLI is not installed on PATH.
                     </p>
                   ) : (
-                    <div className="space-y-2 rounded-xl border border-border bg-muted/30 p-3 text-sm">
+                    <PanelCard className="space-y-2 text-sm">
                       <div className="flex flex-wrap items-center gap-2">
                         <Badge variant={githubStatusQuery.data.authenticated ? "success" : "warning"}>
                           {githubStatusQuery.data.authenticated ? "Authenticated" : "Not authenticated"}
@@ -1352,7 +1582,7 @@ export default function GitHubPanel({ gitCwd, projectGitCwd, activeThreadId }: G
                           {loginMutation.error.message}
                         </p>
                       )}
-                    </div>
+                    </PanelCard>
                   )}
                 </section>
 
@@ -1392,7 +1622,7 @@ export default function GitHubPanel({ gitCwd, projectGitCwd, activeThreadId }: G
                   ) : githubIssuesQuery.isLoading || githubIssuesQuery.isFetching ? (
                     <p className="text-sm text-muted-foreground">Loading issues...</p>
                   ) : issuesDisabled ? (
-                    <div className="space-y-3 rounded-xl border border-border bg-muted/30 p-3">
+                    <PanelCard>
                       <p className="text-sm text-muted-foreground">
                         Issues are disabled for this repository.
                       </p>
@@ -1418,7 +1648,7 @@ export default function GitHubPanel({ gitCwd, projectGitCwd, activeThreadId }: G
                           </Button>
                         )}
                       </div>
-                    </div>
+                    </PanelCard>
                   ) : githubIssuesQuery.error ? (
                     <p className="text-sm text-destructive">{githubIssuesQuery.error.message}</p>
                   ) : githubIssuesQuery.data && githubIssuesQuery.data.issues.length > 0 ? (

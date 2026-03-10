@@ -22,6 +22,10 @@ function status(overrides: Partial<GitStatusResult> = {}): GitStatusResult {
     hasUpstream: true,
     aheadCount: 0,
     behindCount: 0,
+    merge: {
+      inProgress: false,
+      conflictedFiles: [],
+    },
     pr: null,
     ...overrides,
   };

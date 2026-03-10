@@ -1635,6 +1635,10 @@ describe("WebSocket Server", () => {
       hasUpstream: false,
       aheadCount: 0,
       behindCount: 0,
+      merge: {
+        inProgress: false,
+        conflictedFiles: [],
+      },
       pr: null,
     };
 

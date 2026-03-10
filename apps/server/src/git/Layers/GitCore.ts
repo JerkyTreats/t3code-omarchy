@@ -536,7 +536,8 @@ const makeGitCore = Effect.gen(function* () {
     Effect.gen(function* () {
       yield* refreshStatusUpstreamIfStale(cwd).pipe(Effect.catch(() => Effect.void));
 
-      const [statusStdout, unstagedNumstatStdout, stagedNumstatStdout] = yield* Effect.all(
+      const [statusStdout, unstagedNumstatStdout, stagedNumstatStdout, mergeHeadStdout, conflictedStdout] =
+        yield* Effect.all(
         [
           runGitStdout("GitCore.statusDetails.status", cwd, [
             "status",
@@ -549,6 +550,14 @@ const makeGitCore = Effect.gen(function* () {
             "--cached",
             "--numstat",
           ]),
+          runGitStdout("GitCore.statusDetails.mergeHead", cwd, ["rev-parse", "-q", "--verify", "MERGE_HEAD"]).pipe(
+            Effect.catch(() => Effect.succeed("")),
+          ),
+          runGitStdout("GitCore.statusDetails.conflictedFiles", cwd, [
+            "diff",
+            "--name-only",
+            "--diff-filter=U",
+          ]).pipe(Effect.catch(() => Effect.succeed(""))),
         ],
         { concurrency: "unbounded" },
       );
@@ -617,6 +626,12 @@ const makeGitCore = Effect.gen(function* () {
         files.push({ path: filePath, insertions: 0, deletions: 0 });
       }
       files.sort((a, b) => a.path.localeCompare(b.path));
+      const conflictedFiles = conflictedStdout
+        .split(/\r?\n/g)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0)
+        .toSorted((a, b) => a.localeCompare(b));
+      const mergeInProgress = mergeHeadStdout.trim().length > 0 || conflictedFiles.length > 0;
 
       return {
         branch,
@@ -630,6 +645,10 @@ const makeGitCore = Effect.gen(function* () {
         hasUpstream: upstreamRef !== null,
         aheadCount,
         behindCount,
+        merge: {
+          inProgress: mergeInProgress,
+          conflictedFiles,
+        },
       };
     });
 
@@ -642,6 +661,7 @@ const makeGitCore = Effect.gen(function* () {
         hasUpstream: details.hasUpstream,
         aheadCount: details.aheadCount,
         behindCount: details.behindCount,
+        merge: details.merge,
         pr: null,
       })),
     );

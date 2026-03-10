@@ -51,8 +51,11 @@ import {
   gitBranchesQueryOptions,
   gitCreateWorktreeMutationOptions,
   gitRepositoryContextQueryOptions,
+  gitStatusQueryOptions,
 } from "~/lib/gitReactQuery";
+import { resolveGitPanelContext } from "~/lib/gitPanelContext";
 import { buildTemporaryWorktreeBranchName } from "~/gitWorktree";
+import { deriveWorkspacePromotionState } from "~/lib/workspacePromotionState";
 import { projectSearchEntriesQueryOptions } from "~/lib/projectReactQuery";
 import { serverConfigQueryOptions, serverQueryKeys } from "~/lib/serverReactQuery";
 
@@ -1183,8 +1186,24 @@ export default function ChatView({ threadId }: ChatViewProps) {
     timelineEntries,
   ]);
   const projectGitContextQuery = useQuery(gitRepositoryContextQueryOptions(activeProject?.cwd ?? null));
-  const projectGitCwd = projectGitContextQuery.data?.repoRoot ?? activeProject?.cwd ?? null;
-  const gitCwd = activeThread?.worktreePath ?? projectGitCwd;
+  const gitPanelContext = useMemo(
+    () =>
+      resolveGitPanelContext({
+        activeProjectId: activeProject?.id ?? null,
+        activeProjectCwd: activeProject?.cwd ?? null,
+        activeThreadId: activeThread?.id ?? null,
+        activeThreadWorktreePath: activeThread?.worktreePath ?? null,
+        repoRoot: projectGitContextQuery.data?.repoRoot ?? null,
+      }),
+    [
+      activeProject?.cwd,
+      activeProject?.id,
+      activeThread?.id,
+      activeThread?.worktreePath,
+      projectGitContextQuery.data?.repoRoot,
+    ],
+  );
+  const gitCwd = gitPanelContext.workspaceCwd;
   const composerTriggerKind = composerTrigger?.kind ?? null;
   const pathTriggerQuery = composerTrigger?.kind === "path" ? composerTrigger.query : "";
   const isPathTrigger = composerTriggerKind === "path";
@@ -1195,6 +1214,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
   );
   const effectivePathQuery = pathTriggerQuery.length > 0 ? debouncedPathQuery : "";
   const branchesQuery = useQuery(gitBranchesQueryOptions(gitCwd));
+  const threadGitStatusQuery = useQuery(gitStatusQueryOptions(gitCwd));
   const serverConfigQuery = useQuery(serverConfigQueryOptions());
   const workspaceEntriesQuery = useQuery(
     projectSearchEntriesQueryOptions({
@@ -1205,6 +1225,46 @@ export default function ChatView({ threadId }: ChatViewProps) {
     }),
   );
   const workspaceEntries = workspaceEntriesQuery.data?.entries ?? EMPTY_PROJECT_ENTRIES;
+  const threadDefaultBranch = useMemo(
+    () => branchesQuery.data?.branches.find((branch) => branch.isDefault)?.name ?? null,
+    [branchesQuery.data?.branches],
+  );
+  const threadPromotionState = useMemo(() => {
+    if (!gitCwd || !branchesQuery.data?.isRepo || !threadGitStatusQuery.data) {
+      return null;
+    }
+
+    const branchName =
+      threadGitStatusQuery.data.branch ??
+      branchesQuery.data.branches.find((branch) => branch.current)?.name ??
+      null;
+    return deriveWorkspacePromotionState({
+      branch: branchName,
+      targetBranch: threadGitStatusQuery.data.pr?.baseBranch ?? threadDefaultBranch,
+      isPrimaryWorkspace: gitPanelContext.repoRoot !== null && gitCwd === gitPanelContext.repoRoot,
+      hasWorkingTreeChanges: threadGitStatusQuery.data.hasWorkingTreeChanges,
+      mergeInProgress: threadGitStatusQuery.data.merge.inProgress,
+      conflictedFiles: threadGitStatusQuery.data.merge.conflictedFiles,
+      hasUpstream: threadGitStatusQuery.data.hasUpstream,
+      aheadCount: threadGitStatusQuery.data.aheadCount,
+      behindCount: threadGitStatusQuery.data.behindCount,
+      hasOpenPr: threadGitStatusQuery.data.pr?.state === "open",
+    });
+  }, [
+    branchesQuery.data?.branches,
+    branchesQuery.data?.isRepo,
+    gitCwd,
+    gitPanelContext.repoRoot,
+    threadDefaultBranch,
+    threadGitStatusQuery.data,
+  ]);
+  const showThreadWorkflowGuidance =
+    !!activeThread &&
+    !!threadPromotionState &&
+    branchesQuery.data?.isRepo === true &&
+    !(gitPanelContext.repoRoot !== null &&
+      gitCwd === gitPanelContext.repoRoot &&
+      threadPromotionState.state === "seeded");
   const composerMenuItems = useMemo<ComposerCommandItem[]>(() => {
     if (!composerTrigger) return [];
     if (composerTrigger.kind === "path") {
@@ -3498,8 +3558,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
           keybindings={keybindings}
           availableEditors={availableEditors}
           diffToggleShortcutLabel={diffPanelShortcutLabel}
-          gitCwd={gitCwd}
-          projectGitCwd={projectGitCwd}
+          gitActionsCwd={gitPanelContext.repoCwd ?? gitPanelContext.workspaceCwd}
           diffOpen={diffOpen}
           githubOpen={githubOpen}
           onRunProjectScript={(script) => {
@@ -3515,6 +3574,9 @@ export default function ChatView({ threadId }: ChatViewProps) {
       {/* Error banner */}
       <ProviderHealthBanner status={activeProviderStatus} />
       <ThreadErrorBanner error={activeThread.error} />
+      <ThreadWorkflowGuidanceBanner
+        promotionState={showThreadWorkflowGuidance ? threadPromotionState : null}
+      />
       <PlanModePanel activePlan={activePlan} />
 
       {/* Messages */}
@@ -4114,7 +4176,14 @@ export default function ChatView({ threadId }: ChatViewProps) {
             keepMounted
             className="w-[min(88vw,680px)] max-w-[680px] p-0"
           >
-            <GitHubPanel gitCwd={gitCwd} projectGitCwd={projectGitCwd} activeThreadId={activeThread.id} />
+            <GitHubPanel
+              key={gitPanelContext.contextKey}
+              workspaceCwd={gitPanelContext.workspaceCwd}
+              repoCwd={gitPanelContext.repoCwd}
+              repoRoot={gitPanelContext.repoRoot}
+              scopeKind={gitPanelContext.scopeKind}
+              activeThreadId={activeThread.id}
+            />
           </SheetPopup>
         </Sheet>
       </>
@@ -4135,7 +4204,14 @@ export default function ChatView({ threadId }: ChatViewProps) {
         collapsible="offcanvas"
         className="border-l border-border bg-card text-foreground"
       >
-        <GitHubPanel gitCwd={gitCwd} projectGitCwd={projectGitCwd} activeThreadId={activeThread.id} />
+        <GitHubPanel
+          key={gitPanelContext.contextKey}
+          workspaceCwd={gitPanelContext.workspaceCwd}
+          repoCwd={gitPanelContext.repoCwd}
+          repoRoot={gitPanelContext.repoRoot}
+          scopeKind={gitPanelContext.scopeKind}
+          activeThreadId={activeThread.id}
+        />
         <SidebarRail />
       </Sidebar>
     </SidebarProvider>
@@ -4152,8 +4228,7 @@ interface ChatHeaderProps {
   keybindings: ResolvedKeybindingsConfig;
   availableEditors: ReadonlyArray<EditorId>;
   diffToggleShortcutLabel: string | null;
-  gitCwd: string | null;
-  projectGitCwd: string | null;
+  gitActionsCwd: string | null;
   diffOpen: boolean;
   githubOpen: boolean;
   onRunProjectScript: (script: ProjectScript) => void;
@@ -4173,8 +4248,7 @@ const ChatHeader = memo(function ChatHeader({
   keybindings,
   availableEditors,
   diffToggleShortcutLabel,
-  gitCwd,
-  projectGitCwd,
+  gitActionsCwd,
   diffOpen,
   githubOpen,
   onRunProjectScript,
@@ -4223,7 +4297,11 @@ const ChatHeader = memo(function ChatHeader({
           />
         )}
         {activeProjectName && (
-          <GitActionsControl gitCwd={projectGitCwd ?? gitCwd} open={githubOpen} onToggle={onToggleGitHub} />
+          <GitActionsControl
+            gitCwd={gitActionsCwd}
+            open={githubOpen}
+            onToggle={onToggleGitHub}
+          />
         )}
         <Tooltip>
           <TooltipTrigger
@@ -4262,6 +4340,38 @@ const ThreadErrorBanner = memo(function ThreadErrorBanner({ error }: { error: st
         <CircleAlertIcon />
         <AlertDescription className="line-clamp-3" title={error}>
           {error}
+        </AlertDescription>
+      </Alert>
+    </div>
+  );
+});
+
+const ThreadWorkflowGuidanceBanner = memo(function ThreadWorkflowGuidanceBanner({
+  promotionState,
+}: {
+  promotionState: ReturnType<typeof deriveWorkspacePromotionState> | null;
+}) {
+  if (!promotionState) {
+    return null;
+  }
+
+  const variant =
+    promotionState.state === "conflicted"
+      ? "error"
+      : promotionState.state === "needs-sync" || promotionState.state === "syncing"
+        ? "warning"
+        : promotionState.state === "ready"
+          ? "success"
+          : "info";
+
+  return (
+    <div className="mx-auto max-w-3xl pt-3">
+      <Alert variant={variant}>
+        <CircleAlertIcon />
+        <AlertTitle>{promotionState.guidanceTitle}</AlertTitle>
+        <AlertDescription>
+          <span>{promotionState.guidanceBody}</span>
+          <span className="text-xs">Next action: {promotionState.nextAction}</span>
         </AlertDescription>
       </Alert>
     </div>

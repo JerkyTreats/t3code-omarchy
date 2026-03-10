@@ -1,0 +1,312 @@
+# GitHub Panel Context And Promotion Phases
+
+Date: 2026-03-09
+Status: active
+Owner: web
+
+## Intent
+
+Track the phased overhaul for GitHub panel correctness, workspace awareness, repo switching, responsiveness, and promotion state integration.
+
+## Progress
+
+| Phase | Goal | Status | Checks | Commit | Notes |
+| --- | --- | --- | --- | --- | --- |
+| 1 | Define canonical panel context and scope ownership | DONE | PASS | `refactor(web): define canonical github panel context` | Repo scope and workspace scope are explicit |
+| 2 | Reset stale panel state and query results on context change | DONE | PASS | `fix(web): reset github panel state on context changes` | Context switches now clear local panel state and force a fresh fetch |
+| 3 | Make project and thread switching rules explicit | DONE | PASS | `refactor(web): align project clicks with panel scope` | Project header clicks now activate that project thread context |
+| 4 | Split panel into repo and workspace sections and improve responsiveness | DONE | PASS | `refactor(web): reorganize github panel layout for workspace flows` | Repo scope is explicit and narrow layouts stack cleanly |
+| 5 | Integrate promotion state and next action guidance | DONE | PASS | `feat(web): show workspace promotion state guidance` | First slice derives workspace promotion state from available Git facts |
+| 6 | Compact panel composition and review architecture cleanliness | DONE | PASS | `refactor(web): compact github panel composition` | Final pass compacted repeated panel layout and recorded the architecture review |
+| 7 | Promote conflict truth from Git and add workflow guidance | DONE | PASS | `feat(web): surface conflict aware promotion guidance` | Conflict state now survives refresh because it comes from Git status, and the panel shows short workflow guidance |
+| 8 | Surface promotion guidance in the thread view | DONE | PASS | `feat(web): show thread scoped promotion guidance` | Closed the deferred thread guidance item with a thread scoped workflow banner |
+| 9 | Collapse low priority panel metadata behind disclosure | DONE | PASS | `refactor(web): hide low priority github panel metadata` | Closed the deferred responsive polish item with compact details areas |
+
+## Phase 1
+
+### Goal
+
+Create one canonical context model for the GitHub panel and make ownership of repo scoped data and workspace scoped data explicit.
+
+### Detailed implementation plan
+
+| Step | Change | Files | Done criteria |
+| --- | --- | --- | --- |
+| 1.1 | Add a pure `GitPanelContext` resolver with explicit repo root, workspace cwd, project id, workspace kind, and context key | `apps/web/src/lib/gitPanelContext.ts` | DONE |
+| 1.2 | Update `ChatView` to derive and pass the canonical panel context | `apps/web/src/components/ChatView.tsx` | DONE |
+| 1.3 | Refactor `GitHubPanel` props to use explicit `repoRoot` and `workspaceCwd` naming | `apps/web/src/components/GitHubPanel.tsx` | DONE |
+| 1.4 | Key the panel by context identity at the mount site | `apps/web/src/components/ChatView.tsx` | DONE |
+| 1.5 | Add focused tests for the resolver if adjacent test patterns exist | `apps/web/src/lib` | DONE |
+
+### Implementation notes
+
+- Repo scoped GitHub queries must use repo root only
+- Workspace scoped Git queries and mutations must use workspace cwd only
+- The context key should include project id, repo root, workspace cwd, and active thread id
+- Phase 1 should not reshape the panel layout yet
+
+### Validation
+
+- `bun lint`
+- `bun typecheck`
+- `bun run test -- --run src/lib/gitPanelContext.test.ts` from `apps/web`
+
+## Phase 2
+
+### Goal
+
+Eliminate stale panel state after thread changes, project changes, worktree creation, worktree removal, and merge actions.
+
+### Detailed implementation plan
+
+| Step | Change | Files | Done criteria |
+| --- | --- | --- | --- |
+| 2.1 | Reset merge and issue filter state when panel context changes | `apps/web/src/components/GitHubPanel.tsx` | DONE |
+| 2.2 | Audit Git and GitHub query invalidation after branch and worktree mutations | `apps/web/src/lib/gitReactQuery.ts`, `apps/web/src/lib/githubReactQuery.ts` | DONE |
+| 2.3 | Review `keepMounted` behavior and tighten remount rules | `apps/web/src/components/ChatView.tsx` | DONE |
+| 2.4 | Fix live branch display to prefer current Git facts over stale thread metadata | `apps/web/src/components/GitHubPanel.tsx`, `apps/web/src/components/BranchToolbar.tsx`, `apps/web/src/components/ChatView.tsx` | DONE |
+
+### Validation
+
+- Switch between threads in the same project without stale merge state
+- Switch between projects without stale repo slug or branch labels
+- `bun lint`
+- `bun typecheck`
+
+## Phase 3
+
+### Goal
+
+Make the active entity rules explicit so the panel consistently follows the intended thread or project.
+
+### Detailed implementation plan
+
+| Step | Change | Files | Done criteria |
+| --- | --- | --- | --- |
+| 3.1 | Define active panel scope rules for thread scoped and project scoped views | `apps/web/src/lib/gitPanelContext.ts`, `docs/workspace_promotion_spec.md` | DONE |
+| 3.2 | Audit sidebar project clicks and thread selection behavior | `apps/web/src/components/Sidebar.tsx` | DONE |
+| 3.3 | Add explicit UI copy that names the current panel scope | `apps/web/src/components/GitHubPanel.tsx` | DONE |
+| 3.4 | Ensure empty project states and draft thread states resolve correctly | `apps/web/src/components/ChatView.tsx`, `apps/web/src/components/GitHubPanel.tsx` | DONE |
+
+### Validation
+
+- Click between projects and verify the panel scope rule holds
+- Create a new draft thread in another project and verify scope changes cleanly
+- `bun lint`
+- `bun typecheck`
+
+## Phase 4
+
+### Goal
+
+Separate repo and workspace concerns in the layout and make the panel responsive under narrow and wide widths.
+
+### Detailed implementation plan
+
+| Step | Change | Files | Done criteria |
+| --- | --- | --- | --- |
+| 4.1 | Split the panel into repo, workspace, actions, auth, and issues sections | `apps/web/src/components/GitHubPanel.tsx` and child components | DONE |
+| 4.2 | Rework long branch and path presentation | `apps/web/src/components/GitHubPanel.tsx` | DONE |
+| 4.3 | Stack merge controls and action groups for narrow widths | `apps/web/src/components/GitHubPanel.tsx` | DONE |
+| 4.4 | Collapse low priority metadata behind a disclosure area | `apps/web/src/components/GitHubPanel.tsx` | DONE in Phase 9 |
+| 4.5 | Polish loading and refresh affordances on context switch | `apps/web/src/components/GitHubPanel.tsx` | DONE |
+
+### Validation
+
+- Verify narrow sheet layout
+- Verify standard rail layout
+- Verify long branch and path values remain readable
+- `bun lint`
+- `bun typecheck`
+
+## Phase 5
+
+### Goal
+
+Integrate promotion state into the active workspace card and make next action guidance explicit.
+
+### Detailed implementation plan
+
+| Step | Change | Files | Done criteria |
+| --- | --- | --- | --- |
+| 5.1 | Add a pure promotion state calculator from Git facts | `apps/web/src/lib/workspacePromotionState.ts` | DONE |
+| 5.2 | Add overlays for publish and review status | `apps/web/src/components/GitHubPanel.tsx` | DONE |
+| 5.3 | Show next suggested action by state | `apps/web/src/components/GitHubPanel.tsx` | DONE |
+| 5.4 | Surface conflict resolution as a first class state | `apps/web/src/components/GitHubPanel.tsx` | DONE |
+| 5.5 | Draft short thread guidance on state changes | `apps/web/src/components/GitHubPanel.tsx` or adjacent helper | DONE in Phase 8 |
+
+### Validation
+
+- Verify seeded, draft, committed, needs sync, conflicted, ready, merged, and retired cases
+- Verify loop closure rules after merge
+- `bun lint`
+- `bun typecheck`
+
+## Phase 6
+
+### Goal
+
+Compact the GitHub panel composition, reduce repeated layout code, and complete a focused review of architecture, cleanliness, and maintainability before closing the rollout.
+
+### Detailed implementation plan
+
+| Step | Change | Files | Done criteria |
+| --- | --- | --- | --- |
+| 6.1 | Add small reusable panel primitives for repeated section and field layout | `apps/web/src/components/GitHubPanel.tsx` | DONE |
+| 6.2 | Centralize active workspace summary presentation to reduce duplicated display logic | `apps/web/src/components/GitHubPanel.tsx` | DONE |
+| 6.3 | Compact merge and workspace presentation without losing clarity on narrow widths | `apps/web/src/components/GitHubPanel.tsx` | DONE |
+| 6.4 | Review the changed panel architecture for scope boundaries, cleanliness, and maintainability | `.plans/github-panel-context-promotion-phases.md`, `apps/web/src/components/GitHubPanel.tsx` | DONE |
+| 6.5 | Re run required checks and capture review outcome in the plan | `.plans/github-panel-context-promotion-phases.md` | DONE |
+
+### Review requirements
+
+- Compact repeated render markup where the same layout pattern appears more than once
+- Preserve the repo scope versus workspace scope boundary from earlier phases
+- Prefer local extraction over broad new component sprawl unless a split clearly improves ownership
+- Review the final code for readability, naming, duplication, and responsiveness regressions
+- Record review findings and any intentional deferrals in this plan file before closing the phase
+
+### Validation
+
+- Verify repository and active workspace sections still read clearly after compaction
+- Verify narrow layouts still wrap branch, path, and action content cleanly
+- `bun lint`
+- `bun typecheck`
+- `bun run test -- --run src/lib/workspacePromotionState.test.ts src/lib/gitPanelContext.test.ts` from `apps/web`
+
+### Review outcome
+
+- Kept repo scope and workspace scope separated. Repo data still reads from `repoCwd`, while workspace actions still bind to `workspaceCwd`.
+- Compacted repeated repository, workspace, auth, and issues card markup into local panel primitives inside `apps/web/src/components/GitHubPanel.tsx`.
+- Centralized active workspace presentation into one derived summary so labels, badges, next action copy, and merge target copy stay aligned.
+- Kept the compaction local to the panel file instead of splitting more files. The mutation and query ownership is still tightly coupled to this component.
+- Deferred a larger file split for now. The current helper extraction improved readability without scattering ownership across many small files.
+
+## Phase 7
+
+### Goal
+
+Promote merge conflict truth from Git status, use those facts in promotion state derivation, and show short workflow guidance that tells the user what to do next.
+
+### Detailed implementation plan
+
+| Step | Change | Files | Done criteria |
+| --- | --- | --- | --- |
+| 7.1 | Extend Git status contracts with merge progress and conflicted files | `packages/contracts/src/git.ts`, `apps/server/src/git/Services/GitCore.ts` | DONE |
+| 7.2 | Teach server Git status to detect merge in progress and conflicted files from Git | `apps/server/src/git/Layers/GitCore.ts`, `apps/server/src/git/Layers/GitManager.ts` | DONE |
+| 7.3 | Add focused tests for merge conflict status facts | `apps/server/src/git/Layers/GitCore.test.ts` | DONE |
+| 7.4 | Update promotion state derivation to consume Git conflict facts instead of local merge memory | `apps/web/src/lib/workspacePromotionState.ts`, `apps/web/src/components/GitHubPanel.tsx` | DONE |
+| 7.5 | Add short workflow guidance copy for the active workspace state | `apps/web/src/lib/workspacePromotionState.ts`, `apps/web/src/components/GitHubPanel.tsx` | DONE |
+| 7.6 | Re run required checks and record the outcome in this plan | `.plans/github-panel-context-promotion-phases.md` | DONE |
+
+### Review requirements
+
+- Conflict state must survive panel remounts and refreshes because it comes from Git status, not local memory
+- Promotion derivation should continue to prefer Git facts over thread metadata
+- Guidance copy should stay short and action oriented
+- Keep the new scope limited to conflict truth and workflow guidance. Do not add a broad new UI system in this phase
+
+### Validation
+
+- Verify a conflicted merge is reflected after refreshing the panel
+- Verify conflicted file names surface in the active workspace card
+- Verify guidance copy changes for draft, needs sync, conflicted, and ready states
+- `bun lint`
+- `bun typecheck`
+- `bun run test -- --run src/lib/workspacePromotionState.test.ts src/lib/gitPanelContext.test.ts` from `apps/web`
+- `bun run test -- --run src/git/Layers/GitCore.test.ts` from `apps/server`
+
+### Review outcome
+
+- Git conflict truth now comes from `GitStatusResult.merge`, so it survives refreshes, remounts, and panel context changes.
+- The panel still keeps `lastMergeResult` only for recent success feedback. Persistent conflict state no longer depends on that local memory.
+- Promotion guidance stays compact and local to the existing helper instead of introducing a larger workflow system in this phase.
+- A larger next step remains available to draft guidance directly into the thread timeline when promotion state changes.
+
+## Phase 8
+
+### Goal
+
+Show short promotion workflow guidance in the thread view so users see the next Git step while reading and composing in the conversation.
+
+### Detailed implementation plan
+
+| Step | Change | Files | Done criteria |
+| --- | --- | --- | --- |
+| 8.1 | Reuse current Git panel context and Git status facts inside `ChatView` | `apps/web/src/components/ChatView.tsx` | DONE |
+| 8.2 | Derive thread scoped workflow guidance from the same promotion helper used by the panel | `apps/web/src/components/ChatView.tsx`, `apps/web/src/lib/workspacePromotionState.ts` | DONE |
+| 8.3 | Add a compact workflow guidance banner above the timeline | `apps/web/src/components/ChatView.tsx` | DONE |
+| 8.4 | Keep the banner scoped to active thread workflow states so it does not add noise in empty or inactive views | `apps/web/src/components/ChatView.tsx` | DONE |
+| 8.5 | Re run required checks and record the outcome in this plan | `.plans/github-panel-context-promotion-phases.md` | DONE |
+
+### Review requirements
+
+- Thread guidance must reuse the same promotion derivation as the GitHub panel
+- The banner must stay concise and not compete with provider health or thread error banners
+- Do not persist synthetic assistant messages in this phase. Keep guidance as thread scoped UI
+
+### Validation
+
+- Verify thread guidance updates when switching between draft, needs sync, conflicted, and ready workspaces
+- Verify the banner disappears in non Git or inactive thread states
+- `bun lint`
+- `bun typecheck`
+- `bun run test -- --run src/lib/workspacePromotionState.test.ts src/lib/gitPanelContext.test.ts` from `apps/web`
+
+### Review outcome
+
+- Reused the same promotion derivation helper as the panel, so thread guidance and panel guidance stay aligned.
+- Kept guidance as thread scoped UI rather than persisting synthetic assistant messages.
+- Suppressed the banner for quiet primary seeded states so it does not add noise to a clean thread view.
+
+## Phase 9
+
+### Goal
+
+Collapse low priority panel metadata behind disclosure areas so the panel stays readable while preserving access to advanced repo and workspace details.
+
+### Detailed implementation plan
+
+| Step | Change | Files | Done criteria |
+| --- | --- | --- | --- |
+| 9.1 | Identify low priority repo and workspace metadata that can move behind disclosure | `apps/web/src/components/GitHubPanel.tsx` | DONE |
+| 9.2 | Add compact disclosure controls using existing collapsible primitives | `apps/web/src/components/GitHubPanel.tsx` | DONE |
+| 9.3 | Preserve narrow width readability after metadata moves behind disclosure | `apps/web/src/components/GitHubPanel.tsx` | DONE |
+| 9.4 | Re run required checks and record the outcome in this plan | `.plans/github-panel-context-promotion-phases.md` | DONE |
+
+### Review requirements
+
+- Keep important state, next action, and primary controls visible without opening disclosure
+- Move only low priority metadata such as long paths, scope details, and secondary repo details behind disclosure
+- Reuse the existing collapsible primitive from the web UI kit
+
+### Validation
+
+- Verify repository and workspace primary information remains visible at a glance
+- Verify disclosure content wraps cleanly on narrow widths
+- `bun lint`
+- `bun typecheck`
+- `bun run test -- --run src/lib/workspacePromotionState.test.ts src/lib/gitPanelContext.test.ts` from `apps/web`
+
+### Review outcome
+
+- Moved long repo scope and path metadata behind repository details disclosure.
+- Moved long workspace path metadata behind workspace details disclosure while keeping branch, status, and next action visible.
+- Reused the existing collapsible primitive rather than adding another disclosure system.
+
+## Commit strategy
+
+Use one focused commit per phase.
+
+Recommended subjects:
+
+- `design(web): phase github panel context and promotion overhaul`
+- `refactor(web): define canonical github panel context`
+- `fix(web): reset stale github panel state on context changes`
+- `refactor(web): align project switching with panel scope rules`
+- `design(web): reorganize github panel layout for responsive workspace flows`
+- `feat(web): derive workspace promotion state in github panel`
+- `refactor(web): compact github panel composition`
+- `feat(web): surface conflict aware promotion guidance`
+- `feat(web): show thread scoped promotion guidance`
+- `refactor(web): hide low priority github panel metadata`
