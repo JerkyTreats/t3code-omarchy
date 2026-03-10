@@ -60,6 +60,28 @@ function git(
   });
 }
 
+function gitAllowNonZero(
+  cwd: string,
+  args: ReadonlyArray<string>,
+  env?: NodeJS.ProcessEnv,
+): Effect.Effect<
+  { readonly code: number; readonly stdout: string; readonly stderr: string },
+  GitCommandError,
+  GitService
+> {
+  return Effect.gen(function* () {
+    const gitService = yield* GitService;
+    return yield* gitService.execute({
+      operation: "GitCore.test.gitAllowNonZero",
+      cwd,
+      args,
+      ...(env ? { env } : {}),
+      allowNonZeroExit: true,
+      timeoutMs: 10_000,
+    });
+  });
+}
+
 function runShellCommand(input: {
   command: string;
   cwd: string;
@@ -1273,6 +1295,37 @@ it.layer(TestLayer)("git integration", (it) => {
         yield* writeTextFile(path.join(tmp, "README.md"), "updated\n");
         const dirty = yield* core.statusDetails(tmp);
         expect(dirty.hasWorkingTreeChanges).toBe(true);
+      }),
+    );
+
+    it.effect("reports merge conflict facts from git status", () =>
+      Effect.gen(function* () {
+        const tmp = yield* makeTmpDir();
+        yield* initRepoWithCommit(tmp);
+        const initialBranch = yield* git(tmp, ["rev-parse", "--abbrev-ref", "HEAD"]);
+        yield* createGitBranch({ cwd: tmp, branch: "feature/conflict" });
+        yield* checkoutGitBranch({ cwd: tmp, branch: "feature/conflict" });
+        yield* writeTextFile(path.join(tmp, "README.md"), "feature branch\n");
+        yield* git(tmp, ["add", "README.md"]);
+        yield* git(tmp, ["commit", "-m", "feature change"]);
+
+        yield* checkoutGitBranch({ cwd: tmp, branch: initialBranch });
+        yield* writeTextFile(path.join(tmp, "README.md"), "main branch\n");
+        yield* git(tmp, ["add", "README.md"]);
+        yield* git(tmp, ["commit", "-m", "main change"]);
+
+        const mergeAttempt = yield* gitAllowNonZero(tmp, ["merge", "feature/conflict"]);
+        expect(mergeAttempt.code).not.toBe(0);
+
+        const core = yield* GitCore;
+        const details = yield* core.statusDetails(tmp);
+        expect(details.merge.inProgress).toBe(true);
+        expect(details.merge.conflictedFiles).toEqual(["README.md"]);
+        expect(details.hasWorkingTreeChanges).toBe(true);
+
+        const status = yield* core.status({ cwd: tmp });
+        expect(status.merge.inProgress).toBe(true);
+        expect(status.merge.conflictedFiles).toEqual(["README.md"]);
       }),
     );
 

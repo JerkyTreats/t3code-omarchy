@@ -18,6 +18,7 @@ Track the phased overhaul for GitHub panel correctness, workspace awareness, rep
 | 4 | Split panel into repo and workspace sections and improve responsiveness | DONE | PASS | `refactor(web): reorganize github panel layout for workspace flows` | Repo scope is explicit and narrow layouts stack cleanly |
 | 5 | Integrate promotion state and next action guidance | DONE | PASS | `feat(web): show workspace promotion state guidance` | First slice derives workspace promotion state from available Git facts |
 | 6 | Compact panel composition and review architecture cleanliness | DONE | PASS | `refactor(web): compact github panel composition` | Final pass compacted repeated panel layout and recorded the architecture review |
+| 7 | Promote conflict truth from Git and add workflow guidance | DONE | PASS | `feat(web): surface conflict aware promotion guidance` | Conflict state now survives refresh because it comes from Git status, and the panel shows short workflow guidance |
 
 ## Phase 1
 
@@ -179,6 +180,47 @@ Compact the GitHub panel composition, reduce repeated layout code, and complete 
 - Kept the compaction local to the panel file instead of splitting more files. The mutation and query ownership is still tightly coupled to this component.
 - Deferred a larger file split for now. The current helper extraction improved readability without scattering ownership across many small files.
 
+## Phase 7
+
+### Goal
+
+Promote merge conflict truth from Git status, use those facts in promotion state derivation, and show short workflow guidance that tells the user what to do next.
+
+### Detailed implementation plan
+
+| Step | Change | Files | Done criteria |
+| --- | --- | --- | --- |
+| 7.1 | Extend Git status contracts with merge progress and conflicted files | `packages/contracts/src/git.ts`, `apps/server/src/git/Services/GitCore.ts` | DONE |
+| 7.2 | Teach server Git status to detect merge in progress and conflicted files from Git | `apps/server/src/git/Layers/GitCore.ts`, `apps/server/src/git/Layers/GitManager.ts` | DONE |
+| 7.3 | Add focused tests for merge conflict status facts | `apps/server/src/git/Layers/GitCore.test.ts` | DONE |
+| 7.4 | Update promotion state derivation to consume Git conflict facts instead of local merge memory | `apps/web/src/lib/workspacePromotionState.ts`, `apps/web/src/components/GitHubPanel.tsx` | DONE |
+| 7.5 | Add short workflow guidance copy for the active workspace state | `apps/web/src/lib/workspacePromotionState.ts`, `apps/web/src/components/GitHubPanel.tsx` | DONE |
+| 7.6 | Re run required checks and record the outcome in this plan | `.plans/github-panel-context-promotion-phases.md` | DONE |
+
+### Review requirements
+
+- Conflict state must survive panel remounts and refreshes because it comes from Git status, not local memory
+- Promotion derivation should continue to prefer Git facts over thread metadata
+- Guidance copy should stay short and action oriented
+- Keep the new scope limited to conflict truth and workflow guidance. Do not add a broad new UI system in this phase
+
+### Validation
+
+- Verify a conflicted merge is reflected after refreshing the panel
+- Verify conflicted file names surface in the active workspace card
+- Verify guidance copy changes for draft, needs sync, conflicted, and ready states
+- `bun lint`
+- `bun typecheck`
+- `bun run test -- --run src/lib/workspacePromotionState.test.ts src/lib/gitPanelContext.test.ts` from `apps/web`
+- `bun run test -- --run src/git/Layers/GitCore.test.ts` from `apps/server`
+
+### Review outcome
+
+- Git conflict truth now comes from `GitStatusResult.merge`, so it survives refreshes, remounts, and panel context changes.
+- The panel still keeps `lastMergeResult` only for recent success feedback. Persistent conflict state no longer depends on that local memory.
+- Promotion guidance stays compact and local to the existing helper instead of introducing a larger workflow system in this phase.
+- A larger next step remains available to draft guidance directly into the thread timeline when promotion state changes.
+
 ## Commit strategy
 
 Use one focused commit per phase.
@@ -192,3 +234,4 @@ Recommended subjects:
 - `design(web): reorganize github panel layout for responsive workspace flows`
 - `feat(web): derive workspace promotion state in github panel`
 - `refactor(web): compact github panel composition`
+- `feat(web): surface conflict aware promotion guidance`

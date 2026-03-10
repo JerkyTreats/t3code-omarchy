@@ -291,6 +291,10 @@ function resolveWsRpc(tag: string): unknown {
       hasUpstream: true,
       aheadCount: 0,
       behindCount: 0,
+      merge: {
+        inProgress: false,
+        conflictedFiles: [],
+      },
       pr: null,
     };
   }

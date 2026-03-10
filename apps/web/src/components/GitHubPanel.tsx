@@ -321,8 +321,9 @@ export default function GitHubPanel({
     [activeWorkspaceBranch, localBranches],
   );
   const isPrimaryWorkspace = repoRoot !== null && workspaceCwd === repoRoot;
-  const activeWorkspaceHasConflicts =
-    lastMergeResult?.status === "conflicted" && lastMergeResult.targetWorktreePath === workspaceCwd;
+  const activeWorkspaceMerge =
+    gitStatusForActions?.merge ?? ({ inProgress: false, conflictedFiles: [] } as const);
+  const activeWorkspaceHasConflicts = activeWorkspaceMerge.conflictedFiles.length > 0;
   const isDefaultBranch = useMemo(() => {
     const branchName = gitStatusForActions?.branch;
     if (!branchName) return false;
@@ -337,7 +338,8 @@ export default function GitHubPanel({
         targetBranch: activeTargetBranch,
         isPrimaryWorkspace,
         hasWorkingTreeChanges: gitStatusForActions?.hasWorkingTreeChanges ?? false,
-        hasConflicts: activeWorkspaceHasConflicts,
+        mergeInProgress: activeWorkspaceMerge.inProgress,
+        conflictedFiles: activeWorkspaceMerge.conflictedFiles,
         hasUpstream: gitStatusForActions?.hasUpstream ?? false,
         aheadCount: gitStatusForActions?.aheadCount ?? 0,
         behindCount: gitStatusForActions?.behindCount ?? 0,
@@ -346,7 +348,8 @@ export default function GitHubPanel({
     [
       activeTargetBranch,
       activeWorkspaceBranch,
-      activeWorkspaceHasConflicts,
+      activeWorkspaceMerge.conflictedFiles,
+      activeWorkspaceMerge.inProgress,
       gitStatusForActions?.aheadCount,
       gitStatusForActions?.behindCount,
       gitStatusForActions?.hasUpstream,
@@ -370,6 +373,8 @@ export default function GitHubPanel({
 
     if (activeWorkspaceHasConflicts) {
       statusBadges.push({ label: "Conflicts", variant: "error" });
+    } else if (activeWorkspaceMerge.inProgress) {
+      statusBadges.push({ label: "Merge in progress", variant: "outline" });
     } else if (gitStatusForActions?.hasWorkingTreeChanges) {
       statusBadges.push({ label: "Dirty", variant: "warning" });
     } else {
@@ -407,14 +412,19 @@ export default function GitHubPanel({
       statusBadges,
       nextAction: promotionState.nextAction,
       detail: promotionState.detail,
+      guidanceTitle: promotionState.guidanceTitle,
+      guidanceBody: promotionState.guidanceBody,
     };
   }, [
     activeWorkspaceBranch,
     activeWorkspaceBranchMeta?.isDefault,
     activeWorkspaceHasConflicts,
+    activeWorkspaceMerge.inProgress,
     gitStatusForActions,
     isPrimaryWorkspace,
     promotionState.detail,
+    promotionState.guidanceBody,
+    promotionState.guidanceTitle,
     promotionState.label,
     promotionState.nextAction,
     workspaceCwd,
@@ -1071,6 +1081,10 @@ export default function GitHubPanel({
     ? "Checkout a branch before merging."
     : mergeSourceBranch.length === 0
       ? "Create another local branch to merge into this workspace."
+      : activeWorkspaceHasConflicts
+        ? "Resolve or abort the current merge before starting another merge."
+        : activeWorkspaceMerge.inProgress
+          ? "Finish or abort the current merge before starting another merge."
       : gitStatusForActions.hasWorkingTreeChanges
         ? "Active workspace is dirty. Clean it before merging."
         : isMergeRunning
@@ -1212,6 +1226,17 @@ export default function GitHubPanel({
                         </div>
                       </div>
 
+                      <PanelInsetCard>
+                        <PanelField label="Workflow guidance">
+                          <p className="text-sm font-medium text-foreground">
+                            {activeWorkspaceSummary.guidanceTitle}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {activeWorkspaceSummary.guidanceBody}
+                          </p>
+                        </PanelField>
+                      </PanelInsetCard>
+
                       {isPrimaryWorkspace && (
                         <PanelInsetCard>
                           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1308,7 +1333,21 @@ export default function GitHubPanel({
                             <p className="text-xs text-muted-foreground">{mergeDisabledReason}</p>
                           )}
 
-                          {lastMergeResult && (
+                          {activeWorkspaceHasConflicts ? (
+                            <PanelCard className="text-sm">
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="font-medium">Resolve conflicted files before continuing promotion.</p>
+                                <Badge variant="error">Conflicted</Badge>
+                              </div>
+                              <div className="mt-3 flex flex-wrap gap-1.5">
+                                {activeWorkspaceMerge.conflictedFiles.map((file) => (
+                                  <Badge key={file} variant="outline">
+                                    {file}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </PanelCard>
+                          ) : lastMergeResult ? (
                             <PanelCard className="text-sm">
                               <div className="flex items-center justify-between gap-2">
                                 <p className="font-medium">
@@ -1330,7 +1369,7 @@ export default function GitHubPanel({
                                 </div>
                               )}
                             </PanelCard>
-                          )}
+                          ) : null}
                         </div>
                       </PanelInsetCard>
                     </PanelCard>

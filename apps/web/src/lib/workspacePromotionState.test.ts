@@ -10,7 +10,8 @@ describe("deriveWorkspacePromotionState", () => {
         targetBranch: "main",
         isPrimaryWorkspace: false,
         hasWorkingTreeChanges: true,
-        hasConflicts: true,
+        mergeInProgress: true,
+        conflictedFiles: ["README.md"],
         hasUpstream: false,
         aheadCount: 2,
         behindCount: 1,
@@ -26,7 +27,8 @@ describe("deriveWorkspacePromotionState", () => {
         targetBranch: "main",
         isPrimaryWorkspace: false,
         hasWorkingTreeChanges: true,
-        hasConflicts: false,
+        mergeInProgress: false,
+        conflictedFiles: [],
         hasUpstream: false,
         aheadCount: 0,
         behindCount: 0,
@@ -42,7 +44,8 @@ describe("deriveWorkspacePromotionState", () => {
         targetBranch: "main",
         isPrimaryWorkspace: false,
         hasWorkingTreeChanges: false,
-        hasConflicts: false,
+        mergeInProgress: false,
+        conflictedFiles: [],
         hasUpstream: true,
         aheadCount: 3,
         behindCount: 0,
@@ -58,12 +61,30 @@ describe("deriveWorkspacePromotionState", () => {
         targetBranch: "main",
         isPrimaryWorkspace: false,
         hasWorkingTreeChanges: false,
-        hasConflicts: false,
+        mergeInProgress: false,
+        conflictedFiles: [],
         hasUpstream: true,
         aheadCount: 0,
         behindCount: 2,
         hasOpenPr: false,
       }).state,
     ).toBe("needs-sync");
+  });
+
+  it("returns syncing when a merge is in progress without conflicts", () => {
+    expect(
+      deriveWorkspacePromotionState({
+        branch: "feature/a",
+        targetBranch: "main",
+        isPrimaryWorkspace: false,
+        hasWorkingTreeChanges: true,
+        mergeInProgress: true,
+        conflictedFiles: [],
+        hasUpstream: true,
+        aheadCount: 1,
+        behindCount: 0,
+        hasOpenPr: false,
+      }).state,
+    ).toBe("syncing");
   });
 });
