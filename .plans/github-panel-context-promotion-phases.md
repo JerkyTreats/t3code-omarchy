@@ -19,6 +19,8 @@ Track the phased overhaul for GitHub panel correctness, workspace awareness, rep
 | 5 | Integrate promotion state and next action guidance | DONE | PASS | `feat(web): show workspace promotion state guidance` | First slice derives workspace promotion state from available Git facts |
 | 6 | Compact panel composition and review architecture cleanliness | DONE | PASS | `refactor(web): compact github panel composition` | Final pass compacted repeated panel layout and recorded the architecture review |
 | 7 | Promote conflict truth from Git and add workflow guidance | DONE | PASS | `feat(web): surface conflict aware promotion guidance` | Conflict state now survives refresh because it comes from Git status, and the panel shows short workflow guidance |
+| 8 | Surface promotion guidance in the thread view | DONE | PASS | `feat(web): show thread scoped promotion guidance` | Closed the deferred thread guidance item with a thread scoped workflow banner |
+| 9 | Collapse low priority panel metadata behind disclosure | TODO | TODO | `refactor(web): hide low priority github panel metadata` | Close the deferred responsive polish item with compact details areas |
 
 ## Phase 1
 
@@ -221,6 +223,75 @@ Promote merge conflict truth from Git status, use those facts in promotion state
 - Promotion guidance stays compact and local to the existing helper instead of introducing a larger workflow system in this phase.
 - A larger next step remains available to draft guidance directly into the thread timeline when promotion state changes.
 
+## Phase 8
+
+### Goal
+
+Show short promotion workflow guidance in the thread view so users see the next Git step while reading and composing in the conversation.
+
+### Detailed implementation plan
+
+| Step | Change | Files | Done criteria |
+| --- | --- | --- | --- |
+| 8.1 | Reuse current Git panel context and Git status facts inside `ChatView` | `apps/web/src/components/ChatView.tsx` | DONE |
+| 8.2 | Derive thread scoped workflow guidance from the same promotion helper used by the panel | `apps/web/src/components/ChatView.tsx`, `apps/web/src/lib/workspacePromotionState.ts` | DONE |
+| 8.3 | Add a compact workflow guidance banner above the timeline | `apps/web/src/components/ChatView.tsx` | DONE |
+| 8.4 | Keep the banner scoped to active thread workflow states so it does not add noise in empty or inactive views | `apps/web/src/components/ChatView.tsx` | DONE |
+| 8.5 | Re run required checks and record the outcome in this plan | `.plans/github-panel-context-promotion-phases.md` | DONE |
+
+### Review requirements
+
+- Thread guidance must reuse the same promotion derivation as the GitHub panel
+- The banner must stay concise and not compete with provider health or thread error banners
+- Do not persist synthetic assistant messages in this phase. Keep guidance as thread scoped UI
+
+### Validation
+
+- Verify thread guidance updates when switching between draft, needs sync, conflicted, and ready workspaces
+- Verify the banner disappears in non Git or inactive thread states
+- `bun lint`
+- `bun typecheck`
+- `bun run test -- --run src/lib/workspacePromotionState.test.ts src/lib/gitPanelContext.test.ts` from `apps/web`
+
+### Review outcome
+
+- Reused the same promotion derivation helper as the panel, so thread guidance and panel guidance stay aligned.
+- Kept guidance as thread scoped UI rather than persisting synthetic assistant messages.
+- Suppressed the banner for quiet primary seeded states so it does not add noise to a clean thread view.
+
+## Phase 9
+
+### Goal
+
+Collapse low priority panel metadata behind disclosure areas so the panel stays readable while preserving access to advanced repo and workspace details.
+
+### Detailed implementation plan
+
+| Step | Change | Files | Done criteria |
+| --- | --- | --- | --- |
+| 9.1 | Identify low priority repo and workspace metadata that can move behind disclosure | `apps/web/src/components/GitHubPanel.tsx` | TODO |
+| 9.2 | Add compact disclosure controls using existing collapsible primitives | `apps/web/src/components/GitHubPanel.tsx` | TODO |
+| 9.3 | Preserve narrow width readability after metadata moves behind disclosure | `apps/web/src/components/GitHubPanel.tsx` | TODO |
+| 9.4 | Re run required checks and record the outcome in this plan | `.plans/github-panel-context-promotion-phases.md` | TODO |
+
+### Review requirements
+
+- Keep important state, next action, and primary controls visible without opening disclosure
+- Move only low priority metadata such as long paths, scope details, and secondary repo details behind disclosure
+- Reuse the existing collapsible primitive from the web UI kit
+
+### Validation
+
+- Verify repository and workspace primary information remains visible at a glance
+- Verify disclosure content wraps cleanly on narrow widths
+- `bun lint`
+- `bun typecheck`
+- `bun run test -- --run src/lib/workspacePromotionState.test.ts src/lib/gitPanelContext.test.ts` from `apps/web`
+
+### Review outcome
+
+- Pending
+
 ## Commit strategy
 
 Use one focused commit per phase.
@@ -235,3 +306,5 @@ Recommended subjects:
 - `feat(web): derive workspace promotion state in github panel`
 - `refactor(web): compact github panel composition`
 - `feat(web): surface conflict aware promotion guidance`
+- `feat(web): show thread scoped promotion guidance`
+- `refactor(web): hide low priority github panel metadata`
