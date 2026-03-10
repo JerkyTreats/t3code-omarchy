@@ -31,6 +31,7 @@ import {
   DialogPopup,
   DialogTitle,
 } from "~/components/ui/dialog";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "~/components/ui/collapsible";
 import { ScrollArea } from "~/components/ui/scroll-area";
 import { Textarea } from "~/components/ui/textarea";
 import { toastManager } from "~/components/ui/toast";
@@ -241,6 +242,8 @@ export default function GitHubPanel({
     useState<PendingDefaultBranchAction | null>(null);
   const [mergeSourceBranch, setMergeSourceBranch] = useState("");
   const [lastMergeResult, setLastMergeResult] = useState<GitMergeBranchesResult | null>(null);
+  const [repoDetailsOpen, setRepoDetailsOpen] = useState(false);
+  const [workspaceDetailsOpen, setWorkspaceDetailsOpen] = useState(false);
 
   const { data: gitStatus = null, error: gitStatusError } = useQuery(
     gitStatusQueryOptions(workspaceCwd),
@@ -261,6 +264,8 @@ export default function GitHubPanel({
     setPendingDefaultBranchAction(null);
     setDialogCommitMessage("");
     setIsCommitDialogOpen(false);
+    setRepoDetailsOpen(false);
+    setWorkspaceDetailsOpen(false);
     void invalidateGitQueries(queryClient);
     void invalidateGitHubQueries(queryClient);
   }, [activeThreadId, queryClient, repoCwd, workspaceCwd]);
@@ -1147,17 +1152,24 @@ export default function GitHubPanel({
                     </h3>
                   </div>
                   <PanelCard>
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <PanelField label="Repo">
-                        <p className="break-all text-sm font-medium text-foreground">
-                          {githubStatusQuery.data?.repo?.nameWithOwner ?? "Repository unavailable"}
-                        </p>
-                      </PanelField>
-                      <PanelField label="Scope">
-                        <PanelBadgeList items={repositoryScopeBadges} />
-                      </PanelField>
-                    </div>
-                    <p className="break-all text-xs text-muted-foreground">{repoRoot ?? repoCwd}</p>
+                    <PanelField label="Repo">
+                      <p className="break-all text-sm font-medium text-foreground">
+                        {githubStatusQuery.data?.repo?.nameWithOwner ?? "Repository unavailable"}
+                      </p>
+                    </PanelField>
+                    <Collapsible open={repoDetailsOpen} onOpenChange={setRepoDetailsOpen}>
+                      <CollapsibleTrigger className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">
+                        {repoDetailsOpen ? "Hide details" : "Show details"}
+                      </CollapsibleTrigger>
+                      <CollapsibleContent className="pt-3">
+                        <div className="grid gap-3 md:grid-cols-2">
+                          <PanelField label="Scope">
+                            <PanelBadgeList items={repositoryScopeBadges} />
+                          </PanelField>
+                        </div>
+                        <p className="mt-3 break-all text-xs text-muted-foreground">{repoRoot ?? repoCwd}</p>
+                      </CollapsibleContent>
+                    </Collapsible>
                   </PanelCard>
                 </section>
 
@@ -1211,9 +1223,18 @@ export default function GitHubPanel({
                               <p className="text-xs text-muted-foreground">{activeWorkspaceSummary.detail}</p>
                             </PanelField>
                           </div>
-                          <p className="break-all text-xs text-muted-foreground">
-                            {activeWorkspaceSummary.pathLabel}
-                          </p>
+                          <Collapsible open={workspaceDetailsOpen} onOpenChange={setWorkspaceDetailsOpen}>
+                            <CollapsibleTrigger className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">
+                              {workspaceDetailsOpen ? "Hide details" : "Show details"}
+                            </CollapsibleTrigger>
+                            <CollapsibleContent className="pt-3">
+                              <PanelField label="Path">
+                                <p className="break-all text-xs text-muted-foreground">
+                                  {activeWorkspaceSummary.pathLabel}
+                                </p>
+                              </PanelField>
+                            </CollapsibleContent>
+                          </Collapsible>
                         </div>
                         <div className="flex shrink-0 flex-wrap gap-2 lg:justify-end">
                           <Button

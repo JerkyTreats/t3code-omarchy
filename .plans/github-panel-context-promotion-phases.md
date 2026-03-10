@@ -20,7 +20,7 @@ Track the phased overhaul for GitHub panel correctness, workspace awareness, rep
 | 6 | Compact panel composition and review architecture cleanliness | DONE | PASS | `refactor(web): compact github panel composition` | Final pass compacted repeated panel layout and recorded the architecture review |
 | 7 | Promote conflict truth from Git and add workflow guidance | DONE | PASS | `feat(web): surface conflict aware promotion guidance` | Conflict state now survives refresh because it comes from Git status, and the panel shows short workflow guidance |
 | 8 | Surface promotion guidance in the thread view | DONE | PASS | `feat(web): show thread scoped promotion guidance` | Closed the deferred thread guidance item with a thread scoped workflow banner |
-| 9 | Collapse low priority panel metadata behind disclosure | TODO | TODO | `refactor(web): hide low priority github panel metadata` | Close the deferred responsive polish item with compact details areas |
+| 9 | Collapse low priority panel metadata behind disclosure | DONE | PASS | `refactor(web): hide low priority github panel metadata` | Closed the deferred responsive polish item with compact details areas |
 
 ## Phase 1
 
@@ -108,7 +108,7 @@ Separate repo and workspace concerns in the layout and make the panel responsive
 | 4.1 | Split the panel into repo, workspace, actions, auth, and issues sections | `apps/web/src/components/GitHubPanel.tsx` and child components | DONE |
 | 4.2 | Rework long branch and path presentation | `apps/web/src/components/GitHubPanel.tsx` | DONE |
 | 4.3 | Stack merge controls and action groups for narrow widths | `apps/web/src/components/GitHubPanel.tsx` | DONE |
-| 4.4 | Collapse low priority metadata behind a disclosure area | `apps/web/src/components/GitHubPanel.tsx` | DEFERRED |
+| 4.4 | Collapse low priority metadata behind a disclosure area | `apps/web/src/components/GitHubPanel.tsx` | DONE in Phase 9 |
 | 4.5 | Polish loading and refresh affordances on context switch | `apps/web/src/components/GitHubPanel.tsx` | DONE |
 
 ### Validation
@@ -133,7 +133,7 @@ Integrate promotion state into the active workspace card and make next action gu
 | 5.2 | Add overlays for publish and review status | `apps/web/src/components/GitHubPanel.tsx` | DONE |
 | 5.3 | Show next suggested action by state | `apps/web/src/components/GitHubPanel.tsx` | DONE |
 | 5.4 | Surface conflict resolution as a first class state | `apps/web/src/components/GitHubPanel.tsx` | DONE |
-| 5.5 | Draft short thread guidance on state changes | `apps/web/src/components/GitHubPanel.tsx` or adjacent helper | DEFERRED |
+| 5.5 | Draft short thread guidance on state changes | `apps/web/src/components/GitHubPanel.tsx` or adjacent helper | DONE in Phase 8 |
 
 ### Validation
 
@@ -269,10 +269,10 @@ Collapse low priority panel metadata behind disclosure areas so the panel stays 
 
 | Step | Change | Files | Done criteria |
 | --- | --- | --- | --- |
-| 9.1 | Identify low priority repo and workspace metadata that can move behind disclosure | `apps/web/src/components/GitHubPanel.tsx` | TODO |
-| 9.2 | Add compact disclosure controls using existing collapsible primitives | `apps/web/src/components/GitHubPanel.tsx` | TODO |
-| 9.3 | Preserve narrow width readability after metadata moves behind disclosure | `apps/web/src/components/GitHubPanel.tsx` | TODO |
-| 9.4 | Re run required checks and record the outcome in this plan | `.plans/github-panel-context-promotion-phases.md` | TODO |
+| 9.1 | Identify low priority repo and workspace metadata that can move behind disclosure | `apps/web/src/components/GitHubPanel.tsx` | DONE |
+| 9.2 | Add compact disclosure controls using existing collapsible primitives | `apps/web/src/components/GitHubPanel.tsx` | DONE |
+| 9.3 | Preserve narrow width readability after metadata moves behind disclosure | `apps/web/src/components/GitHubPanel.tsx` | DONE |
+| 9.4 | Re run required checks and record the outcome in this plan | `.plans/github-panel-context-promotion-phases.md` | DONE |
 
 ### Review requirements
 
@@ -290,7 +290,9 @@ Collapse low priority panel metadata behind disclosure areas so the panel stays 
 
 ### Review outcome
 
-- Pending
+- Moved long repo scope and path metadata behind repository details disclosure.
+- Moved long workspace path metadata behind workspace details disclosure while keeping branch, status, and next action visible.
+- Reused the existing collapsible primitive rather than adding another disclosure system.
 
 ## Commit strategy
 
