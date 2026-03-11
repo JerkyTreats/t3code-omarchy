@@ -13,7 +13,6 @@ import {
   DownloadIcon,
   ExternalLinkIcon,
   FolderGit2Icon,
-  GitBranchIcon,
   GitCommitIcon,
   GitMergeIcon,
   GitPullRequestIcon,
@@ -45,17 +44,7 @@ import {
 } from "../BranchToolbar.logic";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
-import {
-  Dialog,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogPanel,
-  DialogPopup,
-  DialogTitle,
-} from "~/components/ui/dialog";
 import { ScrollArea } from "~/components/ui/scroll-area";
-import { Textarea } from "~/components/ui/textarea";
 import { toastManager } from "~/components/ui/toast";
 import {
   githubIssuesQueryOptions,
@@ -86,6 +75,9 @@ import { formatWorktreePathForDisplay } from "~/worktreeCleanup";
 import { GitPanelSection } from "./GitPanelSection";
 import { GitStatusDot } from "./GitStatusDot";
 import { GitWorkspaceCard } from "./GitWorkspaceCard";
+import { GitCommitDialog } from "./GitCommitDialog";
+import { GitDefaultBranchDialog } from "./GitDefaultBranchDialog";
+import { GitPromoteDialog } from "./GitPromoteDialog";
 
 interface GitPanelProps {
   workspaceCwd: string | null;
@@ -149,10 +141,6 @@ function formatGitHubTimestamp(value: string): string {
 // Main Component
 // =============================================================================
 
-const COMMIT_DIALOG_TITLE = "Commit changes";
-const COMMIT_DIALOG_DESCRIPTION =
-  "Review and confirm your commit. Leave the message blank to auto-generate one.";
-
 export default function GitPanel({
   workspaceCwd,
   repoCwd,
@@ -192,7 +180,6 @@ export default function GitPanel({
   );
   const queryClient = useQueryClient();
   const [isCommitDialogOpen, setIsCommitDialogOpen] = useState(false);
-  const [dialogCommitMessage, setDialogCommitMessage] = useState("");
   const [issueState, setIssueState] = useState<"open" | "closed" | "all">("open");
   const [pendingDefaultBranchAction, setPendingDefaultBranchAction] =
     useState<PendingDefaultBranchAction | null>(null);
@@ -223,7 +210,6 @@ export default function GitPanel({
     setMergeSourceBranch("");
     setLastMergeResult(null);
     setPendingDefaultBranchAction(null);
-    setDialogCommitMessage("");
     setIsCommitDialogOpen(false);
     setMergeExpanded(false);
     setPromotionTargetBranch(null);
@@ -1038,18 +1024,19 @@ export default function GitPanel({
     });
   }, [pendingDefaultBranchAction, checkoutNewBranchAndRunAction]);
 
-  const runDialogActionOnNewBranch = useCallback(() => {
-    if (!isCommitDialogOpen) return;
-    const commitMessage = dialogCommitMessage.trim();
+  const runDialogActionOnNewBranch = useCallback(
+    (commitMessage: string) => {
+      if (!isCommitDialogOpen) return;
 
-    setIsCommitDialogOpen(false);
-    setDialogCommitMessage("");
+      setIsCommitDialogOpen(false);
 
-    checkoutNewBranchAndRunAction({
-      action: "commit",
-      ...(commitMessage ? { commitMessage } : {}),
-    });
-  }, [isCommitDialogOpen, dialogCommitMessage, checkoutNewBranchAndRunAction]);
+      checkoutNewBranchAndRunAction({
+        action: "commit",
+        ...(commitMessage ? { commitMessage } : {}),
+      });
+    },
+    [checkoutNewBranchAndRunAction, isCommitDialogOpen],
+  );
 
   const openDialogForMenuItem = useCallback(
     (item: GitActionMenuItem) => {
@@ -1097,22 +1084,18 @@ export default function GitPanel({
     [threadToastData],
   );
 
-  const runDialogAction = useCallback(() => {
-    if (!isCommitDialogOpen) return;
-    const commitMessage = dialogCommitMessage.trim();
-    setIsCommitDialogOpen(false);
-    setDialogCommitMessage("");
-    void runGitActionWithToast({
-      action: "commit",
-      ...(commitMessage ? { commitMessage } : {}),
-    });
-  }, [
-    dialogCommitMessage,
-    isCommitDialogOpen,
-    runGitActionWithToast,
-    setDialogCommitMessage,
-    setIsCommitDialogOpen,
-  ]);
+  const runDialogAction = useCallback(
+    (commitMessage: string) => {
+      if (!isCommitDialogOpen) return;
+
+      setIsCommitDialogOpen(false);
+      void runGitActionWithToast({
+        action: "commit",
+        ...(commitMessage ? { commitMessage } : {}),
+      });
+    },
+    [isCommitDialogOpen, runGitActionWithToast],
+  );
 
   const openChangedFileInEditor = useCallback(
     (filePath: string) => {
@@ -1816,188 +1799,37 @@ export default function GitPanel({
         </ScrollArea>
       </div>
 
-      {/* ================================================================== */}
-      {/* COMMIT DIALOG */}
-      {/* ================================================================== */}
-      <Dialog
+      <GitCommitDialog
         open={isCommitDialogOpen}
-        onOpenChange={(open) => {
-          if (!open) {
-            setIsCommitDialogOpen(false);
-            setDialogCommitMessage("");
-          }
-        }}
-      >
-        <DialogPopup>
-          <DialogHeader>
-            <DialogTitle>{COMMIT_DIALOG_TITLE}</DialogTitle>
-            <DialogDescription>{COMMIT_DIALOG_DESCRIPTION}</DialogDescription>
-          </DialogHeader>
-          <DialogPanel className="space-y-4">
-            <div className="space-y-3 rounded-lg border border-input bg-muted/40 p-3 text-xs">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-muted-foreground">Branch</span>
-                <div className="flex items-center gap-2">
-                  <span className="font-mono font-medium">
-                    {gitStatusForActions?.branch ?? "(detached)"}
-                  </span>
-                  {isDefaultBranch && (
-                    <Badge variant="warning" size="sm">
-                      default
-                    </Badge>
-                  )}
-                </div>
-              </div>
-              <div className="space-y-1">
-                <p className="text-muted-foreground">Files</p>
-                {!gitStatusForActions || gitStatusForActions.workingTree.files.length === 0 ? (
-                  <p className="font-medium">No changes</p>
-                ) : (
-                  <div className="space-y-2">
-                    <ScrollArea className="h-40 rounded-md border border-input bg-background">
-                      <div className="space-y-0.5 p-1">
-                        {gitStatusForActions.workingTree.files.map((file) => (
-                          <button
-                            type="button"
-                            key={file.path}
-                            className="flex w-full items-center justify-between gap-3 rounded px-2 py-1 font-mono text-left transition-colors hover:bg-accent/50"
-                            onClick={() => openChangedFileInEditor(file.path)}
-                          >
-                            <span className="truncate">{file.path}</span>
-                            <span className="shrink-0 tabular-nums">
-                              <span className="text-success-foreground">+{file.insertions}</span>
-                              <span className="mx-0.5 text-border">/</span>
-                              <span className="text-destructive-foreground">-{file.deletions}</span>
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    </ScrollArea>
-                    <div className="flex justify-end font-mono tabular-nums">
-                      <span className="text-success-foreground">
-                        +{gitStatusForActions.workingTree.insertions}
-                      </span>
-                      <span className="mx-1 text-border">/</span>
-                      <span className="text-destructive-foreground">
-                        -{gitStatusForActions.workingTree.deletions}
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="space-y-1">
-              <p className="text-xs font-medium">Commit message (optional)</p>
-              <Textarea
-                value={dialogCommitMessage}
-                onChange={(event) => setDialogCommitMessage(event.target.value)}
-                placeholder="Leave empty to auto-generate"
-                size="sm"
-              />
-            </div>
-          </DialogPanel>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setIsCommitDialogOpen(false);
-                setDialogCommitMessage("");
-              }}
-            >
-              Cancel
-            </Button>
-            <Button variant="outline" size="sm" onClick={runDialogActionOnNewBranch}>
-              New branch
-            </Button>
-            <Button size="sm" onClick={runDialogAction}>
-              Commit
-            </Button>
-          </DialogFooter>
-        </DialogPopup>
-      </Dialog>
+        branchName={gitStatusForActions?.branch ?? null}
+        isDefaultBranch={isDefaultBranch}
+        workingTree={gitStatusForActions?.workingTree ?? null}
+        onOpenChange={setIsCommitDialogOpen}
+        onOpenFile={openChangedFileInEditor}
+        onSubmit={runDialogAction}
+        onSubmitNewBranch={runDialogActionOnNewBranch}
+      />
 
-      {/* ================================================================== */}
-      {/* DEFAULT BRANCH CONFIRMATION DIALOG */}
-      {/* ================================================================== */}
-      <Dialog
+      <GitDefaultBranchDialog
         open={pendingDefaultBranchAction !== null}
+        copy={pendingDefaultBranchActionCopy}
         onOpenChange={(open) => {
           if (!open) {
             setPendingDefaultBranchAction(null);
           }
         }}
-      >
-        <DialogPopup className="max-w-xl">
-          <DialogHeader>
-            <DialogTitle>
-              {pendingDefaultBranchActionCopy?.title ?? "Continue on default branch?"}
-            </DialogTitle>
-            <DialogDescription>{pendingDefaultBranchActionCopy?.description}</DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => setPendingDefaultBranchAction(null)}>
-              Cancel
-            </Button>
-            <Button variant="outline" size="sm" onClick={continuePendingDefaultBranchAction}>
-              {pendingDefaultBranchActionCopy?.continueLabel ?? "Continue"}
-            </Button>
-            <Button size="sm" onClick={checkoutFeatureBranchAndContinuePendingAction}>
-              Feature branch
-            </Button>
-          </DialogFooter>
-        </DialogPopup>
-      </Dialog>
+        onContinue={continuePendingDefaultBranchAction}
+        onCreateBranch={checkoutFeatureBranchAndContinuePendingAction}
+      />
 
-      {/* ================================================================== */}
-      {/* PROMOTE CONFIRMATION DIALOG */}
-      {/* ================================================================== */}
-      <Dialog
+      <GitPromoteDialog
         open={isPromoteDialogOpen}
-        onOpenChange={(open) => {
-          if (!open) {
-            setIsPromoteDialogOpen(false);
-          }
-        }}
-      >
-        <DialogPopup className="max-w-xl">
-          <DialogHeader>
-            <DialogTitle>Promote to {activeTargetBranch ?? "target"}?</DialogTitle>
-            <DialogDescription>
-              This will merge{" "}
-              <code className="rounded bg-muted px-1 font-mono text-xs">
-                {activeWorkspaceBranch ?? "current branch"}
-              </code>{" "}
-              into{" "}
-              <code className="rounded bg-muted px-1 font-mono text-xs">
-                {activeTargetBranch ?? "target"}
-              </code>
-              , push, and delete the feature branch. This bypasses pull request review.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogPanel className="space-y-3">
-            <div className="flex items-center gap-2 text-sm">
-              <GitBranchIcon className="size-4 text-muted-foreground" />
-              <span className="font-mono">{activeWorkspaceBranch}</span>
-              <ArrowRightIcon className="size-4 text-muted-foreground" />
-              <span className="font-mono font-medium">{activeTargetBranch}</span>
-            </div>
-            {gitStatusForActions?.hasWorkingTreeChanges && (
-              <p className="text-xs text-muted-foreground">
-                Uncommitted changes will be committed first.
-              </p>
-            )}
-          </DialogPanel>
-          <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => setIsPromoteDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button size="sm" onClick={runPromoteAction}>
-              Promote
-            </Button>
-          </DialogFooter>
-        </DialogPopup>
-      </Dialog>
+        sourceBranch={activeWorkspaceBranch}
+        targetBranch={activeTargetBranch}
+        hasWorkingTreeChanges={gitStatusForActions?.hasWorkingTreeChanges ?? false}
+        onOpenChange={setIsPromoteDialogOpen}
+        onPromote={runPromoteAction}
+      />
     </>
   );
 }

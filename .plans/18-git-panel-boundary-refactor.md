@@ -111,10 +111,10 @@ Run these checks after each phase:
 
 | Progress | Workstream | Scope | Exit criteria |
 | --- | --- | --- | --- |
-| Not started | Extract dialogs | Move commit, default branch, and promote dialogs into standalone components | Main container no longer renders dialog internals |
-| Not started | Narrow contracts | Pass only dialog specific props, open state, and submit callbacks | Dialogs have no query or store access |
-| Not started | Clarify state ownership | Keep only the needed open state and dialog draft state at the right layer | Dialog lifecycle is easy to reason about |
-| Not started | Verify checks | Run formatting, lint, and typecheck | Validation gate passes |
+| Done | Extract dialogs | Move commit, default branch, and promote dialogs into standalone components | Main container no longer renders dialog internals |
+| Done | Narrow contracts | Pass only dialog specific props, open state, and submit callbacks | Dialogs have no query or store access |
+| Done | Clarify state ownership | Keep only the needed open state and dialog draft state at the right layer | Dialog lifecycle is easy to reason about |
+| Done | Verify checks | Run formatting, lint, and typecheck | Validation gate passes |
 
 ## Phase 3
 
