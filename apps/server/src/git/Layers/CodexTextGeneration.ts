@@ -20,6 +20,14 @@ import {
 const CODEX_MODEL = "gpt-5.3-codex";
 const CODEX_REASONING_EFFORT = "low";
 const CODEX_TIMEOUT_MS = 180_000;
+const AGENTS_FILE_NAME = "AGENTS.md";
+const AGENTS_DOC_MAX_CHARS = 6_000;
+const AGENTS_TOTAL_MAX_CHARS = 12_000;
+
+interface CommitGuidanceDocument {
+  readonly path: string;
+  readonly content: string;
+}
 
 function toCodexOutputJsonSchema(schema: Schema.Top): unknown {
   const document = Schema.toJsonSchemaDocument(schema);
@@ -72,6 +80,55 @@ function limitSection(value: string, maxChars: number): string {
   if (value.length <= maxChars) return value;
   const truncated = value.slice(0, maxChars);
   return `${truncated}\n\n[truncated]`;
+}
+
+function uniqueStrings(values: ReadonlyArray<string>): ReadonlyArray<string> {
+  return [...new Set(values)];
+}
+
+function collectMarkdownPathsFromLine(line: string): ReadonlyArray<string> {
+  const matches: string[] = [];
+
+  for (const match of line.matchAll(/\[[^\]]+\]\(([^)]+\.md)\)/g)) {
+    const value = match[1]?.trim();
+    if (value) {
+      matches.push(value);
+    }
+  }
+
+  for (const match of line.matchAll(/`([^`]+\.md)`/g)) {
+    const value = match[1]?.trim();
+    if (value) {
+      matches.push(value);
+    }
+  }
+
+  return uniqueStrings(matches);
+}
+
+function buildCommitGuidancePromptSection(
+  documents: ReadonlyArray<CommitGuidanceDocument>,
+): ReadonlyArray<string> {
+  if (documents.length === 0) {
+    return [
+      "Local commit guidance:",
+      "- No AGENTS.md commit guidance was found for this cwd.",
+      "- Do not assume the repository uses conventional commits unless local guidance says so.",
+    ];
+  }
+
+  return [
+    "Local commit guidance discovered from AGENTS.md:",
+    "- Follow commit-specific instructions from these files when present.",
+    "- If the guidance does not define a format, use a concise repo-neutral message.",
+    "- Do not assume the repository uses conventional commits unless local guidance says so.",
+    "",
+    ...documents.flatMap((document) => [
+      `File: ${document.path}`,
+      limitSection(document.content, AGENTS_DOC_MAX_CHARS),
+      "",
+    ]),
+  ];
 }
 
 function sanitizeCommitSubject(raw: string): string {
@@ -146,6 +203,102 @@ const makeCodexTextGeneration = Effect.gen(function* () {
 
   const safeUnlink = (filePath: string): Effect.Effect<void, never> =>
     fileSystem.remove(filePath).pipe(Effect.catch(() => Effect.void));
+
+  const loadCommitGuidanceDocuments = (
+    cwd: string,
+  ): Effect.Effect<ReadonlyArray<CommitGuidanceDocument>, TextGenerationError> =>
+    Effect.gen(function* () {
+      const resolvedCwd = path.resolve(cwd);
+      const directories: string[] = [];
+      let current = resolvedCwd;
+      while (true) {
+        directories.push(current);
+        const parent = path.dirname(current);
+        if (parent === current) {
+          break;
+        }
+        current = parent;
+      }
+
+      const discoveredDocuments: CommitGuidanceDocument[] = [];
+      const seenPaths = new Set<string>();
+      let totalChars = 0;
+
+      const addDocument = (filePath: string): Effect.Effect<void, TextGenerationError> =>
+        Effect.gen(function* () {
+          const normalizedPath = path.normalize(filePath);
+          if (seenPaths.has(normalizedPath) || totalChars >= AGENTS_TOTAL_MAX_CHARS) {
+            return;
+          }
+
+          const exists = yield* fileSystem.exists(normalizedPath).pipe(
+            Effect.orElseSucceed(() => false),
+          );
+          if (!exists) {
+            return;
+          }
+
+          const content = yield* fileSystem.readFileString(normalizedPath).pipe(
+            Effect.mapError(
+              (cause) =>
+                new TextGenerationError({
+                  operation: "generateCommitMessage",
+                  detail: `Failed to read local guidance file at ${normalizedPath}.`,
+                  cause,
+                }),
+            ),
+          );
+
+          const remainingChars = AGENTS_TOTAL_MAX_CHARS - totalChars;
+          if (remainingChars <= 0) {
+            return;
+          }
+
+          const limitedContent = limitSection(content, Math.min(AGENTS_DOC_MAX_CHARS, remainingChars));
+          discoveredDocuments.push({ path: normalizedPath, content: limitedContent });
+          seenPaths.add(normalizedPath);
+          totalChars += limitedContent.length;
+        });
+
+      for (const directory of directories) {
+        const agentsPath = path.join(directory, AGENTS_FILE_NAME);
+        const exists = yield* fileSystem.exists(agentsPath).pipe(Effect.orElseSucceed(() => false));
+        if (!exists) {
+          continue;
+        }
+
+        yield* addDocument(agentsPath);
+        if (totalChars >= AGENTS_TOTAL_MAX_CHARS) {
+          break;
+        }
+
+        const agentsContent = discoveredDocuments.at(-1)?.path === path.normalize(agentsPath)
+          ? discoveredDocuments.at(-1)?.content ?? ""
+          : "";
+
+        for (const line of agentsContent.split(/\r?\n/g)) {
+          if (!/commit|amend|git commit/i.test(line)) {
+            continue;
+          }
+
+          for (const relativeDocPath of collectMarkdownPathsFromLine(line)) {
+            if (/^(https?:|file:)/i.test(relativeDocPath)) {
+              continue;
+            }
+            const resolvedDocPath = path.resolve(path.join(directory, relativeDocPath));
+            yield* addDocument(resolvedDocPath);
+            if (totalChars >= AGENTS_TOTAL_MAX_CHARS) {
+              break;
+            }
+          }
+          if (totalChars >= AGENTS_TOTAL_MAX_CHARS) {
+            break;
+          }
+        }
+      }
+
+      return discoveredDocuments;
+    });
 
   const materializeImageAttachments = (
     _operation: "generateCommitMessage" | "generatePrContent" | "generateBranchName",
@@ -312,58 +465,59 @@ const makeCodexTextGeneration = Effect.gen(function* () {
     });
 
   const generateCommitMessage: TextGenerationShape["generateCommitMessage"] = (input) => {
-    const wantsBranch = input.includeBranch === true;
+    return Effect.gen(function* () {
+      const wantsBranch = input.includeBranch === true;
+      const commitGuidanceDocs = yield* loadCommitGuidanceDocuments(input.cwd);
 
-    const prompt = [
-      "You write concise git commit messages.",
-      wantsBranch
-        ? "Return a JSON object with keys: subject, body, branch."
-        : "Return a JSON object with keys: subject, body.",
-      "Rules:",
-      "- subject must be imperative, <= 72 chars, and no trailing period",
-      "- body can be empty string or short bullet points",
-      ...(wantsBranch
-        ? ["- branch must be a short semantic git branch fragment for this change"]
-        : []),
-      "- capture the primary user-visible or developer-visible change",
-      "",
-      `Branch: ${input.branch ?? "(detached)"}`,
-      "",
-      "Staged files:",
-      limitSection(input.stagedSummary, 6_000),
-      "",
-      "Staged patch:",
-      limitSection(input.stagedPatch, 40_000),
-    ].join("\n");
+      const prompt = [
+        "You write concise git commit messages.",
+        wantsBranch
+          ? "Return a JSON object with keys: subject, body, branch."
+          : "Return a JSON object with keys: subject, body.",
+        "Rules:",
+        "- subject must be imperative, <= 72 chars, and no trailing period",
+        "- body can be empty string or short bullet points",
+        ...(wantsBranch
+          ? ["- branch must be a short semantic git branch fragment for this change"]
+          : []),
+        "- capture the primary user-visible or developer-visible change",
+        ...buildCommitGuidancePromptSection(commitGuidanceDocs),
+        "",
+        `Branch: ${input.branch ?? "(detached)"}`,
+        "",
+        "Staged files:",
+        limitSection(input.stagedSummary, 6_000),
+        "",
+        "Staged patch:",
+        limitSection(input.stagedPatch, 40_000),
+      ].join("\n");
 
-    const outputSchemaJson = wantsBranch
-      ? Schema.Struct({
-          subject: Schema.String,
-          body: Schema.String,
-          branch: Schema.String,
-        })
-      : Schema.Struct({
-          subject: Schema.String,
-          body: Schema.String,
-        });
+      const outputSchemaJson = wantsBranch
+        ? Schema.Struct({
+            subject: Schema.String,
+            body: Schema.String,
+            branch: Schema.String,
+          })
+        : Schema.Struct({
+            subject: Schema.String,
+            body: Schema.String,
+          });
 
-    return runCodexJson({
-      operation: "generateCommitMessage",
-      cwd: input.cwd,
-      prompt,
-      outputSchemaJson,
-    }).pipe(
-      Effect.map(
-        (generated) =>
-          ({
-            subject: sanitizeCommitSubject(generated.subject),
-            body: generated.body.trim(),
-            ...("branch" in generated && typeof generated.branch === "string"
-              ? { branch: sanitizeFeatureBranchName(generated.branch) }
-              : {}),
-          }) satisfies CommitMessageGenerationResult,
-      ),
-    );
+      const generated = yield* runCodexJson({
+        operation: "generateCommitMessage",
+        cwd: input.cwd,
+        prompt,
+        outputSchemaJson,
+      });
+
+      return {
+        subject: sanitizeCommitSubject(generated.subject),
+        body: generated.body.trim(),
+        ...("branch" in generated && typeof generated.branch === "string"
+          ? { branch: sanitizeFeatureBranchName(generated.branch) }
+          : {}),
+      } satisfies CommitMessageGenerationResult;
+    });
   };
 
   const generatePrContent: TextGenerationShape["generatePrContent"] = (input) => {

@@ -222,6 +222,81 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
     ),
   );
 
+  it.effect("includes safe fallback guidance when no local AGENTS commit instructions exist", () =>
+    withFakeCodexEnv(
+      {
+        output: JSON.stringify({
+          subject: "Update project files",
+          body: "",
+        }),
+        stdinMustContain:
+          "Do not assume the repository uses conventional commits unless local guidance says so.",
+      },
+      Effect.gen(function* () {
+        const textGeneration = yield* TextGeneration;
+        const fs = yield* FileSystem.FileSystem;
+
+        const repoDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3code-codex-commit-fallback-" });
+        yield* fs.writeFileString(`${repoDir}/README.md`, "fallback\n");
+
+        const generated = yield* textGeneration.generateCommitMessage({
+          cwd: repoDir,
+          branch: "feature/codex-effect",
+          stagedSummary: "M README.md",
+          stagedPatch: "diff --git a/README.md b/README.md",
+        });
+
+        expect(generated.subject).toBe("Update project files");
+      }),
+    ),
+  );
+
+  it.effect("reads AGENTS commit guidance and linked policy docs", () =>
+    withFakeCodexEnv(
+      {
+        output: JSON.stringify({
+          subject: "refactor(web): align commit generation with AGENTS guidance",
+          body: "",
+        }),
+        stdinMustContain: "Use type(scope): summary for commit subjects in this repository.",
+      },
+      Effect.gen(function* () {
+        const textGeneration = yield* TextGeneration;
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+
+        const repoDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3code-codex-commit-agents-" });
+        const docsDir = path.join(repoDir, "governance");
+        yield* fs.makeDirectory(docsDir, { recursive: true });
+        yield* fs.writeFileString(
+          path.join(repoDir, "AGENTS.md"),
+          [
+            "# AGENTS.md",
+            "",
+            "For commit or amend requests, review [Commit Policy](governance/commit_policy.md).",
+          ].join("\n"),
+        );
+        yield* fs.writeFileString(
+          path.join(docsDir, "commit_policy.md"),
+          [
+            "# Commit Policy",
+            "",
+            "Use type(scope): summary for commit subjects in this repository.",
+          ].join("\n"),
+        );
+
+        const generated = yield* textGeneration.generateCommitMessage({
+          cwd: repoDir,
+          branch: "feature/codex-effect",
+          stagedSummary: "M README.md",
+          stagedPatch: "diff --git a/README.md b/README.md",
+        });
+
+        expect(generated.subject).toBe("refactor(web): align commit generation with AGENTS guidance");
+      }),
+    ),
+  );
+
   it.effect("generates commit message with branch when includeBranch is true", () =>
     withFakeCodexEnv(
       {
