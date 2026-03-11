@@ -147,10 +147,16 @@ Run these checks after each phase:
 
 | Progress | Workstream | Scope | Exit criteria |
 | --- | --- | --- | --- |
-| Not started | Add focused tests | Add or update tests around extracted hooks and section logic where useful | Critical workflows are covered at the new boundaries |
-| Not started | Review dependency direction | Confirm section, hook, and logic dependency flow is correct | Expected boundary rules are reflected in code structure |
-| Not started | Document final structure | Update the plan with final progress and any follow up notes | The refactor story is easy to follow |
-| Not started | Verify checks | Run formatting, lint, and typecheck | Validation gate passes |
+| Done | Add focused tests | Add section logic coverage for workspace and sync guard derivation | Critical workflows are covered at the new boundaries |
+| Done | Review dependency direction | Keep section rendering in components, imperative flows in hooks, and derivation in logic files | Expected boundary rules are reflected in code structure |
+| Done | Document final structure | Add a local README and update this plan with final progress and follow up notes | The refactor story is easy to follow |
+| Done | Verify checks | Run formatting, lint, and typecheck | Validation gate passes |
+
+## Follow Up Notes
+
+- `GitPanel` is now a composition shell with section, dialog, hook, and logic boundaries split into local files.
+- Focused logic coverage exists for the extracted workspace and sync guard rules.
+- A local README explains where new view, workflow, and derivation code should live.
 
 ## Done Criteria
 
