@@ -120,8 +120,7 @@ function inferHyprlandInstanceSignature(env: NodeJS.ProcessEnv): string | null {
 
   const hyprRuntimeDirectory = Path.join(runtimeDirectory, "hypr");
   try {
-    const candidates = FSNative
-      .readdirSync(hyprRuntimeDirectory, { withFileTypes: true })
+    const candidates = FSNative.readdirSync(hyprRuntimeDirectory, { withFileTypes: true })
       .filter((entry) => entry.isDirectory())
       .map((entry) => {
         const socketPath = Path.join(hyprRuntimeDirectory, entry.name, ".socket.sock");
@@ -135,7 +134,9 @@ function inferHyprlandInstanceSignature(env: NodeJS.ProcessEnv): string | null {
           return null;
         }
       })
-      .filter((candidate): candidate is { signature: string; mtimeMs: number } => candidate !== null)
+      .filter(
+        (candidate): candidate is { signature: string; mtimeMs: number } => candidate !== null,
+      )
       .toSorted((left, right) => right.mtimeMs - left.mtimeMs);
 
     return candidates[0]?.signature ?? null;
@@ -220,10 +221,7 @@ async function resolveOmarchyScreenshotCommand(): Promise<string | null> {
   return (await commandExists("omarchy-cmd-screenshot")) ? "omarchy-cmd-screenshot" : null;
 }
 
-function buildScreenshotCapture(
-  imageBytes: Buffer,
-  fileName: string,
-): DesktopScreenshotCapture {
+function buildScreenshotCapture(imageBytes: Buffer, fileName: string): DesktopScreenshotCapture {
   return {
     name: fileName,
     mimeType: SCREENSHOT_MIME_TYPE,
@@ -261,7 +259,9 @@ async function resolveOmarchyScreenshotOutputDir(): Promise<string> {
   return Path.join(OS.homedir(), "Pictures");
 }
 
-async function listScreenshotFiles(directoryPath: string): Promise<ReadonlyArray<ScreenshotFileStat>> {
+async function listScreenshotFiles(
+  directoryPath: string,
+): Promise<ReadonlyArray<ScreenshotFileStat>> {
   try {
     const entries = await FS.readdir(directoryPath, { withFileTypes: true });
     const fileStats = await Promise.all(
@@ -335,7 +335,10 @@ async function readOmarchyCaptureArtifact(
       return null;
     }
 
-    return buildScreenshotCapture(imageBytes, Path.basename(outputFilePath) || screenshotFileName());
+    return buildScreenshotCapture(
+      imageBytes,
+      Path.basename(outputFilePath) || screenshotFileName(),
+    );
   }
 
   const clipboardAfterCapture = readClipboardPng();

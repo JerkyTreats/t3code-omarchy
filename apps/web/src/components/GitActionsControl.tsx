@@ -26,9 +26,7 @@ export default function GitActionsControl({ gitCwd, open, onToggle }: GitActions
           </Toggle>
         }
       />
-      <TooltipPopup side="bottom">
-        {open ? "Close GitHub panel" : "Open GitHub panel"}
-      </TooltipPopup>
+      <TooltipPopup side="bottom">{open ? "Close GitHub panel" : "Open GitHub panel"}</TooltipPopup>
     </Tooltip>
   );
 }

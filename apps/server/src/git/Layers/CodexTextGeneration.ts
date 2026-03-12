@@ -231,9 +231,9 @@ const makeCodexTextGeneration = Effect.gen(function* () {
             return;
           }
 
-          const exists = yield* fileSystem.exists(normalizedPath).pipe(
-            Effect.orElseSucceed(() => false),
-          );
+          const exists = yield* fileSystem
+            .exists(normalizedPath)
+            .pipe(Effect.orElseSucceed(() => false));
           if (!exists) {
             return;
           }
@@ -254,7 +254,10 @@ const makeCodexTextGeneration = Effect.gen(function* () {
             return;
           }
 
-          const limitedContent = limitSection(content, Math.min(AGENTS_DOC_MAX_CHARS, remainingChars));
+          const limitedContent = limitSection(
+            content,
+            Math.min(AGENTS_DOC_MAX_CHARS, remainingChars),
+          );
           discoveredDocuments.push({ path: normalizedPath, content: limitedContent });
           seenPaths.add(normalizedPath);
           totalChars += limitedContent.length;
@@ -272,9 +275,10 @@ const makeCodexTextGeneration = Effect.gen(function* () {
           break;
         }
 
-        const agentsContent = discoveredDocuments.at(-1)?.path === path.normalize(agentsPath)
-          ? discoveredDocuments.at(-1)?.content ?? ""
-          : "";
+        const agentsContent =
+          discoveredDocuments.at(-1)?.path === path.normalize(agentsPath)
+            ? (discoveredDocuments.at(-1)?.content ?? "")
+            : "";
 
         for (const line of agentsContent.split(/\r?\n/g)) {
           if (!/commit|amend|git commit/i.test(line)) {

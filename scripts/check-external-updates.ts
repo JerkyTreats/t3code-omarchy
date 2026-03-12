@@ -328,7 +328,12 @@ async function main(): Promise<void> {
   const [forkMeta, compare, release, openIssues] = await Promise.all([
     getRepo(repo),
     getRepo(repo).then((forkRepository) =>
-      compareForkWithUpstream(repo, forkRepository.default_branch, upstreamRepo, config.upstream.branch),
+      compareForkWithUpstream(
+        repo,
+        forkRepository.default_branch,
+        upstreamRepo,
+        config.upstream.branch,
+      ),
     ),
     getLatestRelease(parseRepoRef(config.omarchy.repo)),
     listOpenIssues(repo),

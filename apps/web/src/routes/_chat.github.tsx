@@ -15,7 +15,13 @@ import { GitHubIcon } from "~/components/Icons";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
-import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
+import {
+  Select,
+  SelectItem,
+  SelectPopup,
+  SelectTrigger,
+  SelectValue,
+} from "~/components/ui/select";
 import { SidebarInset } from "~/components/ui/sidebar";
 import { toastManager } from "~/components/ui/toast";
 import { isElectron } from "~/env";
@@ -133,7 +139,8 @@ function GitHubRouteView() {
             <header className="space-y-1">
               <h1 className="text-2xl font-semibold tracking-tight text-foreground">GitHub</h1>
               <p className="text-sm text-muted-foreground">
-                Verify `gh`, authenticate the active account, and browse issues from your local projects.
+                Verify `gh`, authenticate the active account, and browse issues from your local
+                projects.
               </p>
             </header>
 
@@ -147,7 +154,9 @@ function GitHubRouteView() {
                     </div>
                     <div className="space-y-2 text-white">
                       <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="text-xl font-semibold tracking-tight">Control room for `gh`</h2>
+                        <h2 className="text-xl font-semibold tracking-tight">
+                          Control room for `gh`
+                        </h2>
                         {statusQuery.data?.installed ? (
                           <Badge variant={statusQuery.data.authenticated ? "success" : "warning"}>
                             {statusQuery.data.authenticated ? "Authenticated" : "Needs auth"}
@@ -157,7 +166,8 @@ function GitHubRouteView() {
                         )}
                       </div>
                       <p className="max-w-2xl text-sm text-white/70">
-                        Keep the CLI healthy, confirm which account is active, and turn project repos into an issue menu that is one click away.
+                        Keep the CLI healthy, confirm which account is active, and turn project
+                        repos into an issue menu that is one click away.
                       </p>
                     </div>
                   </div>
@@ -171,7 +181,9 @@ function GitHubRouteView() {
                       <div className="mt-2 text-lg font-semibold">
                         {statusQuery.data?.installed ? "Detected" : "Unavailable"}
                       </div>
-                      <p className="mt-1 text-xs text-white/60">Checks whether `gh` is available on PATH.</p>
+                      <p className="mt-1 text-xs text-white/60">
+                        Checks whether `gh` is available on PATH.
+                      </p>
                     </div>
                     <div className="rounded-2xl border border-white/12 bg-white/6 p-4 text-white backdrop-blur">
                       <div className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-white/45">
@@ -208,7 +220,8 @@ function GitHubRouteView() {
                   <div className="space-y-1">
                     <h3 className="text-sm font-medium tracking-wide text-white">Actions</h3>
                     <p className="text-xs text-white/60">
-                      Run a fresh verification, start the browser auth flow, or copy the fallback command.
+                      Run a fresh verification, start the browser auth flow, or copy the fallback
+                      command.
                     </p>
                   </div>
 
@@ -227,10 +240,16 @@ function GitHubRouteView() {
                       onClick={() => loginMutation.mutate()}
                       disabled={!statusQuery.data?.installed || loginMutation.isPending}
                     >
-                      {loginMutation.isPending ? "Waiting for GitHub auth" : "Authenticate with browser"}
+                      {loginMutation.isPending
+                        ? "Waiting for GitHub auth"
+                        : "Authenticate with browser"}
                       <LogInIcon />
                     </Button>
-                    <Button variant="outline" className="justify-between" onClick={() => void copyAuthCommand()}>
+                    <Button
+                      variant="outline"
+                      className="justify-between"
+                      onClick={() => void copyAuthCommand()}
+                    >
                       {copiedAuthCommand ? "Copied command" : "Copy fallback command"}
                       <ExternalLinkIcon />
                     </Button>
@@ -267,9 +286,7 @@ function GitHubRouteView() {
               <Card className="rounded-3xl">
                 <CardHeader>
                   <CardTitle>Project source</CardTitle>
-                  <CardDescription>
-                    Choose which local repo powers the issue menu.
-                  </CardDescription>
+                  <CardDescription>Choose which local repo powers the issue menu.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="space-y-2">
@@ -283,14 +300,20 @@ function GitHubRouteView() {
                       onValueChange={(value) => setSelectedCwd(value ?? null)}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder={projects.length === 0 ? "No projects yet" : "Select a project"} />
+                        <SelectValue
+                          placeholder={
+                            projects.length === 0 ? "No projects yet" : "Select a project"
+                          }
+                        />
                       </SelectTrigger>
                       <SelectPopup alignItemWithTrigger={false}>
                         {projects.map((project) => (
                           <SelectItem key={project.id} value={project.cwd}>
                             <div className="flex min-w-0 flex-col text-left">
                               <span className="truncate">{project.name}</span>
-                              <span className="truncate text-xs text-muted-foreground">{project.cwd}</span>
+                              <span className="truncate text-xs text-muted-foreground">
+                                {project.cwd}
+                              </span>
                             </div>
                           </SelectItem>
                         ))}
@@ -368,7 +391,8 @@ function GitHubRouteView() {
                     </div>
                   ) : !statusQuery.data.authenticated ? (
                     <div className="rounded-2xl border border-dashed border-border p-6 text-sm text-muted-foreground">
-                      Authenticate the GitHub CLI, then come back to load issues for the selected project.
+                      Authenticate the GitHub CLI, then come back to load issues for the selected
+                      project.
                     </div>
                   ) : !repo ? (
                     <div className="rounded-2xl border border-dashed border-border p-6 text-sm text-muted-foreground">

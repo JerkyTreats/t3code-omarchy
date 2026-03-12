@@ -163,7 +163,10 @@ function decodeGitHubJson<S extends Schema.Top>(
   );
 }
 
-function parseAuthStatus(raw: string, hostname: string): {
+function parseAuthStatus(
+  raw: string,
+  hostname: string,
+): {
   state: string;
   active: boolean;
   host: string;
@@ -335,19 +338,20 @@ function parseIssues(raw: string): ReadonlyArray<{
     }
 
     const labels = Array.isArray(record.labels)
-      ? record.labels
-          .flatMap((label) => {
-            if (!label || typeof label !== "object") {
-              return [];
-            }
-            const labelRecord = label as Record<string, unknown>;
-            const name = labelRecord.name;
-            const color = labelRecord.color;
-            if (typeof name !== "string" || name.trim().length === 0) {
-              return [];
-            }
-            return [{ name, color: typeof color === "string" && color.trim().length > 0 ? color : null }];
-          })
+      ? record.labels.flatMap((label) => {
+          if (!label || typeof label !== "object") {
+            return [];
+          }
+          const labelRecord = label as Record<string, unknown>;
+          const name = labelRecord.name;
+          const color = labelRecord.color;
+          if (typeof name !== "string" || name.trim().length === 0) {
+            return [];
+          }
+          return [
+            { name, color: typeof color === "string" && color.trim().length > 0 ? color : null },
+          ];
+        })
       : [];
 
     const assignees = Array.isArray(record.assignees)

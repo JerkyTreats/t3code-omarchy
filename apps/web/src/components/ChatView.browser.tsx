@@ -802,8 +802,8 @@ describe("ChatView timeline estimator parity (full app)", () => {
     try {
       const screenshotButton = await waitForElement(
         () =>
-          Array.from(mounted.host.querySelectorAll("button")).find(
-            (button) => button.textContent?.includes("Screenshot"),
+          Array.from(mounted.host.querySelectorAll("button")).find((button) =>
+            button.textContent?.includes("Screenshot"),
           ) as HTMLButtonElement | null,
         "Unable to find screenshot button.",
       );

@@ -133,9 +133,9 @@ describe("captureDesktopScreenshot", () => {
     }
 
     await Promise.all(
-      tempDirectories.splice(0).map((directoryPath) =>
-        FS.rm(directoryPath, { recursive: true, force: true }),
-      ),
+      tempDirectories
+        .splice(0)
+        .map((directoryPath) => FS.rm(directoryPath, { recursive: true, force: true })),
     );
   });
 
@@ -170,18 +170,23 @@ describe("captureDesktopScreenshot", () => {
     readImageMock.mockReturnValue(emptyClipboardImage());
 
     const screenshotBytes = pngBytes();
-    spawnMock.mockImplementation((command: string, args: string[], options: { env: NodeJS.ProcessEnv }) => {
-      expect(command).toBe(commandPath);
-      expect(args).toEqual([]);
-      expect(options.env.OMARCHY_SCREENSHOT_DIR).toBe(screenshotDirectory);
-      expect(options.env.HYPRLAND_INSTANCE_SIGNATURE).toBe(hyprlandInstanceSignature);
+    spawnMock.mockImplementation(
+      (command: string, args: string[], options: { env: NodeJS.ProcessEnv }) => {
+        expect(command).toBe(commandPath);
+        expect(args).toEqual([]);
+        expect(options.env.OMARCHY_SCREENSHOT_DIR).toBe(screenshotDirectory);
+        expect(options.env.HYPRLAND_INSTANCE_SIGNATURE).toBe(hyprlandInstanceSignature);
 
-      return createSpawnedChild({
-        onStart: async () => {
-          await FS.writeFile(Path.join(screenshotDirectory, "omarchy-smart.png"), screenshotBytes);
-        },
-      });
-    });
+        return createSpawnedChild({
+          onStart: async () => {
+            await FS.writeFile(
+              Path.join(screenshotDirectory, "omarchy-smart.png"),
+              screenshotBytes,
+            );
+          },
+        });
+      },
+    );
 
     const { captureDesktopScreenshot } = await import("./screenshotCapture");
     const screenshot = await captureDesktopScreenshot();
@@ -222,7 +227,10 @@ describe("captureDesktopScreenshot", () => {
     spawnMock.mockImplementation(() =>
       createSpawnedChild({
         onStart: async () => {
-          await FS.writeFile(Path.join(picturesDirectory, "omarchy-user-dirs.png"), screenshotBytes);
+          await FS.writeFile(
+            Path.join(picturesDirectory, "omarchy-user-dirs.png"),
+            screenshotBytes,
+          );
         },
       }),
     );
@@ -303,7 +311,10 @@ describe("captureDesktopScreenshot", () => {
         closeAfterMs: 750,
         onStart: () => {
           setTimeout(() => {
-            void FS.writeFile(Path.join(screenshotDirectory, "omarchy-delayed.png"), screenshotBytes);
+            void FS.writeFile(
+              Path.join(screenshotDirectory, "omarchy-delayed.png"),
+              screenshotBytes,
+            );
           }, 75);
         },
       }),

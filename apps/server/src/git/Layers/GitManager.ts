@@ -1133,7 +1133,10 @@ export const makeGitManager = Effect.gen(function* () {
         return yield* gitManagerError("runStackedAction", "Cannot promote from detached HEAD.");
       }
       if (wantsPromote && !input.targetBranch) {
-        return yield* gitManagerError("runStackedAction", "Promote action requires a target branch.");
+        return yield* gitManagerError(
+          "runStackedAction",
+          "Promote action requires a target branch.",
+        );
       }
 
       // Handle promote action separately
@@ -1159,8 +1162,8 @@ export const makeGitManager = Effect.gen(function* () {
         input.cwd,
         initialStatus.branch,
         {
-        ...(input.featureBranch ? { featureBranch: input.featureBranch } : {}),
-        ...(input.commitMessage ? { commitMessage: input.commitMessage } : {}),
+          ...(input.featureBranch ? { featureBranch: input.featureBranch } : {}),
+          ...(input.commitMessage ? { commitMessage: input.commitMessage } : {}),
         },
       );
 

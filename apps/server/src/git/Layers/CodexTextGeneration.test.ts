@@ -236,7 +236,9 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
         const textGeneration = yield* TextGeneration;
         const fs = yield* FileSystem.FileSystem;
 
-        const repoDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3code-codex-commit-fallback-" });
+        const repoDir = yield* fs.makeTempDirectoryScoped({
+          prefix: "t3code-codex-commit-fallback-",
+        });
         yield* fs.writeFileString(`${repoDir}/README.md`, "fallback\n");
 
         const generated = yield* textGeneration.generateCommitMessage({
@@ -265,7 +267,9 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
 
-        const repoDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3code-codex-commit-agents-" });
+        const repoDir = yield* fs.makeTempDirectoryScoped({
+          prefix: "t3code-codex-commit-agents-",
+        });
         const docsDir = path.join(repoDir, "governance");
         yield* fs.makeDirectory(docsDir, { recursive: true });
         yield* fs.writeFileString(
@@ -292,7 +296,9 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
           stagedPatch: "diff --git a/README.md b/README.md",
         });
 
-        expect(generated.subject).toBe("refactor(web): align commit generation with AGENTS guidance");
+        expect(generated.subject).toBe(
+          "refactor(web): align commit generation with AGENTS guidance",
+        );
       }),
     ),
   );

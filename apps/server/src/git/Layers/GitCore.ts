@@ -280,7 +280,12 @@ const makeGitCore = Effect.gen(function* () {
     );
 
   const readConflictedFiles = (cwd: string) =>
-    runGitStdout("GitCore.readConflictedFiles", cwd, ["diff", "--name-only", "--diff-filter=U"], true).pipe(
+    runGitStdout(
+      "GitCore.readConflictedFiles",
+      cwd,
+      ["diff", "--name-only", "--diff-filter=U"],
+      true,
+    ).pipe(
       Effect.map((stdout) =>
         stdout
           .split("\n")
@@ -666,8 +671,13 @@ const makeGitCore = Effect.gen(function* () {
     Effect.gen(function* () {
       yield* refreshStatusUpstreamIfStale(cwd).pipe(Effect.ignoreCause({ log: true }));
 
-      const [statusStdout, unstagedNumstatStdout, stagedNumstatStdout, mergeHeadStdout, conflictedStdout] =
-        yield* Effect.all(
+      const [
+        statusStdout,
+        unstagedNumstatStdout,
+        stagedNumstatStdout,
+        mergeHeadStdout,
+        conflictedStdout,
+      ] = yield* Effect.all(
         [
           runGitStdout("GitCore.statusDetails.status", cwd, [
             "status",
@@ -680,9 +690,12 @@ const makeGitCore = Effect.gen(function* () {
             "--cached",
             "--numstat",
           ]),
-          runGitStdout("GitCore.statusDetails.mergeHead", cwd, ["rev-parse", "-q", "--verify", "MERGE_HEAD"]).pipe(
-            Effect.catch(() => Effect.succeed("")),
-          ),
+          runGitStdout("GitCore.statusDetails.mergeHead", cwd, [
+            "rev-parse",
+            "-q",
+            "--verify",
+            "MERGE_HEAD",
+          ]).pipe(Effect.catch(() => Effect.succeed(""))),
           runGitStdout("GitCore.statusDetails.conflictedFiles", cwd, [
             "diff",
             "--name-only",
@@ -1069,7 +1082,6 @@ const makeGitCore = Effect.gen(function* () {
       };
     });
 
-
   const listBranches: GitCoreShape["listBranches"] = (input) =>
     Effect.gen(function* () {
       const branchRecencyPromise = readBranchRecency(input.cwd).pipe(
@@ -1363,11 +1375,10 @@ const makeGitCore = Effect.gen(function* () {
         );
       }
 
-      const currentBranch = yield* runGitStdout(
-        "GitCore.mergeBranches.currentBranch",
-        input.cwd,
-        ["branch", "--show-current"],
-      ).pipe(Effect.map((stdout) => stdout.trim()));
+      const currentBranch = yield* runGitStdout("GitCore.mergeBranches.currentBranch", input.cwd, [
+        "branch",
+        "--show-current",
+      ]).pipe(Effect.map((stdout) => stdout.trim()));
 
       if (currentBranch.length === 0) {
         return yield* createGitCommandError(
@@ -1398,15 +1409,10 @@ const makeGitCore = Effect.gen(function* () {
       }
 
       const mergeArgs = ["merge", "--no-ff", "--no-edit", input.sourceBranch] as const;
-      const mergeResult = yield* executeGit(
-        "GitCore.mergeBranches.merge",
-        input.cwd,
-        mergeArgs,
-        {
-          timeoutMs: 30_000,
-          allowNonZeroExit: true,
-        },
-      );
+      const mergeResult = yield* executeGit("GitCore.mergeBranches.merge", input.cwd, mergeArgs, {
+        timeoutMs: 30_000,
+        allowNonZeroExit: true,
+      });
 
       if (mergeResult.code === 0) {
         const mergeCommitSha = yield* runGitStdout(

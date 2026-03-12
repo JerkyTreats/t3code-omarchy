@@ -12,6 +12,7 @@ Define commit message and scoping rules for this repository.
 Use conventional commits when instructed to commit.
 
 Approved commit `type` values:
+
 - `feat`
 - `fix`
 - `perf`
@@ -41,6 +42,7 @@ Approved commit `type` values:
 ## Policy Commit Trace
 
 For `policy` commits include at least one governance trace footer such as:
+
 - `Policy-Ref: governance/commit_policy.md`
 - `Policy-Ref: AGENTS.md`
 - `Discussion: user request on 2026-03-07`
@@ -59,6 +61,7 @@ For `policy` commits include at least one governance trace footer such as:
 - Prefer `type(scope): summary`.
 
 Examples:
+
 - `feat(desktop): attach Omarchy screenshots to the active draft`
 - `refactor(web): split chat screenshot attach flow from paste handling`
 - `policy(governance): add commit and compatibility rules`

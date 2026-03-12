@@ -200,7 +200,6 @@ function SettingsRouteView() {
               </p>
             </header>
 
-
             <section className="rounded-2xl border border-border bg-card p-5">
               <div className="mb-4">
                 <h2 className="text-sm font-medium text-foreground">Appearance</h2>

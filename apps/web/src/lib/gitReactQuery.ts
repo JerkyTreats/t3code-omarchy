@@ -242,7 +242,13 @@ export function gitMergeBranchesMutationOptions(input: {
 }) {
   return mutationOptions({
     mutationKey: gitMutationKeys.mergeBranches(input.cwd),
-    mutationFn: async ({ sourceBranch, targetBranch }: { sourceBranch: string; targetBranch: string }) => {
+    mutationFn: async ({
+      sourceBranch,
+      targetBranch,
+    }: {
+      sourceBranch: string;
+      targetBranch: string;
+    }) => {
       const api = ensureNativeApi();
       if (!input.cwd) throw new Error("Git merge is unavailable.");
       return api.git.mergeBranches({ cwd: input.cwd, sourceBranch, targetBranch });

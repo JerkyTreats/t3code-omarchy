@@ -70,7 +70,8 @@ function readCachedDesktopSystemTheme(): DesktopSystemTheme | null {
       mode: parsed.mode,
       colors: Object.fromEntries(
         Object.entries(parsed.colors).filter(
-          (entry): entry is [string, string] => typeof entry[0] === "string" && typeof entry[1] === "string",
+          (entry): entry is [string, string] =>
+            typeof entry[0] === "string" && typeof entry[1] === "string",
         ),
       ),
     };
@@ -148,7 +149,10 @@ function applyTheme(theme: Theme, suppressTransitions = false) {
   }
 }
 
-function setDesktopSystemTheme(nextTheme: DesktopSystemTheme | null, suppressTransitions = false): void {
+function setDesktopSystemTheme(
+  nextTheme: DesktopSystemTheme | null,
+  suppressTransitions = false,
+): void {
   if (JSON.stringify(nextTheme) === JSON.stringify(desktopSystemTheme)) {
     return;
   }

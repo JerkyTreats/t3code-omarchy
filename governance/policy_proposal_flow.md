@@ -19,6 +19,7 @@ Define how governance changes are evaluated before policy files are edited.
 ## Scope
 
 This flow applies to:
+
 - `AGENTS.md`
 - files under `governance/`
 - policy sections added to top level docs that define repository rules

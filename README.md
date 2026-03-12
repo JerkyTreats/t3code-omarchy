@@ -16,7 +16,7 @@ When T3 appearance is set to `System`, the desktop app inherits the active Omarc
 
 ### GitHub Panel
 
-Desktop chat now includes a project scoped GitHub panel in the header. 
+Desktop chat now includes a project scoped GitHub panel in the header.
 
 It surfaces local Git actions such as commit and push, verifies `gh` authentication, and lists repository issues.
 

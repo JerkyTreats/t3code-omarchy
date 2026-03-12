@@ -37,9 +37,7 @@ function parseGitHubRepoSelector(remoteUrl: string, hostname: string): string | 
 
   const normalizedHostname = hostname.toLowerCase();
 
-  const scpLikeMatch = !trimmed.includes("://")
-    ? /^(?:[^@]+@)?([^:]+):(.+)$/.exec(trimmed)
-    : null;
+  const scpLikeMatch = !trimmed.includes("://") ? /^(?:[^@]+@)?([^:]+):(.+)$/.exec(trimmed) : null;
   if (scpLikeMatch) {
     const remoteHost = scpLikeMatch[1];
     const remotePath = scpLikeMatch[2];
@@ -84,7 +82,9 @@ const makeGitHubManager = Effect.gen(function* () {
   const gitCore = yield* GitCore;
 
   const resolveRepositorySelector = Effect.fnUntraced(function* (cwd: string, hostname: string) {
-    const statusDetails = yield* gitCore.statusDetails(cwd).pipe(Effect.catch(() => Effect.succeed(null)));
+    const statusDetails = yield* gitCore
+      .statusDetails(cwd)
+      .pipe(Effect.catch(() => Effect.succeed(null)));
     const branchRemoteName =
       statusDetails?.branch !== null && statusDetails?.branch !== undefined
         ? yield* gitCore
@@ -93,7 +93,8 @@ const makeGitHubManager = Effect.gen(function* () {
         : null;
     const upstreamRemoteName = statusDetails?.upstreamRef?.split("/")[0] ?? null;
     const remoteNames = [branchRemoteName, upstreamRemoteName, "origin"].filter(
-      (value, index, values): value is string => typeof value === "string" && value.length > 0 && values.indexOf(value) === index,
+      (value, index, values): value is string =>
+        typeof value === "string" && value.length > 0 && values.indexOf(value) === index,
     );
 
     for (const remoteName of remoteNames) {
@@ -114,18 +115,20 @@ const makeGitHubManager = Effect.gen(function* () {
 
   const status: GitHubManagerShape["status"] = Effect.fnUntraced(function* (input) {
     const hostname = input.hostname ?? DEFAULT_HOSTNAME;
-    const auth = yield* gitHubCli.getAuthStatus({
-      ...(input.cwd !== null ? { cwd: input.cwd } : {}),
-      ...(input.hostname ? { hostname: input.hostname } : {}),
-    }).pipe(
-      Effect.map((value) => ({ installed: true as const, value })),
-      Effect.catch((error) => {
-        if (isGitHubCliMissing(error)) {
-          return Effect.succeed({ installed: false as const, value: null });
-        }
-        return Effect.fail(error);
-      }),
-    );
+    const auth = yield* gitHubCli
+      .getAuthStatus({
+        ...(input.cwd !== null ? { cwd: input.cwd } : {}),
+        ...(input.hostname ? { hostname: input.hostname } : {}),
+      })
+      .pipe(
+        Effect.map((value) => ({ installed: true as const, value })),
+        Effect.catch((error) => {
+          if (isGitHubCliMissing(error)) {
+            return Effect.succeed({ installed: false as const, value: null });
+          }
+          return Effect.fail(error);
+        }),
+      );
 
     if (!auth.installed) {
       return emptyStatus(input);
@@ -135,9 +138,9 @@ const makeGitHubManager = Effect.gen(function* () {
       input.cwd !== null ? yield* resolveRepositorySelector(input.cwd, hostname) : null;
     const repo =
       input.cwd !== null && repositorySelector
-        ? yield* gitHubCli.getRepository({ cwd: input.cwd, repo: repositorySelector }).pipe(
-            Effect.catch(() => Effect.succeed(null)),
-          )
+        ? yield* gitHubCli
+            .getRepository({ cwd: input.cwd, repo: repositorySelector })
+            .pipe(Effect.catch(() => Effect.succeed(null)))
         : null;
 
     return {
