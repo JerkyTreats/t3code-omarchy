@@ -17,6 +17,12 @@
   --color-destructive: var(--destructive);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
   --color-muted-foreground: var(--muted-foreground);
   --color-muted: var(--muted);
   --color-secondary-foreground: var(--secondary-foreground);
@@ -64,59 +70,119 @@
 :root {
   color-scheme: light;
   --radius: 0.625rem;
-  --background: var(--color-white);
-  --foreground: var(--color-neutral-800);
-  --card: var(--color-white);
-  --card-foreground: var(--color-neutral-800);
-  --popover: var(--color-white);
-  --popover-foreground: var(--color-neutral-800);
-  --primary: oklch(0.488 0.217 264);
-  --primary-foreground: var(--color-white);
-  --secondary: --alpha(var(--color-black) / 4%);
-  --secondary-foreground: var(--color-neutral-800);
-  --muted: --alpha(var(--color-black) / 4%);
-  --muted-foreground: color-mix(in srgb, var(--color-neutral-500) 90%, var(--color-black));
-  --accent: --alpha(var(--color-black) / 4%);
-  --accent-foreground: var(--color-neutral-800);
-  --destructive: var(--color-red-500);
-  --border: --alpha(var(--color-black) / 8%);
-  --input: --alpha(var(--color-black) / 10%);
-  --ring: oklch(0.488 0.217 264);
-  --destructive-foreground: var(--color-red-700);
-  --info: var(--color-blue-500);
-  --info-foreground: var(--color-blue-700);
-  --success: var(--color-emerald-500);
-  --success-foreground: var(--color-emerald-700);
-  --warning: var(--color-amber-500);
-  --warning-foreground: var(--color-amber-700);
+  --background: #eceff4;
+  --foreground: #2e3440;
+  --card: color-mix(in srgb, #e5e9f0 72%, white);
+  --card-foreground: #2e3440;
+  --popover: color-mix(in srgb, #eceff4 86%, white);
+  --popover-foreground: #2e3440;
+  --primary: #5e81ac;
+  --primary-foreground: #eceff4;
+  --secondary: color-mix(in srgb, #d8dee9 76%, #eceff4);
+  --secondary-foreground: #2e3440;
+  --muted: color-mix(in srgb, #d8dee9 62%, white);
+  --muted-foreground: #4c566a;
+  --accent: color-mix(in srgb, #88c0d0 18%, #eceff4);
+  --accent-foreground: #2e3440;
+  --destructive: #bf616a;
+  --border: color-mix(in srgb, #4c566a 16%, #eceff4);
+  --input: color-mix(in srgb, #4c566a 20%, #eceff4);
+  --ring: #81a1c1;
+  --destructive-foreground: color-mix(in srgb, #bf616a 82%, #2e3440);
+  --info: #5e81ac;
+  --info-foreground: color-mix(in srgb, #5e81ac 82%, #2e3440);
+  --success: #a3be8c;
+  --success-foreground: color-mix(in srgb, #a3be8c 82%, #2e3440);
+  --warning: #ebcb8b;
+  --warning-foreground: color-mix(in srgb, #d08770 76%, #2e3440);
+  --sidebar: color-mix(in srgb, #e5e9f0 88%, white);
+  --sidebar-foreground: #2e3440;
+  --sidebar-accent: color-mix(in srgb, #81a1c1 15%, #e5e9f0);
+  --sidebar-accent-foreground: #2e3440;
+  --sidebar-border: color-mix(in srgb, #4c566a 16%, #e5e9f0);
+  --sidebar-ring: #81a1c1;
+  --page-glow-top: color-mix(in srgb, #88c0d0 24%, transparent);
+  --page-glow-bottom: color-mix(in srgb, #81a1c1 16%, transparent);
+  --page-grid: color-mix(in srgb, #4c566a 8%, transparent);
+  --noise-opacity: 0.03;
+  --selection-background: color-mix(in srgb, #81a1c1 32%, #eceff4);
+  --selection-foreground: #2e3440;
+  --terminal-cursor: #5e81ac;
+  --terminal-selection: rgb(129 161 193 / 0.24);
+  --terminal-black: #3b4252;
+  --terminal-red: #bf616a;
+  --terminal-green: #a3be8c;
+  --terminal-yellow: #d08770;
+  --terminal-blue: #5e81ac;
+  --terminal-magenta: #b48ead;
+  --terminal-cyan: #88c0d0;
+  --terminal-white: #eceff4;
+  --terminal-bright-black: #4c566a;
+  --terminal-bright-red: #bf616a;
+  --terminal-bright-green: #a3be8c;
+  --terminal-bright-yellow: #ebcb8b;
+  --terminal-bright-blue: #81a1c1;
+  --terminal-bright-magenta: #b48ead;
+  --terminal-bright-cyan: #8fbcbb;
+  --terminal-bright-white: #ffffff;
 
   @variant dark {
     color-scheme: dark;
-    --background: color-mix(in srgb, var(--color-neutral-950) 95%, var(--color-white));
-    --foreground: var(--color-neutral-100);
-    --card: color-mix(in srgb, var(--background) 98%, var(--color-white));
-    --card-foreground: var(--color-neutral-100);
-    --popover: color-mix(in srgb, var(--background) 98%, var(--color-white));
-    --popover-foreground: var(--color-neutral-100);
-    --primary: oklch(0.588 0.217 264);
-    --primary-foreground: var(--color-white);
-    --secondary: --alpha(var(--color-white) / 4%);
-    --secondary-foreground: var(--color-neutral-100);
-    --muted: --alpha(var(--color-white) / 4%);
-    --muted-foreground: color-mix(in srgb, var(--color-neutral-500) 90%, var(--color-white));
-    --accent: --alpha(var(--color-white) / 4%);
-    --accent-foreground: var(--color-neutral-100);
-    --destructive: color-mix(in srgb, var(--color-red-500) 90%, var(--color-white));
-    --border: --alpha(var(--color-white) / 6%);
-    --input: --alpha(var(--color-white) / 8%);
-    --ring: oklch(0.588 0.217 264);
-    --destructive-foreground: var(--color-red-400);
-    --info: var(--color-blue-500);
-    --info-foreground: var(--color-blue-400);
-    --success: var(--color-emerald-500);
-    --success-foreground: var(--color-emerald-400);
-    --warning: var(--color-amber-500);
-    --warning-foreground: var(--color-amber-400);
+    --background: #2e3440;
+    --foreground: #e5e9f0;
+    --card: color-mix(in srgb, #3b4252 86%, #2e3440);
+    --card-foreground: #e5e9f0;
+    --popover: color-mix(in srgb, #3b4252 92%, #2e3440);
+    --popover-foreground: #e5e9f0;
+    --primary: #88c0d0;
+    --primary-foreground: #2e3440;
+    --secondary: color-mix(in srgb, #434c5e 78%, #2e3440);
+    --secondary-foreground: #e5e9f0;
+    --muted: color-mix(in srgb, #3b4252 92%, #2e3440);
+    --muted-foreground: #aeb8ca;
+    --accent: color-mix(in srgb, #88c0d0 18%, #3b4252);
+    --accent-foreground: #eceff4;
+    --destructive: #bf616a;
+    --border: color-mix(in srgb, #4c566a 56%, #2e3440);
+    --input: color-mix(in srgb, #4c566a 68%, #2e3440);
+    --ring: #81a1c1;
+    --destructive-foreground: color-mix(in srgb, #bf616a 84%, #eceff4);
+    --info: #81a1c1;
+    --info-foreground: color-mix(in srgb, #81a1c1 82%, #eceff4);
+    --success: #a3be8c;
+    --success-foreground: color-mix(in srgb, #a3be8c 82%, #eceff4);
+    --warning: #ebcb8b;
+    --warning-foreground: color-mix(in srgb, #ebcb8b 80%, #eceff4);
+    --sidebar: color-mix(in srgb, #2e3440 84%, #242933);
+    --sidebar-foreground: #d8dee9;
+    --sidebar-accent: color-mix(in srgb, #88c0d0 14%, #3b4252);
+    --sidebar-accent-foreground: #eceff4;
+    --sidebar-border: color-mix(in srgb, #4c566a 70%, #2e3440);
+    --sidebar-ring: #88c0d0;
+    --page-glow-top: color-mix(in srgb, #88c0d0 18%, transparent);
+    --page-glow-bottom: color-mix(in srgb, #5e81ac 18%, transparent);
+    --page-grid: color-mix(in srgb, #d8dee9 7%, transparent);
+    --noise-opacity: 0.042;
+    --selection-background: rgb(129 161 193 / 0.28);
+    --selection-foreground: #eceff4;
+    --terminal-cursor: #88c0d0;
+    --terminal-selection: rgb(129 161 193 / 0.26);
+    --terminal-black: #3b4252;
+    --terminal-red: #bf616a;
+    --terminal-green: #a3be8c;
+    --terminal-yellow: #ebcb8b;
+    --terminal-blue: #81a1c1;
+    --terminal-magenta: #b48ead;
+    --terminal-cyan: #88c0d0;
+    --terminal-white: #e5e9f0;
+    --terminal-bright-black: #4c566a;
+    --terminal-bright-red: #d08770;
+    --terminal-bright-green: #a3be8c;
+    --terminal-bright-yellow: #ebcb8b;
+    --terminal-bright-blue: #5e81ac;
+    --terminal-bright-magenta: #b48ead;
+    --terminal-bright-cyan: #8fbcbb;
+    --terminal-bright-white: #eceff4;
   }
 }
 
@@ -127,6 +193,29 @@
   --info: var(--desktop-system-theme-color4);
   --success: var(--desktop-system-theme-color2);
   --warning: var(--desktop-system-theme-color3);
+  --sidebar-ring: var(--desktop-system-theme-accent);
+  --terminal-cursor: var(--desktop-system-theme-accent);
+  --terminal-selection: color-mix(
+    in srgb,
+    var(--desktop-system-theme-selection-background, var(--desktop-system-theme-color8)) 72%,
+    transparent
+  );
+  --terminal-black: var(--desktop-system-theme-color0, var(--desktop-system-theme-background));
+  --terminal-red: var(--desktop-system-theme-color1, var(--destructive));
+  --terminal-green: var(--desktop-system-theme-color2, var(--success));
+  --terminal-yellow: var(--desktop-system-theme-color3, var(--warning));
+  --terminal-blue: var(--desktop-system-theme-color4, var(--info));
+  --terminal-magenta: var(--desktop-system-theme-color5, var(--primary));
+  --terminal-cyan: var(--desktop-system-theme-color6, var(--primary));
+  --terminal-white: var(--desktop-system-theme-color7, var(--foreground));
+  --terminal-bright-black: var(--desktop-system-theme-color8, var(--muted-foreground));
+  --terminal-bright-red: var(--desktop-system-theme-color9, var(--destructive));
+  --terminal-bright-green: var(--desktop-system-theme-color10, var(--success));
+  --terminal-bright-yellow: var(--desktop-system-theme-color11, var(--warning));
+  --terminal-bright-blue: var(--desktop-system-theme-color12, var(--info));
+  --terminal-bright-magenta: var(--desktop-system-theme-color13, var(--primary));
+  --terminal-bright-cyan: var(--desktop-system-theme-color14, var(--primary));
+  --terminal-bright-white: var(--desktop-system-theme-color15, var(--foreground));
 }
 
 :root[data-system-theme-source="omarchy"][data-system-theme-mode="dark"] {
@@ -171,6 +260,23 @@
     var(--desktop-system-theme-background)
   );
   --accent-foreground: var(--desktop-system-theme-foreground);
+  --sidebar: color-mix(
+    in srgb,
+    var(--desktop-system-theme-background) 84%,
+    var(--desktop-system-theme-color0, var(--desktop-system-theme-foreground))
+  );
+  --sidebar-foreground: var(--desktop-system-theme-foreground);
+  --sidebar-accent: color-mix(
+    in srgb,
+    var(--desktop-system-theme-accent) 18%,
+    var(--desktop-system-theme-background)
+  );
+  --sidebar-accent-foreground: var(--desktop-system-theme-foreground);
+  --sidebar-border: color-mix(
+    in srgb,
+    var(--desktop-system-theme-foreground) 14%,
+    var(--desktop-system-theme-background)
+  );
   --border: color-mix(
     in srgb,
     var(--desktop-system-theme-foreground) 12%,
@@ -199,6 +305,23 @@
   --warning-foreground: color-mix(
     in srgb,
     var(--desktop-system-theme-color3) 78%,
+    var(--desktop-system-theme-foreground)
+  );
+  --page-glow-top: color-mix(in srgb, var(--desktop-system-theme-accent) 18%, transparent);
+  --page-glow-bottom: color-mix(
+    in srgb,
+    var(--desktop-system-theme-color12, var(--desktop-system-theme-accent)) 18%,
+    transparent
+  );
+  --page-grid: color-mix(in srgb, var(--desktop-system-theme-foreground) 7%, transparent);
+  --noise-opacity: 0.04;
+  --selection-background: color-mix(
+    in srgb,
+    var(--desktop-system-theme-selection-background, var(--desktop-system-theme-accent)) 66%,
+    transparent
+  );
+  --selection-foreground: var(
+    --desktop-system-theme-selection-foreground,
     var(--desktop-system-theme-foreground)
   );
 }
@@ -245,6 +368,23 @@
     var(--desktop-system-theme-background)
   );
   --accent-foreground: var(--desktop-system-theme-foreground);
+  --sidebar: color-mix(
+    in srgb,
+    var(--desktop-system-theme-background) 92%,
+    var(--desktop-system-theme-color7, var(--desktop-system-theme-foreground))
+  );
+  --sidebar-foreground: var(--desktop-system-theme-foreground);
+  --sidebar-accent: color-mix(
+    in srgb,
+    var(--desktop-system-theme-accent) 12%,
+    var(--desktop-system-theme-background)
+  );
+  --sidebar-accent-foreground: var(--desktop-system-theme-foreground);
+  --sidebar-border: color-mix(
+    in srgb,
+    var(--desktop-system-theme-foreground) 12%,
+    var(--desktop-system-theme-background)
+  );
   --border: color-mix(
     in srgb,
     var(--desktop-system-theme-foreground) 14%,
@@ -275,6 +415,23 @@
     var(--desktop-system-theme-color3) 82%,
     var(--desktop-system-theme-background)
   );
+  --page-glow-top: color-mix(in srgb, var(--desktop-system-theme-accent) 14%, transparent);
+  --page-glow-bottom: color-mix(
+    in srgb,
+    var(--desktop-system-theme-color12, var(--desktop-system-theme-accent)) 12%,
+    transparent
+  );
+  --page-grid: color-mix(in srgb, var(--desktop-system-theme-foreground) 8%, transparent);
+  --noise-opacity: 0.028;
+  --selection-background: color-mix(
+    in srgb,
+    var(--desktop-system-theme-selection-background, var(--desktop-system-theme-accent)) 42%,
+    var(--desktop-system-theme-background)
+  );
+  --selection-foreground: var(
+    --desktop-system-theme-selection-foreground,
+    var(--desktop-system-theme-foreground)
+  );
 }
 
 body {
@@ -285,9 +442,40 @@ body {
     "Segoe UI",
     system-ui,
     sans-serif;
+  background-color: var(--background);
+  background-image:
+    radial-gradient(circle at top left, var(--page-glow-top) 0, transparent 44%),
+    radial-gradient(circle at top right, var(--page-glow-bottom) 0, transparent 38%),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--background) 94%, var(--card)) 0%,
+      var(--background) 100%
+    );
+  background-attachment: fixed;
   margin: 0;
   padding: 0;
   min-height: 100vh;
+}
+
+html {
+  background: var(--background);
+}
+
+::selection {
+  background: var(--selection-background);
+  color: var(--selection-foreground);
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(var(--page-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--page-grid) 1px, transparent 1px);
+  background-size: 40px 40px;
+  mask-image: linear-gradient(180deg, rgb(255 255 255 / 0.55), transparent 88%);
 }
 
 html,
@@ -307,7 +495,7 @@ body::after {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  opacity: 0.035;
+  opacity: var(--noise-opacity);
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   background-repeat: repeat;
   background-size: 256px 256px;
@@ -343,20 +531,12 @@ input {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.15);
+  background: color-mix(in srgb, var(--foreground) 16%, transparent);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.25);
-}
-
-.dark ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.dark ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.18);
+  background: color-mix(in srgb, var(--foreground) 24%, transparent);
 }
 
 .turn-chip-strip {

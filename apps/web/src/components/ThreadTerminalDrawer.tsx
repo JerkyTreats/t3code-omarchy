@@ -45,65 +45,46 @@ function writeSystemMessage(terminal: Terminal, message: string): void {
   terminal.write(`\r\n[terminal] ${message}\r\n`);
 }
 
+function readThemeVariable(styles: CSSStyleDeclaration, name: string, fallback: string): string {
+  const value = styles.getPropertyValue(name).trim();
+  return value.length > 0 ? value : fallback;
+}
+
 function terminalThemeFromApp(): ITheme {
-  const isDark = document.documentElement.classList.contains("dark");
+  const rootStyles = getComputedStyle(document.documentElement);
   const bodyStyles = getComputedStyle(document.body);
   const background =
-    bodyStyles.backgroundColor || (isDark ? "rgb(14, 18, 24)" : "rgb(255, 255, 255)");
-  const foreground = bodyStyles.color || (isDark ? "rgb(237, 241, 247)" : "rgb(28, 33, 41)");
-
-  if (isDark) {
-    return {
-      background,
-      foreground,
-      cursor: "rgb(180, 203, 255)",
-      selectionBackground: "rgba(180, 203, 255, 0.25)",
-      scrollbarSliderBackground: "rgba(255, 255, 255, 0.1)",
-      scrollbarSliderHoverBackground: "rgba(255, 255, 255, 0.18)",
-      scrollbarSliderActiveBackground: "rgba(255, 255, 255, 0.22)",
-      black: "rgb(24, 30, 38)",
-      red: "rgb(255, 122, 142)",
-      green: "rgb(134, 231, 149)",
-      yellow: "rgb(244, 205, 114)",
-      blue: "rgb(137, 190, 255)",
-      magenta: "rgb(208, 176, 255)",
-      cyan: "rgb(124, 232, 237)",
-      white: "rgb(210, 218, 230)",
-      brightBlack: "rgb(110, 120, 136)",
-      brightRed: "rgb(255, 168, 180)",
-      brightGreen: "rgb(176, 245, 186)",
-      brightYellow: "rgb(255, 224, 149)",
-      brightBlue: "rgb(174, 210, 255)",
-      brightMagenta: "rgb(229, 203, 255)",
-      brightCyan: "rgb(167, 244, 247)",
-      brightWhite: "rgb(244, 247, 252)",
-    };
-  }
+    bodyStyles.backgroundColor || readThemeVariable(rootStyles, "--background", "#2e3440");
+  const foreground = bodyStyles.color || readThemeVariable(rootStyles, "--foreground", "#e5e9f0");
 
   return {
     background,
     foreground,
-    cursor: "rgb(38, 56, 78)",
-    selectionBackground: "rgba(37, 63, 99, 0.2)",
-    scrollbarSliderBackground: "rgba(0, 0, 0, 0.15)",
-    scrollbarSliderHoverBackground: "rgba(0, 0, 0, 0.25)",
-    scrollbarSliderActiveBackground: "rgba(0, 0, 0, 0.3)",
-    black: "rgb(44, 53, 66)",
-    red: "rgb(191, 70, 87)",
-    green: "rgb(60, 126, 86)",
-    yellow: "rgb(146, 112, 35)",
-    blue: "rgb(72, 102, 163)",
-    magenta: "rgb(132, 86, 149)",
-    cyan: "rgb(53, 127, 141)",
-    white: "rgb(210, 215, 223)",
-    brightBlack: "rgb(112, 123, 140)",
-    brightRed: "rgb(212, 95, 112)",
-    brightGreen: "rgb(85, 148, 111)",
-    brightYellow: "rgb(173, 133, 45)",
-    brightBlue: "rgb(91, 124, 194)",
-    brightMagenta: "rgb(153, 107, 172)",
-    brightCyan: "rgb(70, 149, 164)",
-    brightWhite: "rgb(236, 240, 246)",
+    cursor: readThemeVariable(rootStyles, "--terminal-cursor", "#88c0d0"),
+    selectionBackground: readThemeVariable(
+      rootStyles,
+      "--terminal-selection",
+      "rgb(129 161 193 / 0.26)",
+    ),
+    scrollbarSliderBackground: "rgba(148, 163, 184, 0.12)",
+    scrollbarSliderHoverBackground: "rgba(148, 163, 184, 0.18)",
+    scrollbarSliderActiveBackground: "rgba(148, 163, 184, 0.24)",
+    black: readThemeVariable(rootStyles, "--terminal-black", "#3b4252"),
+    red: readThemeVariable(rootStyles, "--terminal-red", "#bf616a"),
+    green: readThemeVariable(rootStyles, "--terminal-green", "#a3be8c"),
+    yellow: readThemeVariable(rootStyles, "--terminal-yellow", "#ebcb8b"),
+    blue: readThemeVariable(rootStyles, "--terminal-blue", "#81a1c1"),
+    magenta: readThemeVariable(rootStyles, "--terminal-magenta", "#b48ead"),
+    cyan: readThemeVariable(rootStyles, "--terminal-cyan", "#88c0d0"),
+    white: readThemeVariable(rootStyles, "--terminal-white", "#e5e9f0"),
+    brightBlack: readThemeVariable(rootStyles, "--terminal-bright-black", "#4c566a"),
+    brightRed: readThemeVariable(rootStyles, "--terminal-bright-red", "#d08770"),
+    brightGreen: readThemeVariable(rootStyles, "--terminal-bright-green", "#a3be8c"),
+    brightYellow: readThemeVariable(rootStyles, "--terminal-bright-yellow", "#ebcb8b"),
+    brightBlue: readThemeVariable(rootStyles, "--terminal-bright-blue", "#5e81ac"),
+    brightMagenta: readThemeVariable(rootStyles, "--terminal-bright-magenta", "#b48ead"),
+    brightCyan: readThemeVariable(rootStyles, "--terminal-bright-cyan", "#8fbcbb"),
+    brightWhite: readThemeVariable(rootStyles, "--terminal-bright-white", "#eceff4"),
   };
 }
 
