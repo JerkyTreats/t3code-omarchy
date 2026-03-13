@@ -382,6 +382,7 @@ function createGitHubCliWithFakeGh(scenario: FakeGhScenario = {}): {
           args: [
             "pr",
             "list",
+            ...(input.repo ? ["--repo", input.repo] : []),
             "--head",
             input.headSelector,
             "--state",
@@ -402,6 +403,7 @@ function createGitHubCliWithFakeGh(scenario: FakeGhScenario = {}): {
           args: [
             "pr",
             "create",
+            ...(input.repo ? ["--repo", input.repo] : []),
             "--base",
             input.baseBranch,
             "--head",
@@ -415,7 +417,15 @@ function createGitHubCliWithFakeGh(scenario: FakeGhScenario = {}): {
       getDefaultBranch: (input) =>
         execute({
           cwd: input.cwd,
-          args: ["repo", "view", "--json", "defaultBranchRef", "--jq", ".defaultBranchRef.name"],
+          args: [
+            "repo",
+            "view",
+            ...(input.repo ? [input.repo] : []),
+            "--json",
+            "defaultBranchRef",
+            "--jq",
+            ".defaultBranchRef.name",
+          ],
         }).pipe(
           Effect.map((result) => {
             const value = result.stdout.trim();
@@ -429,6 +439,7 @@ function createGitHubCliWithFakeGh(scenario: FakeGhScenario = {}): {
             "pr",
             "view",
             input.reference,
+            ...(input.repo ? ["--repo", input.repo] : []),
             "--json",
             "number,title,url,baseRefName,headRefName,state,mergedAt,isCrossRepository,headRepository,headRepositoryOwner",
           ],
@@ -441,7 +452,13 @@ function createGitHubCliWithFakeGh(scenario: FakeGhScenario = {}): {
       checkoutPullRequest: (input) =>
         execute({
           cwd: input.cwd,
-          args: ["pr", "checkout", input.reference, ...(input.force ? ["--force"] : [])],
+          args: [
+            "pr",
+            "checkout",
+            input.reference,
+            ...(input.repo ? ["--repo", input.repo] : []),
+            ...(input.force ? ["--force"] : []),
+          ],
         }).pipe(Effect.asVoid),
       getAuthStatus: () =>
         Effect.succeed({
@@ -1389,6 +1406,71 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
           call.includes("pr create --base statemachine --head octocat:statemachine"),
         ),
       ).toBe(false);
+    }),
+  );
+
+  it.effect("creates PRs against the upstream repo when origin is a fork", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("t3code-git-manager-");
+      yield* initRepo(repoDir);
+      const forkDir = yield* createBareRemote();
+      const upstreamDir = yield* createBareRemote();
+      yield* runGit(repoDir, ["remote", "add", "origin", forkDir]);
+      yield* runGit(repoDir, ["remote", "add", "upstream", upstreamDir]);
+      yield* runGit(repoDir, ["checkout", "-b", "statemachine"]);
+      fs.writeFileSync(path.join(repoDir, "changes.txt"), "change\n");
+      yield* runGit(repoDir, ["add", "changes.txt"]);
+      yield* runGit(repoDir, ["commit", "-m", "Feature commit"]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "statemachine"]);
+      yield* runGit(repoDir, [
+        "config",
+        "remote.origin.url",
+        "git@github.com:octocat/codething-mvp.git",
+      ]);
+      yield* runGit(repoDir, [
+        "config",
+        "remote.upstream.url",
+        "git@github.com:pingdotgg/codething-mvp.git",
+      ]);
+
+      const { manager, ghCalls } = yield* makeManager({
+        ghScenario: {
+          prListSequence: [
+            JSON.stringify([]),
+            JSON.stringify([]),
+            JSON.stringify([]),
+            JSON.stringify([
+              {
+                number: 188,
+                title: "Add stacked git actions",
+                url: "https://github.com/pingdotgg/codething-mvp/pull/188",
+                baseRefName: "main",
+                headRefName: "statemachine",
+              },
+            ]),
+          ],
+        },
+      });
+
+      const result = yield* runStackedAction(manager, {
+        cwd: repoDir,
+        action: "commit_push_pr",
+      });
+
+      expect(result.pr.status).toBe("created");
+      expect(result.pr.number).toBe(188);
+      expect(
+        ghCalls.some((call) =>
+          call.includes(
+            "pr create --repo pingdotgg/codething-mvp --base main --head octocat:statemachine",
+          ),
+        ),
+      ).toBe(true);
+      expect(
+        ghCalls.some((call) =>
+          call.includes("pr list --repo pingdotgg/codething-mvp --head octocat:statemachine"),
+        ),
+      ).toBe(true);
     }),
   );
 

@@ -9,6 +9,11 @@ import {
 } from "@t3tools/shared/git";
 
 import { GitManagerError } from "../Errors.ts";
+import {
+  DEFAULT_GITHUB_HOSTNAME,
+  parseGitHubRepoSelector,
+  resolveGitHubRepositorySelector,
+} from "../gitHubRepository.ts";
 import { GitManager, type GitManagerShape } from "../Services/GitManager.ts";
 import { GitCore } from "../Services/GitCore.ts";
 import { GitHubCli } from "../Services/GitHubCli.ts";
@@ -93,20 +98,6 @@ function resolvePullRequestWorktreeLocalBranchName(
   return `t3code/pr-${pullRequest.number}/${suffix}`;
 }
 
-function parseGitHubRepositoryNameWithOwnerFromRemoteUrl(url: string | null): string | null {
-  const trimmed = url?.trim() ?? "";
-  if (trimmed.length === 0) {
-    return null;
-  }
-
-  const match =
-    /^(?:git@github\.com:|ssh:\/\/git@github\.com\/|https:\/\/github\.com\/|git:\/\/github\.com\/)([^/\s]+\/[^/\s]+?)(?:\.git)?\/?$/i.exec(
-      trimmed,
-    );
-  const repositoryNameWithOwner = match?.[1]?.trim() ?? "";
-  return repositoryNameWithOwner.length > 0 ? repositoryNameWithOwner : null;
-}
-
 function parseRepositoryOwnerLogin(nameWithOwner: string | null): string | null {
   const trimmed = nameWithOwner?.trim() ?? "";
   if (trimmed.length === 0) {
@@ -115,6 +106,25 @@ function parseRepositoryOwnerLogin(nameWithOwner: string | null): string | null 
   const [ownerLogin] = trimmed.split("/");
   const normalizedOwnerLogin = ownerLogin?.trim() ?? "";
   return normalizedOwnerLogin.length > 0 ? normalizedOwnerLogin : null;
+}
+
+function withOptionalFilePaths<T extends object>(
+  input: T,
+  filePaths: readonly string[] | undefined,
+): T & { filePaths?: readonly string[] } {
+  if (filePaths === undefined) {
+    return input;
+  }
+
+  return { ...input, filePaths };
+}
+
+function withOptionalRepo<T extends object>(input: T, repo: string | null): T & { repo?: string } {
+  if (repo === null) {
+    return input;
+  }
+
+  return { ...input, repo };
 }
 
 function parsePullRequestList(raw: unknown): PullRequestInfo[] {
@@ -344,6 +354,14 @@ export const makeGitManager = Effect.gen(function* () {
   const gitHubCli = yield* GitHubCli;
   const textGeneration = yield* TextGeneration;
 
+  const resolveRepositorySelector = (cwd: string) =>
+    resolveGitHubRepositorySelector(cwd, gitCore, DEFAULT_GITHUB_HOSTNAME);
+
+  const resolveRepositoryContext = (repositoryNameWithOwner: string | null) => ({
+    repositoryNameWithOwner,
+    ownerLogin: parseRepositoryOwnerLogin(repositoryNameWithOwner),
+  });
+
   const configurePullRequestHeadUpstream = (
     cwd: string,
     pullRequest: ResolvedPullRequest & PullRequestHeadRemoteInfo,
@@ -450,23 +468,19 @@ export const makeGitManager = Effect.gen(function* () {
   const resolveRemoteRepositoryContext = (cwd: string, remoteName: string | null) =>
     Effect.gen(function* () {
       if (!remoteName) {
-        return {
-          repositoryNameWithOwner: null,
-          ownerLogin: null,
-        };
+        return resolveRepositoryContext(null);
       }
 
       const remoteUrl = yield* readConfigValueNullable(cwd, `remote.${remoteName}.url`);
-      const repositoryNameWithOwner = parseGitHubRepositoryNameWithOwnerFromRemoteUrl(remoteUrl);
-      return {
-        repositoryNameWithOwner,
-        ownerLogin: parseRepositoryOwnerLogin(repositoryNameWithOwner),
-      };
+      return resolveRepositoryContext(
+        remoteUrl ? parseGitHubRepoSelector(remoteUrl, DEFAULT_GITHUB_HOSTNAME) : null,
+      );
     });
 
   const resolveBranchHeadContext = (
     cwd: string,
     details: { branch: string; upstreamRef: string | null },
+    baseRepositorySelector: string | null,
   ) =>
     Effect.gen(function* () {
       const remoteName = yield* readConfigValueNullable(cwd, `branch.${details.branch}.remote`);
@@ -483,12 +497,16 @@ export const makeGitManager = Effect.gen(function* () {
         ],
         { concurrency: "unbounded" },
       );
+      const baseRepository =
+        baseRepositorySelector !== null
+          ? resolveRepositoryContext(baseRepositorySelector)
+          : originRepository;
 
       const isCrossRepository =
         remoteRepository.repositoryNameWithOwner !== null &&
-        originRepository.repositoryNameWithOwner !== null
+        baseRepository.repositoryNameWithOwner !== null
           ? remoteRepository.repositoryNameWithOwner.toLowerCase() !==
-            originRepository.repositoryNameWithOwner.toLowerCase()
+            baseRepository.repositoryNameWithOwner.toLowerCase()
           : remoteName !== null &&
             remoteName !== "origin" &&
             remoteRepository.repositoryNameWithOwner !== null;
@@ -535,12 +553,12 @@ export const makeGitManager = Effect.gen(function* () {
 
   const findOpenPr = (cwd: string, headSelectors: ReadonlyArray<string>) =>
     Effect.gen(function* () {
+      const repositorySelector = yield* resolveRepositorySelector(cwd);
+
       for (const headSelector of headSelectors) {
-        const pullRequests = yield* gitHubCli.listOpenPullRequests({
-          cwd,
-          headSelector,
-          limit: 1,
-        });
+        const pullRequests = yield* gitHubCli.listOpenPullRequests(
+          withOptionalRepo({ cwd, headSelector, limit: 1 }, repositorySelector),
+        );
 
         const [firstPullRequest] = pullRequests;
         if (firstPullRequest) {
@@ -561,7 +579,8 @@ export const makeGitManager = Effect.gen(function* () {
 
   const findLatestPr = (cwd: string, details: { branch: string; upstreamRef: string | null }) =>
     Effect.gen(function* () {
-      const headContext = yield* resolveBranchHeadContext(cwd, details);
+      const repositorySelector = yield* resolveRepositorySelector(cwd);
+      const headContext = yield* resolveBranchHeadContext(cwd, details, repositorySelector);
       const parsedByNumber = new Map<number, PullRequestInfo>();
 
       for (const headSelector of headContext.headSelectors) {
@@ -571,6 +590,7 @@ export const makeGitManager = Effect.gen(function* () {
             args: [
               "pr",
               "list",
+              ...(repositorySelector ? ["--repo", repositorySelector] : []),
               "--head",
               headSelector,
               "--state",
@@ -617,6 +637,7 @@ export const makeGitManager = Effect.gen(function* () {
     branch: string,
     upstreamRef: string | null,
     headContext: Pick<BranchHeadContext, "isCrossRepository">,
+    repositorySelector: string | null,
   ) =>
     Effect.gen(function* () {
       const configured = yield* gitCore.readConfigValue(cwd, `branch.${branch}.gh-merge-base`);
@@ -630,7 +651,7 @@ export const makeGitManager = Effect.gen(function* () {
       }
 
       const defaultFromGh = yield* gitHubCli
-        .getDefaultBranch({ cwd })
+        .getDefaultBranch(withOptionalRepo({ cwd }, repositorySelector))
         .pipe(Effect.catch(() => Effect.succeed(null)));
       if (defaultFromGh) {
         return defaultFromGh;
@@ -693,12 +714,16 @@ export const makeGitManager = Effect.gen(function* () {
     Effect.gen(function* () {
       const suggestion =
         preResolvedSuggestion ??
-        (yield* resolveCommitAndBranchSuggestion({
-          cwd,
-          branch,
-          ...(commitMessage ? { commitMessage } : {}),
-          ...(filePaths ? { filePaths } : {}),
-        }));
+        (yield* resolveCommitAndBranchSuggestion(
+          withOptionalFilePaths(
+            {
+              cwd,
+              branch,
+              ...(commitMessage ? { commitMessage } : {}),
+            },
+            filePaths,
+          ),
+        ));
       if (!suggestion) {
         return { status: "skipped_no_changes" as const };
       }
@@ -752,10 +777,15 @@ export const makeGitManager = Effect.gen(function* () {
         );
       }
 
-      const headContext = yield* resolveBranchHeadContext(cwd, {
-        branch,
-        upstreamRef: details.upstreamRef,
-      });
+      const repositorySelector = yield* resolveRepositorySelector(cwd);
+      const headContext = yield* resolveBranchHeadContext(
+        cwd,
+        {
+          branch,
+          upstreamRef: details.upstreamRef,
+        },
+        repositorySelector,
+      );
 
       const existing = yield* findOpenPr(cwd, headContext.headSelectors);
       if (existing) {
@@ -769,7 +799,13 @@ export const makeGitManager = Effect.gen(function* () {
         };
       }
 
-      const baseBranch = yield* resolveBaseBranch(cwd, branch, details.upstreamRef, headContext);
+      const baseBranch = yield* resolveBaseBranch(
+        cwd,
+        branch,
+        details.upstreamRef,
+        headContext,
+        repositorySelector,
+      );
       const rangeContext = yield* gitCore.readRangeContext(cwd, baseBranch);
 
       const generated = yield* textGeneration.generatePrContent({
@@ -790,13 +826,18 @@ export const makeGitManager = Effect.gen(function* () {
           ),
         );
       yield* gitHubCli
-        .createPullRequest({
-          cwd,
-          baseBranch,
-          headSelector: headContext.preferredHeadSelector,
-          title: generated.title,
-          bodyFile,
-        })
+        .createPullRequest(
+          withOptionalRepo(
+            {
+              cwd,
+              baseBranch,
+              headSelector: headContext.preferredHeadSelector,
+              title: generated.title,
+              bodyFile,
+            },
+            repositorySelector,
+          ),
+        )
         .pipe(Effect.ensuring(fileSystem.remove(bodyFile).pipe(Effect.catch(() => Effect.void))));
 
       const created = yield* findOpenPr(cwd, headContext.headSelectors);
@@ -847,11 +888,17 @@ export const makeGitManager = Effect.gen(function* () {
 
   const resolvePullRequest: GitManagerShape["resolvePullRequest"] = Effect.fnUntraced(
     function* (input) {
+      const repositorySelector = yield* resolveRepositorySelector(input.cwd);
       const pullRequest = yield* gitHubCli
-        .getPullRequest({
-          cwd: input.cwd,
-          reference: normalizePullRequestReference(input.reference),
-        })
+        .getPullRequest(
+          withOptionalRepo(
+            {
+              cwd: input.cwd,
+              reference: normalizePullRequestReference(input.reference),
+            },
+            repositorySelector,
+          ),
+        )
         .pipe(Effect.map((resolved) => toResolvedPullRequest(resolved)));
 
       return { pullRequest };
@@ -862,18 +909,29 @@ export const makeGitManager = Effect.gen(function* () {
     function* (input) {
       const normalizedReference = normalizePullRequestReference(input.reference);
       const rootWorktreePath = canonicalizeExistingPath(input.cwd);
-      const pullRequestSummary = yield* gitHubCli.getPullRequest({
-        cwd: input.cwd,
-        reference: normalizedReference,
-      });
+      const repositorySelector = yield* resolveRepositorySelector(input.cwd);
+      const pullRequestSummary = yield* gitHubCli.getPullRequest(
+        withOptionalRepo(
+          {
+            cwd: input.cwd,
+            reference: normalizedReference,
+          },
+          repositorySelector,
+        ),
+      );
       const pullRequest = toResolvedPullRequest(pullRequestSummary);
 
       if (input.mode === "local") {
-        yield* gitHubCli.checkoutPullRequest({
-          cwd: input.cwd,
-          reference: normalizedReference,
-          force: true,
-        });
+        yield* gitHubCli.checkoutPullRequest(
+          withOptionalRepo(
+            {
+              cwd: input.cwd,
+              reference: normalizedReference,
+              force: true,
+            },
+            repositorySelector,
+          ),
+        );
         const details = yield* gitCore.statusDetails(input.cwd);
         yield* configurePullRequestHeadUpstream(
           input.cwd,
@@ -1006,13 +1064,17 @@ export const makeGitManager = Effect.gen(function* () {
     filePaths?: readonly string[],
   ) =>
     Effect.gen(function* () {
-      const suggestion = yield* resolveCommitAndBranchSuggestion({
-        cwd,
-        branch,
-        ...(commitMessage ? { commitMessage } : {}),
-        ...(filePaths ? { filePaths } : {}),
-        includeBranch: true,
-      });
+      const suggestion = yield* resolveCommitAndBranchSuggestion(
+        withOptionalFilePaths(
+          {
+            cwd,
+            branch,
+            ...(commitMessage ? { commitMessage } : {}),
+            includeBranch: true,
+          },
+          filePaths,
+        ),
+      );
       if (!suggestion) {
         return yield* gitManagerError(
           "runFeatureBranchStep",
@@ -1074,13 +1136,17 @@ export const makeGitManager = Effect.gen(function* () {
     filePaths?: readonly string[],
   ) =>
     Effect.gen(function* () {
-      const sourceCommitAndPush = yield* runCommitPushStep({
-        cwd,
-        branch: sourceBranch,
-        ...(commitMessage ? { commitMessage } : {}),
-        ...(filePaths ? { filePaths } : {}),
-        wantsPush: true,
-      });
+      const sourceCommitAndPush = yield* runCommitPushStep(
+        withOptionalFilePaths(
+          {
+            cwd,
+            branch: sourceBranch,
+            ...(commitMessage ? { commitMessage } : {}),
+            wantsPush: true,
+          },
+          filePaths,
+        ),
+      );
 
       // Step 3: Checkout target branch
       yield* Effect.scoped(gitCore.checkoutBranch({ cwd, branch: targetBranch }));
@@ -1181,27 +1247,33 @@ export const makeGitManager = Effect.gen(function* () {
       const preparedCommitExecution: PreparedCommitExecution = yield* prepareCommitExecution(
         input.cwd,
         initialStatus.branch,
-        {
-          ...(input.featureBranch ? { featureBranch: input.featureBranch } : {}),
-          ...(input.commitMessage ? { commitMessage: input.commitMessage } : {}),
-          ...(input.filePaths ? { filePaths: input.filePaths } : {}),
-        },
+        withOptionalFilePaths(
+          {
+            ...(input.featureBranch ? { featureBranch: input.featureBranch } : {}),
+            ...(input.commitMessage ? { commitMessage: input.commitMessage } : {}),
+          },
+          input.filePaths,
+        ),
       );
 
-      const commitAndPush = yield* runCommitPushStep({
-        cwd: input.cwd,
-        branch: preparedCommitExecution.currentBranch,
-        ...(preparedCommitExecution.commitMessage
-          ? { commitMessage: preparedCommitExecution.commitMessage }
-          : {}),
-        ...(preparedCommitExecution.preResolvedCommitSuggestion
-          ? {
-              preResolvedCommitSuggestion: preparedCommitExecution.preResolvedCommitSuggestion,
-            }
-          : {}),
-        ...(input.filePaths ? { filePaths: input.filePaths } : {}),
-        wantsPush,
-      });
+      const commitAndPush = yield* runCommitPushStep(
+        withOptionalFilePaths(
+          {
+            cwd: input.cwd,
+            branch: preparedCommitExecution.currentBranch,
+            ...(preparedCommitExecution.commitMessage
+              ? { commitMessage: preparedCommitExecution.commitMessage }
+              : {}),
+            ...(preparedCommitExecution.preResolvedCommitSuggestion
+              ? {
+                  preResolvedCommitSuggestion: preparedCommitExecution.preResolvedCommitSuggestion,
+                }
+              : {}),
+            wantsPush,
+          },
+          input.filePaths,
+        ),
+      );
 
       const pr = wantsPr
         ? yield* runPrStep(input.cwd, preparedCommitExecution.currentBranch)

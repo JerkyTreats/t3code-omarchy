@@ -99,14 +99,12 @@ export function useGitPanelStackedActions({
       }
       onConfirmed?.();
 
-      const pushTarget = !featureBranch && actionBranch ? `origin/${actionBranch}` : undefined;
       const progressStages = buildGitActionProgressStages({
         action,
         hasCustomCommitMessage: !!commitMessage?.trim(),
         hasWorkingTreeChanges: !!actionStatus?.hasWorkingTreeChanges,
         forcePushOnly: forcePushOnlyProgress,
         featureBranch,
-        ...(pushTarget ? { pushTarget } : {}),
         ...(targetBranch ? { targetBranch } : {}),
       });
       const resolvedProgressToastId =
