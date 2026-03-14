@@ -217,6 +217,10 @@ function createGitCommandError(
   });
 }
 
+function isReservedUpstreamRemoteName(remoteName: string | null): boolean {
+  return remoteName?.trim().toLowerCase() === "upstream";
+}
+
 const makeGitCore = Effect.gen(function* () {
   const git = yield* GitService;
   const fileSystem = yield* FileSystem.FileSystem;
@@ -413,7 +417,7 @@ const makeGitCore = Effect.gen(function* () {
   const refreshStatusUpstreamIfStale = (cwd: string): Effect.Effect<void, GitCommandError> =>
     Effect.gen(function* () {
       const upstream = yield* resolveCurrentUpstream(cwd);
-      if (!upstream) return;
+      if (!upstream || isReservedUpstreamRemoteName(upstream.remoteName)) return;
       yield* Cache.get(
         statusUpstreamRefreshCache,
         new StatusUpstreamRefreshCacheKey({
@@ -428,7 +432,7 @@ const makeGitCore = Effect.gen(function* () {
   const refreshCheckedOutBranchUpstream = (cwd: string): Effect.Effect<void, GitCommandError> =>
     Effect.gen(function* () {
       const upstream = yield* resolveCurrentUpstream(cwd);
-      if (!upstream) return;
+      if (!upstream || isReservedUpstreamRemoteName(upstream.remoteName)) return;
       yield* fetchUpstreamRef(cwd, upstream);
     });
 
@@ -809,9 +813,21 @@ const makeGitCore = Effect.gen(function* () {
       })),
     );
 
-  const prepareCommitContext: GitCoreShape["prepareCommitContext"] = (cwd) =>
+  const prepareCommitContext: GitCoreShape["prepareCommitContext"] = (cwd, filePaths) =>
     Effect.gen(function* () {
-      yield* runGit("GitCore.prepareCommitContext.addAll", cwd, ["add", "-A"]);
+      if (filePaths && filePaths.length > 0) {
+        yield* runGit("GitCore.prepareCommitContext.reset", cwd, ["reset"]).pipe(
+          Effect.catch(() => Effect.void),
+        );
+        yield* runGit("GitCore.prepareCommitContext.addSelected", cwd, [
+          "add",
+          "-A",
+          "--",
+          ...filePaths,
+        ]);
+      } else {
+        yield* runGit("GitCore.prepareCommitContext.addAll", cwd, ["add", "-A"]);
+      }
 
       const stagedSummary = yield* runGitStdout("GitCore.prepareCommitContext.stagedSummary", cwd, [
         "diff",
@@ -910,6 +926,14 @@ const makeGitCore = Effect.gen(function* () {
             "Cannot push because no git remote is configured for this repository.",
           );
         }
+        if (isReservedUpstreamRemoteName(publishRemoteName)) {
+          return yield* createGitCommandError(
+            "GitCore.pushCurrentBranch",
+            cwd,
+            ["push", "-u", publishRemoteName, branch],
+            "Push to the upstream remote is blocked. Push to the fork remote instead.",
+          );
+        }
         yield* runGit("GitCore.pushCurrentBranch.pushWithUpstream", cwd, [
           "push",
           "-u",
@@ -928,6 +952,14 @@ const makeGitCore = Effect.gen(function* () {
         Effect.catch(() => Effect.succeed(null)),
       );
       if (currentUpstream) {
+        if (isReservedUpstreamRemoteName(currentUpstream.remoteName)) {
+          return yield* createGitCommandError(
+            "GitCore.pushCurrentBranch",
+            cwd,
+            ["push", currentUpstream.remoteName, `HEAD:${currentUpstream.upstreamBranch}`],
+            "Push to the upstream remote is blocked. Push to the fork remote instead.",
+          );
+        }
         yield* runGit("GitCore.pushCurrentBranch.pushUpstream", cwd, [
           "push",
           currentUpstream.remoteName,
@@ -968,6 +1000,17 @@ const makeGitCore = Effect.gen(function* () {
           cwd,
           ["pull", "--ff-only"],
           "Current branch has no upstream configured. Push with upstream first.",
+        );
+      }
+      const currentUpstream = yield* resolveCurrentUpstream(cwd).pipe(
+        Effect.catch(() => Effect.succeed(null)),
+      );
+      if (currentUpstream && isReservedUpstreamRemoteName(currentUpstream.remoteName)) {
+        return yield* createGitCommandError(
+          "GitCore.pullCurrentBranch",
+          cwd,
+          ["pull", "--ff-only"],
+          "Pull from the upstream remote is blocked in the Git UI. Use the upstream sync workflow instead.",
         );
       }
       const beforeSha = yield* runGitStdout(

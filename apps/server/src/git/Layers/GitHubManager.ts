@@ -6,11 +6,10 @@ import type {
 import { Effect, Layer } from "effect";
 
 import { GitHubCliError } from "../Errors.ts";
+import { DEFAULT_GITHUB_HOSTNAME, resolveGitHubRepositorySelector } from "../gitHubRepository.ts";
 import { GitHubCli } from "../Services/GitHubCli.ts";
 import { GitCore } from "../Services/GitCore.ts";
 import { GitHubManager, type GitHubManagerShape } from "../Services/GitHubManager.ts";
-
-const DEFAULT_HOSTNAME = "github.com";
 
 function isGitHubCliMissing(error: GitHubCliError): boolean {
   return error.detail.includes("required but not available on PATH");
@@ -20,7 +19,7 @@ function emptyStatus(input: GitHubStatusInput): GitHubStatusResult {
   return {
     installed: false,
     authenticated: false,
-    hostname: input.hostname ?? DEFAULT_HOSTNAME,
+    hostname: input.hostname ?? DEFAULT_GITHUB_HOSTNAME,
     accountLogin: null,
     gitProtocol: null,
     tokenSource: null,
@@ -29,92 +28,15 @@ function emptyStatus(input: GitHubStatusInput): GitHubStatusResult {
   };
 }
 
-function parseGitHubRepoSelector(remoteUrl: string, hostname: string): string | null {
-  const trimmed = remoteUrl.trim();
-  if (trimmed.length === 0) {
-    return null;
-  }
-
-  const normalizedHostname = hostname.toLowerCase();
-
-  const scpLikeMatch = !trimmed.includes("://") ? /^(?:[^@]+@)?([^:]+):(.+)$/.exec(trimmed) : null;
-  if (scpLikeMatch) {
-    const remoteHost = scpLikeMatch[1];
-    const remotePath = scpLikeMatch[2];
-    if (!remoteHost || !remotePath) {
-      return null;
-    }
-    if (remoteHost.toLowerCase() !== normalizedHostname) {
-      return null;
-    }
-    const pathSegments = remotePath
-      .replace(/\.git$/i, "")
-      .split("/")
-      .map((segment) => segment.trim())
-      .filter((segment) => segment.length > 0);
-    if (pathSegments.length < 2) {
-      return null;
-    }
-    return `${pathSegments[pathSegments.length - 2]}/${pathSegments[pathSegments.length - 1]}`;
-  }
-
-  try {
-    const parsed = new URL(trimmed);
-    if (parsed.hostname.toLowerCase() !== normalizedHostname) {
-      return null;
-    }
-    const pathSegments = parsed.pathname
-      .replace(/\.git$/i, "")
-      .split("/")
-      .map((segment) => segment.trim())
-      .filter((segment) => segment.length > 0);
-    if (pathSegments.length < 2) {
-      return null;
-    }
-    return `${pathSegments[pathSegments.length - 2]}/${pathSegments[pathSegments.length - 1]}`;
-  } catch {
-    return null;
-  }
-}
-
 const makeGitHubManager = Effect.gen(function* () {
   const gitHubCli = yield* GitHubCli;
   const gitCore = yield* GitCore;
 
-  const resolveRepositorySelector = Effect.fnUntraced(function* (cwd: string, hostname: string) {
-    const statusDetails = yield* gitCore
-      .statusDetails(cwd)
-      .pipe(Effect.catch(() => Effect.succeed(null)));
-    const branchRemoteName =
-      statusDetails?.branch !== null && statusDetails?.branch !== undefined
-        ? yield* gitCore
-            .readConfigValue(cwd, `branch.${statusDetails.branch}.remote`)
-            .pipe(Effect.catch(() => Effect.succeed(null)))
-        : null;
-    const upstreamRemoteName = statusDetails?.upstreamRef?.split("/")[0] ?? null;
-    const remoteNames = [branchRemoteName, upstreamRemoteName, "origin"].filter(
-      (value, index, values): value is string =>
-        typeof value === "string" && value.length > 0 && values.indexOf(value) === index,
-    );
-
-    for (const remoteName of remoteNames) {
-      const remoteUrl = yield* gitCore
-        .readConfigValue(cwd, `remote.${remoteName}.url`)
-        .pipe(Effect.catch(() => Effect.succeed(null)));
-      if (!remoteUrl) {
-        continue;
-      }
-      const selector = parseGitHubRepoSelector(remoteUrl, hostname);
-      if (selector) {
-        return selector;
-      }
-    }
-
-    return null;
-  });
+  const resolveRepositorySelector = (cwd: string, hostname: string) =>
+    resolveGitHubRepositorySelector(cwd, gitCore, hostname);
 
   const status: GitHubManagerShape["status"] = Effect.fnUntraced(function* (input) {
-    const hostname = input.hostname ?? DEFAULT_HOSTNAME;
+    const hostname = input.hostname ?? DEFAULT_GITHUB_HOSTNAME;
     const auth = yield* gitHubCli
       .getAuthStatus({
         ...(input.cwd !== null ? { cwd: input.cwd } : {}),
@@ -185,7 +107,7 @@ const makeGitHubManager = Effect.gen(function* () {
       });
     }
 
-    const repositorySelector = yield* resolveRepositorySelector(input.cwd, DEFAULT_HOSTNAME);
+    const repositorySelector = yield* resolveRepositorySelector(input.cwd, DEFAULT_GITHUB_HOSTNAME);
     if (!repositorySelector) {
       return {
         repo: null,

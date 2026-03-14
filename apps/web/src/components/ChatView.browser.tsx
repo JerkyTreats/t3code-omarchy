@@ -11,6 +11,7 @@ import {
   type WsWelcomePayload,
   WS_CHANNELS,
   WS_METHODS,
+  OrchestrationSessionStatus,
 } from "@t3tools/contracts";
 import { RouterProvider, createMemoryHistory } from "@tanstack/react-router";
 import { HttpResponse, http, ws } from "msw";
@@ -19,7 +20,8 @@ import { page } from "vitest/browser";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 
-import { useComposerDraftStore } from "../composerDraftStore";
+import { clearPromotedDraftThreads, useComposerDraftStore } from "../composerDraftStore";
+import { isMacPlatform } from "../lib/utils";
 import { getRouter } from "../router";
 import { useStore } from "../store";
 import { estimateTimelineMessageHeight } from "./timelineHeight";
@@ -155,6 +157,7 @@ function createSnapshotForTargetUser(options: {
   targetMessageId: MessageId;
   targetText: string;
   targetAttachmentCount?: number;
+  sessionStatus?: OrchestrationSessionStatus;
 }): OrchestrationReadModel {
   const messages: Array<OrchestrationReadModel["threads"][number]["messages"][number]> = [];
 
@@ -224,7 +227,7 @@ function createSnapshotForTargetUser(options: {
         checkpoints: [],
         session: {
           threadId: THREAD_ID,
-          status: "ready",
+          status: options.sessionStatus ?? "ready",
           providerName: "codex",
           runtimeMode: "full-access",
           activeTurnId: null,
@@ -356,7 +359,8 @@ function createSnapshotWithLongProposedPlan(): OrchestrationReadModel {
   };
 }
 
-function resolveWsRpc(tag: string): unknown {
+function resolveWsRpc(body: WsRequestEnvelope["body"]): unknown {
+  const tag = body._tag;
   if (tag === ORCHESTRATION_WS_METHODS.getSnapshot) {
     return fixture.snapshot;
   }
@@ -402,6 +406,19 @@ function resolveWsRpc(tag: string): unknown {
       truncated: false,
     };
   }
+  if (tag === WS_METHODS.terminalOpen) {
+    return {
+      threadId: typeof body.threadId === "string" ? body.threadId : THREAD_ID,
+      terminalId: typeof body.terminalId === "string" ? body.terminalId : "default",
+      cwd: typeof body.cwd === "string" ? body.cwd : "/repo/project",
+      status: "running",
+      pid: 123,
+      history: "",
+      exitCode: null,
+      exitSignal: null,
+      updatedAt: NOW_ISO,
+    };
+  }
   return {};
 }
 
@@ -430,7 +447,7 @@ const worker = setupWorker(
       client.send(
         JSON.stringify({
           id: request.id,
-          result: resolveWsRpc(method),
+          result: resolveWsRpc(request.body),
         }),
       );
     });
@@ -1103,6 +1120,28 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
+  it("shows a pointer cursor for the running stop button", async () => {
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createSnapshotForTargetUser({
+        targetMessageId: "msg-user-stop-button-cursor" as MessageId,
+        targetText: "stop button cursor target",
+        sessionStatus: "running",
+      }),
+    });
+
+    try {
+      const stopButton = await waitForElement(
+        () => document.querySelector<HTMLButtonElement>('button[aria-label="Stop generation"]'),
+        "Unable to find stop generation button.",
+      );
+
+      expect(getComputedStyle(stopButton).cursor).toBe("pointer");
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
   it("keeps the new thread selected after clicking the new-thread button", async () => {
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
@@ -1152,6 +1191,205 @@ describe("ChatView timeline estimator parity (full app)", () => {
         .element(page.getByText("Send a message to start the conversation."))
         .toBeInTheDocument();
       await expect.element(page.getByTestId("composer-editor")).toBeInTheDocument();
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("creates a new thread from the global chat.new shortcut", async () => {
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createSnapshotForTargetUser({
+        targetMessageId: "msg-user-chat-shortcut-test" as MessageId,
+        targetText: "chat shortcut test",
+      }),
+      configureFixture: (nextFixture) => {
+        nextFixture.serverConfig = {
+          ...nextFixture.serverConfig,
+          keybindings: [
+            {
+              command: "chat.new",
+              shortcut: {
+                key: "o",
+                metaKey: false,
+                ctrlKey: false,
+                shiftKey: true,
+                altKey: false,
+                modKey: true,
+              },
+              whenAst: {
+                type: "not",
+                node: { type: "identifier", name: "terminalFocus" },
+              },
+            },
+          ],
+        };
+      },
+    });
+
+    try {
+      const useMetaForMod = isMacPlatform(navigator.platform);
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "o",
+          shiftKey: true,
+          metaKey: useMetaForMod,
+          ctrlKey: !useMetaForMod,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+
+      await waitForURL(
+        mounted.router,
+        (path) => UUID_ROUTE_RE.test(path),
+        "Route should have changed to a new draft thread UUID from the shortcut.",
+      );
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("creates a fresh draft after the previous draft thread is promoted", async () => {
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createSnapshotForTargetUser({
+        targetMessageId: "msg-user-promoted-draft-shortcut-test" as MessageId,
+        targetText: "promoted draft shortcut test",
+      }),
+      configureFixture: (nextFixture) => {
+        nextFixture.serverConfig = {
+          ...nextFixture.serverConfig,
+          keybindings: [
+            {
+              command: "chat.new",
+              shortcut: {
+                key: "o",
+                metaKey: false,
+                ctrlKey: false,
+                shiftKey: true,
+                altKey: false,
+                modKey: true,
+              },
+              whenAst: {
+                type: "not",
+                node: { type: "identifier", name: "terminalFocus" },
+              },
+            },
+          ],
+        };
+      },
+    });
+
+    try {
+      const newThreadButton = page.getByTestId("new-thread-button");
+      await expect.element(newThreadButton).toBeInTheDocument();
+      await newThreadButton.click();
+
+      const promotedThreadPath = await waitForURL(
+        mounted.router,
+        (path) => UUID_ROUTE_RE.test(path),
+        "Route should have changed to a promoted draft thread UUID.",
+      );
+      const promotedThreadId = promotedThreadPath.slice(1) as ThreadId;
+
+      const { syncServerReadModel } = useStore.getState();
+      syncServerReadModel(addThreadToSnapshot(fixture.snapshot, promotedThreadId));
+      useComposerDraftStore.getState().clearDraftThread(promotedThreadId);
+
+      const useMetaForMod = isMacPlatform(navigator.platform);
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "o",
+          shiftKey: true,
+          metaKey: useMetaForMod,
+          ctrlKey: !useMetaForMod,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+
+      const freshThreadPath = await waitForURL(
+        mounted.router,
+        (path) => UUID_ROUTE_RE.test(path) && path !== promotedThreadPath,
+        "Shortcut should create a fresh draft instead of reusing the promoted thread.",
+      );
+      expect(freshThreadPath).not.toBe(promotedThreadPath);
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("keeps the new thread route after sending the first message before snapshot sync", async () => {
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createSnapshotForTargetUser({
+        targetMessageId: "msg-user-first-send-thread-test" as MessageId,
+        targetText: "first send thread test",
+      }),
+    });
+
+    try {
+      const newThreadButton = page.getByTestId("new-thread-button");
+      await expect.element(newThreadButton).toBeInTheDocument();
+
+      await newThreadButton.click();
+
+      const newThreadPath = await waitForURL(
+        mounted.router,
+        (path) => UUID_ROUTE_RE.test(path),
+        "Route should have changed to a new draft thread UUID.",
+      );
+      const newThreadId = newThreadPath.slice(1) as ThreadId;
+
+      useComposerDraftStore.getState().setPrompt(newThreadId, "hello from the first draft send");
+      await waitForLayout();
+
+      const sendButton = await waitForElement(
+        () =>
+          document.querySelector<HTMLButtonElement>(
+            'form[data-chat-composer-form="true"] button[type="submit"]:not(:disabled)',
+          ),
+        "Unable to find enabled send button.",
+      );
+      sendButton.click();
+
+      await vi.waitFor(
+        () => {
+          const dispatchRequests = wsRequests.filter(
+            (request) => request._tag === ORCHESTRATION_WS_METHODS.dispatchCommand,
+          );
+          expect(dispatchRequests).toEqual(
+            expect.arrayContaining([
+              expect.objectContaining({
+                command: expect.objectContaining({
+                  type: "thread.create",
+                  threadId: newThreadId,
+                }),
+              }),
+              expect.objectContaining({
+                command: expect.objectContaining({
+                  type: "thread.turn.start",
+                  threadId: newThreadId,
+                }),
+              }),
+            ]),
+          );
+        },
+        { timeout: 8_000, interval: 16 },
+      );
+
+      await new Promise<void>((resolve) => {
+        window.setTimeout(resolve, 150);
+      });
+      expect(mounted.router.state.location.pathname).toBe(newThreadPath);
+
+      fixture.snapshot = addThreadToSnapshot(fixture.snapshot, newThreadId);
+      useStore.getState().syncServerReadModel(fixture.snapshot);
+      clearPromotedDraftThreads(new Set([newThreadId]));
+      await waitForLayout();
+
+      expect(mounted.router.state.location.pathname).toBe(newThreadPath);
     } finally {
       await mounted.cleanup();
     }

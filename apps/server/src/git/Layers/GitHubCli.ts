@@ -408,6 +408,7 @@ const makeGitHubCli = Effect.sync(() => {
         args: [
           "pr",
           "list",
+          ...(input.repo ? ["--repo", input.repo] : []),
           "--head",
           input.headSelector,
           "--state",
@@ -438,6 +439,7 @@ const makeGitHubCli = Effect.sync(() => {
           "pr",
           "view",
           input.reference,
+          ...(input.repo ? ["--repo", input.repo] : []),
           "--json",
           "number,title,url,baseRefName,headRefName,state,mergedAt,isCrossRepository,headRepository,headRepositoryOwner",
         ],
@@ -472,7 +474,13 @@ const makeGitHubCli = Effect.sync(() => {
     checkoutPullRequest: (input) =>
       execute({
         cwd: input.cwd,
-        args: ["pr", "checkout", input.reference, ...(input.force ? ["--force"] : [])],
+        args: [
+          "pr",
+          "checkout",
+          input.reference,
+          ...(input.repo ? ["--repo", input.repo] : []),
+          ...(input.force ? ["--force"] : []),
+        ],
       }).pipe(Effect.asVoid),
     createPullRequest: (input) =>
       execute({
@@ -480,6 +488,7 @@ const makeGitHubCli = Effect.sync(() => {
         args: [
           "pr",
           "create",
+          ...(input.repo ? ["--repo", input.repo] : []),
           "--base",
           input.baseBranch,
           "--head",
@@ -493,7 +502,15 @@ const makeGitHubCli = Effect.sync(() => {
     getDefaultBranch: (input) =>
       execute({
         cwd: input.cwd,
-        args: ["repo", "view", "--json", "defaultBranchRef", "--jq", ".defaultBranchRef.name"],
+        args: [
+          "repo",
+          "view",
+          ...(input.repo ? [input.repo] : []),
+          "--json",
+          "defaultBranchRef",
+          "--jq",
+          ".defaultBranchRef.name",
+        ],
       }).pipe(
         Effect.map((value) => {
           const trimmed = value.stdout.trim();
