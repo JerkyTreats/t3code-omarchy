@@ -925,16 +925,16 @@ it.layer(TestLayer)("git integration", (it) => {
           newBranch: "t3code/feat/session",
         });
 
-        expect(renamed.branch).toBe("t3code/feat/session-1");
+        expect(renamed.branch).toBe("t3code/feat/session-2");
         const branches = yield* listGitBranches({ cwd: tmp });
         expect(branches.branches.some((branch) => branch.name === "t3code/feat/session")).toBe(
           true,
         );
-        expect(branches.branches.some((branch) => branch.name === "t3code/feat/session-1")).toBe(
+        expect(branches.branches.some((branch) => branch.name === "t3code/feat/session-2")).toBe(
           true,
         );
         const current = branches.branches.find((branch) => branch.current);
-        expect(current?.name).toBe("t3code/feat/session-1");
+        expect(current?.name).toBe("t3code/feat/session-2");
       }),
     );
 

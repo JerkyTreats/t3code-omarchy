@@ -3,6 +3,7 @@ import { realpathSync } from "node:fs";
 
 import { Effect, FileSystem, Layer, Path } from "effect";
 import {
+  buildManagedWorktreeBranchName,
   resolveAutoFeatureBranchName,
   sanitizeBranchFragment,
   sanitizeFeatureBranchName,
@@ -99,7 +100,7 @@ function resolvePullRequestWorktreeLocalBranchName(
 
   const sanitizedHeadBranch = sanitizeBranchFragment(pullRequest.headBranch).trim();
   const suffix = sanitizedHeadBranch.length > 0 ? sanitizedHeadBranch : "head";
-  return `t3code/pr-${pullRequest.number}/${suffix}`;
+  return buildManagedWorktreeBranchName(suffix, `pr-${pullRequest.number}`);
 }
 
 function parseRepositoryOwnerLogin(nameWithOwner: string | null): string | null {

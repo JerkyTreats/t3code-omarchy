@@ -51,6 +51,7 @@ export interface GitHubIssueSummary {
   readonly title: string;
   readonly state: "open" | "closed";
   readonly url: string;
+  readonly body: string | null;
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly labels: ReadonlyArray<{
