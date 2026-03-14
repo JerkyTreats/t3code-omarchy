@@ -230,6 +230,7 @@ export default function GitPanel({
     () => localBranches.find((branch) => branch.name === activeWorkspaceBranch) ?? null,
     [activeWorkspaceBranch, localBranches],
   );
+  const activeThreadIssueLink = activeServerThread?.issueLink ?? null;
   const isPrimaryWorkspace = repoRoot !== null && workspaceCwd === repoRoot;
   const activeWorkspaceMerge =
     gitStatusForActions?.merge ?? ({ inProgress: false, conflictedFiles: [] } as const);
@@ -364,6 +365,15 @@ export default function GitPanel({
         baseBranch,
         repoNameWithOwner: githubStatusQuery.data?.repo?.nameWithOwner ?? null,
       });
+      const issueLink = githubStatusQuery.data?.repo?.nameWithOwner
+        ? {
+            repoNameWithOwner: githubStatusQuery.data.repo.nameWithOwner,
+            number: issue.number,
+            title: issue.title,
+            url: issue.url,
+            state: issue.state,
+          }
+        : null;
       const title = buildIssueThreadTitle(issue);
       const model =
         activeServerThread?.model ?? activeProject.model ?? DEFAULT_MODEL_BY_PROVIDER.codex;
@@ -392,6 +402,7 @@ export default function GitPanel({
           interactionMode: issueThreadInteractionMode,
           branch: worktreeResult.worktree.branch,
           worktreePath: worktreeResult.worktree.path,
+          issueLink,
           createdAt,
         });
         createdThread = true;
@@ -572,6 +583,7 @@ export default function GitPanel({
   } = useGitPanelStackedActions({
     gitStatusForActions,
     isDefaultBranch,
+    issueLink: activeThreadIssueLink,
     pendingDefaultBranchAction,
     runImmediateGitAction: runImmediateGitActionMutation.mutateAsync,
     setPendingDefaultBranchAction,

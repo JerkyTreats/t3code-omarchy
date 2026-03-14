@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { realpathSync } from "node:fs";
 
 import { Effect, FileSystem, Layer, Path } from "effect";
+import type { GitHubIssueLink } from "@t3tools/contracts";
 import {
   buildManagedWorktreeBranchName,
   resolveAutoFeatureBranchName,
@@ -130,6 +131,33 @@ function withOptionalRepo<T extends object>(input: T, repo: string | null): T & 
   }
 
   return { ...input, repo };
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function buildIssueClosingReference(issueLink: GitHubIssueLink): string {
+  return `Closes ${issueLink.repoNameWithOwner}#${issueLink.number}`;
+}
+
+function bodyAlreadyClosesIssue(body: string, issueLink: GitHubIssueLink): boolean {
+  const issueNumber = String(issueLink.number);
+  const qualifiedReference = `${issueLink.repoNameWithOwner}#${issueNumber}`;
+  const closingVerbPattern = String.raw`(?:close|closes|closed|fix|fixes|fixed|resolve|resolves|resolved)`;
+  const issueReferencePattern = String.raw`(?:${escapeRegExp(qualifiedReference)}|#${escapeRegExp(issueNumber)})`;
+  const pattern = new RegExp(`${closingVerbPattern}\\s+${issueReferencePattern}`, "i");
+  return pattern.test(body);
+}
+
+function appendIssueClosingFooter(body: string, issueLink: GitHubIssueLink | null): string {
+  const trimmedBody = body.trimEnd();
+  if (!issueLink || bodyAlreadyClosesIssue(trimmedBody, issueLink)) {
+    return trimmedBody;
+  }
+
+  const closingReference = buildIssueClosingReference(issueLink);
+  return trimmedBody.length > 0 ? `${trimmedBody}\n\n${closingReference}` : closingReference;
 }
 
 function parsePullRequestList(raw: unknown): PullRequestInfo[] {
@@ -771,7 +799,11 @@ export const makeGitManager = Effect.gen(function* () {
       return { commit, push };
     });
 
-  const runPrStep = (cwd: string, fallbackBranch: string | null) =>
+  const runPrStep = (
+    cwd: string,
+    fallbackBranch: string | null,
+    issueLink: GitHubIssueLink | null,
+  ) =>
     Effect.gen(function* () {
       const details = yield* gitCore.statusDetails(cwd);
       const branch = details.branch ?? fallbackBranch;
@@ -827,10 +859,11 @@ export const makeGitManager = Effect.gen(function* () {
         diffSummary: limitContext(rangeContext.diffSummary, 20_000),
         diffPatch: limitContext(rangeContext.diffPatch, 60_000),
       });
+      const body = appendIssueClosingFooter(generated.body, issueLink);
 
       const bodyFile = path.join(tempDir, `t3code-pr-body-${process.pid}-${randomUUID()}.md`);
       yield* fileSystem
-        .writeFileString(bodyFile, generated.body)
+        .writeFileString(bodyFile, body)
         .pipe(
           Effect.mapError((cause) =>
             gitManagerError("runPrStep", "Failed to write pull request body temp file.", cause),
@@ -1287,7 +1320,11 @@ export const makeGitManager = Effect.gen(function* () {
       );
 
       const pr = wantsPr
-        ? yield* runPrStep(input.cwd, preparedCommitExecution.currentBranch)
+        ? yield* runPrStep(
+            input.cwd,
+            preparedCommitExecution.currentBranch,
+            input.issueLink ?? null,
+          )
         : { status: "skipped_not_requested" as const };
 
       return {

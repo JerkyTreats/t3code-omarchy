@@ -57,6 +57,42 @@ describe("git mutation options", () => {
     });
   });
 
+  it("forwards linked issues to the native API", async () => {
+    const runStackedAction = vi.fn().mockResolvedValue({});
+    vi.spyOn(nativeApi, "ensureNativeApi").mockReturnValue({
+      git: {
+        runStackedAction,
+      },
+    } as unknown as NativeApi);
+
+    const options = gitRunStackedActionMutationOptions({ cwd: "/repo/a", queryClient });
+    await options.mutationFn?.(
+      {
+        action: "commit_push_pr",
+        issueLink: {
+          repoNameWithOwner: "pingdotgg/codething-mvp",
+          number: 123,
+          title: "Linked issue",
+          url: "https://github.com/pingdotgg/codething-mvp/issues/123",
+          state: "open",
+        },
+      },
+      {} as never,
+    );
+
+    expect(runStackedAction).toHaveBeenCalledWith({
+      cwd: "/repo/a",
+      action: "commit_push_pr",
+      issueLink: {
+        repoNameWithOwner: "pingdotgg/codething-mvp",
+        number: 123,
+        title: "Linked issue",
+        url: "https://github.com/pingdotgg/codething-mvp/issues/123",
+        state: "open",
+      },
+    });
+  });
+
   it("attaches cwd-scoped mutation key for pull", () => {
     const options = gitPullMutationOptions({ cwd: "/repo/a", queryClient });
     expect(options.mutationKey).toEqual(gitMutationKeys.pull("/repo/a"));

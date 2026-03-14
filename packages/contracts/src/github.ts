@@ -40,6 +40,15 @@ export const GitHubIssue = Schema.Struct({
 });
 export type GitHubIssue = typeof GitHubIssue.Type;
 
+export const GitHubIssueLink = Schema.Struct({
+  repoNameWithOwner: TrimmedNonEmptyString,
+  number: PositiveInt,
+  title: TrimmedNonEmptyString,
+  url: Schema.String,
+  state: GitHubIssueState,
+});
+export type GitHubIssueLink = typeof GitHubIssueLink.Type;
+
 export const GitHubStatusInput = Schema.Struct({
   cwd: Schema.NullOr(TrimmedNonEmptyString),
   hostname: Schema.optional(GitHubHostname),

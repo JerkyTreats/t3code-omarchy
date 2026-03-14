@@ -1,4 +1,4 @@
-import type { GitStackedAction } from "@t3tools/contracts";
+import type { GitHubIssueLink, GitStackedAction } from "@t3tools/contracts";
 import { mutationOptions, queryOptions, type QueryClient } from "@tanstack/react-query";
 import { ensureNativeApi } from "../nativeApi";
 
@@ -141,12 +141,14 @@ export function gitRunStackedActionMutationOptions(input: {
       commitMessage,
       featureBranch,
       targetBranch,
+      issueLink,
       filePaths,
     }: {
       action: GitStackedAction;
       commitMessage?: string;
       featureBranch?: boolean;
       targetBranch?: string;
+      issueLink?: GitHubIssueLink | null;
       filePaths?: string[];
     }) => {
       const api = ensureNativeApi();
@@ -157,6 +159,7 @@ export function gitRunStackedActionMutationOptions(input: {
         ...(commitMessage ? { commitMessage } : {}),
         ...(featureBranch ? { featureBranch } : {}),
         ...(targetBranch ? { targetBranch } : {}),
+        ...(issueLink ? { issueLink } : {}),
         ...(filePaths ? { filePaths } : {}),
       });
     },

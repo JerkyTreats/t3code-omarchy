@@ -382,6 +382,7 @@ function buildLocalDraftThread(
     lastVisitedAt: draftThread.createdAt,
     branch: draftThread.branch,
     worktreePath: draftThread.worktreePath,
+    issueLink: null,
     turnDiffSummaries: [],
     activities: [],
     proposedPlans: [],
@@ -608,17 +609,6 @@ const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
     </Command>
   );
 });
-
-const extendReplacementRangeForTrailingSpace = (
-  text: string,
-  rangeEnd: number,
-  replacement: string,
-): number => {
-  if (!replacement.endsWith(" ")) {
-    return rangeEnd;
-  }
-  return text[rangeEnd] === " " ? rangeEnd + 1 : rangeEnd;
-};
 
 interface ChatViewProps {
   threadId: ThreadId;
@@ -2727,6 +2717,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
           interactionMode,
           branch: nextThreadBranch,
           worktreePath: nextThreadWorktreePath,
+          issueLink: activeThread.issueLink ?? null,
           createdAt: activeThread.createdAt,
         });
         createdServerThreadForLocalDraft = true;
@@ -3150,6 +3141,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
         interactionMode: "default",
         branch: activeThread.branch,
         worktreePath: activeThread.worktreePath,
+        issueLink: activeThread.issueLink ?? null,
         createdAt,
       })
       .then(() =>

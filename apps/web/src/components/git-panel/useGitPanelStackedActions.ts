@@ -1,4 +1,5 @@
 import type {
+  GitHubIssueLink,
   GitRunStackedActionResult,
   GitStackedAction,
   GitStatusResult,
@@ -20,6 +21,7 @@ export interface PendingDefaultBranchAction {
   includesCommit: boolean;
   commitMessage?: string;
   forcePushOnlyProgress: boolean;
+  issueLink?: GitHubIssueLink | null;
   onConfirmed?: () => void;
 }
 
@@ -36,17 +38,20 @@ interface RunGitActionWithToastInput {
   isDefaultBranchOverride?: boolean;
   progressToastId?: GitActionToastId;
   targetBranch?: string;
+  issueLink?: GitHubIssueLink | null;
 }
 
 interface UseGitPanelStackedActionsInput {
   gitStatusForActions: GitStatusResult | null;
   isDefaultBranch: boolean;
+  issueLink: GitHubIssueLink | null;
   pendingDefaultBranchAction: PendingDefaultBranchAction | null;
   runImmediateGitAction: (input: {
     action: GitStackedAction;
     commitMessage?: string;
     featureBranch?: boolean;
     targetBranch?: string;
+    issueLink?: GitHubIssueLink | null;
   }) => Promise<GitRunStackedActionResult>;
   setPendingDefaultBranchAction: Dispatch<SetStateAction<PendingDefaultBranchAction | null>>;
   threadToastData: { threadId: ThreadId } | undefined;
@@ -55,6 +60,7 @@ interface UseGitPanelStackedActionsInput {
 export function useGitPanelStackedActions({
   gitStatusForActions,
   isDefaultBranch,
+  issueLink,
   pendingDefaultBranchAction,
   runImmediateGitAction,
   setPendingDefaultBranchAction,
@@ -72,9 +78,11 @@ export function useGitPanelStackedActions({
       isDefaultBranchOverride,
       progressToastId,
       targetBranch,
+      issueLink: issueLinkOverride,
     }: RunGitActionWithToastInput) => {
       const actionStatus = statusOverride ?? gitStatusForActions;
       const actionBranch = actionStatus?.branch ?? null;
+      const resolvedIssueLink = issueLinkOverride ?? issueLink;
       const actionIsDefaultBranch =
         isDefaultBranchOverride ?? (featureBranch ? false : isDefaultBranch);
       const includesCommit =
@@ -93,6 +101,7 @@ export function useGitPanelStackedActions({
           includesCommit,
           ...(commitMessage ? { commitMessage } : {}),
           forcePushOnlyProgress,
+          ...(resolvedIssueLink ? { issueLink: resolvedIssueLink } : {}),
           ...(onConfirmed ? { onConfirmed } : {}),
         });
         return;
@@ -146,6 +155,7 @@ export function useGitPanelStackedActions({
           ...(commitMessage ? { commitMessage } : {}),
           ...(featureBranch ? { featureBranch } : {}),
           ...(targetBranch ? { targetBranch } : {}),
+          ...(resolvedIssueLink ? { issueLink: resolvedIssueLink } : {}),
         });
         stopProgressUpdates();
         const resultToast = summarizeGitResult(result);
@@ -189,6 +199,7 @@ export function useGitPanelStackedActions({
                       onConfirmed: closeResultToast,
                       statusOverride: actionStatus,
                       isDefaultBranchOverride: actionIsDefaultBranch,
+                      ...(resolvedIssueLink ? { issueLink: resolvedIssueLink } : {}),
                     });
                   },
                 },
@@ -216,6 +227,7 @@ export function useGitPanelStackedActions({
                           forcePushOnlyProgress: true,
                           statusOverride: actionStatus,
                           isDefaultBranchOverride: actionIsDefaultBranch,
+                          ...(resolvedIssueLink ? { issueLink: resolvedIssueLink } : {}),
                         });
                       },
                     },
@@ -235,6 +247,7 @@ export function useGitPanelStackedActions({
     [
       gitStatusForActions,
       isDefaultBranch,
+      issueLink,
       runImmediateGitAction,
       setPendingDefaultBranchAction,
       threadToastData,
@@ -243,13 +256,14 @@ export function useGitPanelStackedActions({
 
   const continuePendingDefaultBranchAction = useCallback(() => {
     if (!pendingDefaultBranchAction) return;
-    const { action, commitMessage, forcePushOnlyProgress, onConfirmed } =
+    const { action, commitMessage, forcePushOnlyProgress, issueLink, onConfirmed } =
       pendingDefaultBranchAction;
     setPendingDefaultBranchAction(null);
     void runGitActionWithToast({
       action,
       ...(commitMessage ? { commitMessage } : {}),
       forcePushOnlyProgress,
+      ...(issueLink ? { issueLink } : {}),
       ...(onConfirmed ? { onConfirmed } : {}),
       skipDefaultBranchPrompt: true,
     });
@@ -260,6 +274,7 @@ export function useGitPanelStackedActions({
       action: GitStackedAction;
       commitMessage?: string;
       forcePushOnlyProgress?: boolean;
+      issueLink?: GitHubIssueLink | null;
       onConfirmed?: () => void;
     }) => {
       void runGitActionWithToast({
@@ -273,13 +288,14 @@ export function useGitPanelStackedActions({
 
   const checkoutFeatureBranchAndContinuePendingAction = useCallback(() => {
     if (!pendingDefaultBranchAction) return;
-    const { action, commitMessage, forcePushOnlyProgress, onConfirmed } =
+    const { action, commitMessage, forcePushOnlyProgress, issueLink, onConfirmed } =
       pendingDefaultBranchAction;
     setPendingDefaultBranchAction(null);
     checkoutNewBranchAndRunAction({
       action,
       ...(commitMessage ? { commitMessage } : {}),
       forcePushOnlyProgress,
+      ...(issueLink ? { issueLink } : {}),
       ...(onConfirmed ? { onConfirmed } : {}),
     });
   }, [checkoutNewBranchAndRunAction, pendingDefaultBranchAction, setPendingDefaultBranchAction]);
