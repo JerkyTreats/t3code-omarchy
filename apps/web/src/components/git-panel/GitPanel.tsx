@@ -34,6 +34,7 @@ import {
   githubStatusQueryOptions,
   invalidateGitHubQueries,
 } from "~/lib/githubReactQuery";
+import { resolveGitHubIssueWorkflowState } from "~/githubIssueWorkflow";
 import {
   gitAbortMergeMutationOptions,
   gitBranchesQueryOptions,
@@ -58,6 +59,7 @@ import { readNativeApi } from "~/nativeApi";
 import { useComposerDraftStore } from "~/composerDraftStore";
 import { useStore } from "~/store";
 import { GitHubAuthSection } from "./GitHubAuthSection";
+import { GitHubLinkedIssueSection } from "./GitHubLinkedIssueSection";
 import { GitHubIssuesSection } from "./GitHubIssuesSection";
 import { GitSyncSection } from "./GitSyncSection";
 import { GitStatusDot } from "./GitStatusDot";
@@ -262,6 +264,31 @@ export default function GitPanel({
     () => buildMenuItems(gitStatusForActions, isGitActionRunning),
     [gitStatusForActions, isGitActionRunning],
   );
+  const issueWorkflowsByNumber = useMemo(() => {
+    const repoNameWithOwner = githubStatusQuery.data?.repo?.nameWithOwner ?? null;
+    const workflows = new Map<number, ReturnType<typeof resolveGitHubIssueWorkflowState>>();
+    for (const issue of githubIssuesQuery.data?.issues ?? []) {
+      workflows.set(
+        issue.number,
+        resolveGitHubIssueWorkflowState({
+          issue,
+          repoNameWithOwner,
+          threads,
+          activeThreadId,
+          activeIssueLink: activeThreadIssueLink,
+          activePr: gitStatusForActions?.pr ?? null,
+        }),
+      );
+    }
+    return workflows;
+  }, [
+    activeThreadId,
+    activeThreadIssueLink,
+    gitStatusForActions?.pr,
+    githubIssuesQuery.data?.issues,
+    githubStatusQuery.data?.repo?.nameWithOwner,
+    threads,
+  ]);
   const pendingDefaultBranchActionCopy = pendingDefaultBranchAction
     ? resolveDefaultBranchActionDialogCopy({
         action: pendingDefaultBranchAction.action,
@@ -963,6 +990,18 @@ export default function GitPanel({
               }}
             />
 
+            <GitHubLinkedIssueSection
+              visible={activeThreadIssueLink !== null}
+              issueLink={activeThreadIssueLink}
+              activePr={gitStatusForActions?.pr ?? null}
+              onOpenIssue={(url) => {
+                void openExternalUrl(url);
+              }}
+              onOpenPullRequest={(url) => {
+                void openExternalUrl(url);
+              }}
+            />
+
             {/* ============================================================ */}
             {/* ISSUES SECTION */}
             {/* ============================================================ */}
@@ -978,7 +1017,14 @@ export default function GitPanel({
               issuesDisabled={issuesDisabled}
               errorMessage={githubIssuesQuery.error?.message ?? null}
               issues={githubIssuesQuery.data?.issues ?? []}
+              workflowsByIssueNumber={issueWorkflowsByNumber}
               onOpenIssue={(url) => {
+                void openExternalUrl(url);
+              }}
+              onContinueIssueThread={(threadId) => {
+                void navigateToThread(threadId);
+              }}
+              onOpenPullRequest={(url) => {
                 void openExternalUrl(url);
               }}
               onResolveIssue={(issue) => {
