@@ -1570,6 +1570,56 @@ it.layer(TestLayer)("git integration", (it) => {
       }),
     );
 
+    it.effect("rejects push when the only publish remote is upstream", () =>
+      Effect.gen(function* () {
+        const tmp = yield* makeTmpDir();
+        const upstreamRemote = yield* makeTmpDir();
+        yield* git(tmp, ["init", "--initial-branch=main"]);
+        yield* git(tmp, ["config", "user.email", "test@test.com"]);
+        yield* git(tmp, ["config", "user.name", "Test"]);
+        yield* writeTextFile(path.join(tmp, "README.md"), "hello\n");
+        yield* git(tmp, ["add", "README.md"]);
+        yield* git(tmp, ["commit", "-m", "initial"]);
+        yield* git(upstreamRemote, ["init", "--bare"]);
+        yield* git(tmp, ["remote", "add", "upstream", upstreamRemote]);
+        yield* git(tmp, ["checkout", "-b", "feature/blocked-upstream-push"]);
+
+        const core = yield* GitCore;
+        const result = yield* Effect.result(core.pushCurrentBranch(tmp, null));
+        expect(result._tag).toBe("Failure");
+        if (result._tag === "Failure") {
+          expect(result.failure.message).toContain("upstream remote is blocked");
+        }
+      }),
+    );
+
+    it.effect("rejects push when the tracked upstream remote is upstream", () =>
+      Effect.gen(function* () {
+        const tmp = yield* makeTmpDir();
+        const upstreamRemote = yield* makeTmpDir();
+        yield* git(tmp, ["init", "--initial-branch=main"]);
+        yield* git(tmp, ["config", "user.email", "test@test.com"]);
+        yield* git(tmp, ["config", "user.name", "Test"]);
+        yield* writeTextFile(path.join(tmp, "README.md"), "hello\n");
+        yield* git(tmp, ["add", "README.md"]);
+        yield* git(tmp, ["commit", "-m", "initial"]);
+        yield* git(upstreamRemote, ["init", "--bare"]);
+        yield* git(tmp, ["remote", "add", "upstream", upstreamRemote]);
+        yield* git(tmp, ["checkout", "-b", "feature/tracked-upstream-push"]);
+        yield* git(tmp, ["push", "-u", "upstream", "feature/tracked-upstream-push"]);
+        yield* writeTextFile(path.join(tmp, "feature.txt"), "blocked\n");
+        yield* git(tmp, ["add", "feature.txt"]);
+        yield* git(tmp, ["commit", "-m", "blocked push"]);
+
+        const core = yield* GitCore;
+        const result = yield* Effect.result(core.pushCurrentBranch(tmp, null));
+        expect(result._tag).toBe("Failure");
+        if (result._tag === "Failure") {
+          expect(result.failure.message).toContain("upstream remote is blocked");
+        }
+      }),
+    );
+
     it.effect(
       "pushes with upstream setup when comparable base exists but remote branch is missing",
       () =>
@@ -1864,6 +1914,28 @@ it.layer(TestLayer)("git integration", (it) => {
 
         const skipped = yield* core.pullCurrentBranch(source);
         expect(skipped.status).toBe("skipped_up_to_date");
+      }),
+    );
+
+    it.effect("rejects pull when the tracked remote is upstream", () =>
+      Effect.gen(function* () {
+        const upstreamRemote = yield* makeTmpDir();
+        const source = yield* makeTmpDir();
+        yield* git(upstreamRemote, ["init", "--bare"]);
+
+        yield* initRepoWithCommit(source);
+        const initialBranch = (yield* listGitBranches({ cwd: source })).branches.find(
+          (branch) => branch.current,
+        )!.name;
+        yield* git(source, ["remote", "add", "upstream", upstreamRemote]);
+        yield* git(source, ["push", "-u", "upstream", initialBranch]);
+
+        const core = yield* GitCore;
+        const result = yield* Effect.result(core.pullCurrentBranch(source));
+        expect(result._tag).toBe("Failure");
+        if (result._tag === "Failure") {
+          expect(result.failure.message).toContain("upstream remote is blocked");
+        }
       }),
     );
 

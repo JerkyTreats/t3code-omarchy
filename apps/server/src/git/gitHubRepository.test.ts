@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { resolveGitHubRepositorySelector } from "./gitHubRepository.ts";
 
 describe("resolveGitHubRepositorySelector", () => {
-  it("prefers upstream before fork remotes", async () => {
+  it("prefers the fork origin over upstream", async () => {
     const config = new Map<string, string>([
       ["branch.statemachine.remote", "origin"],
       ["remote.origin.url", "git@github.com:octocat/codething-mvp.git"],
@@ -17,7 +17,7 @@ describe("resolveGitHubRepositorySelector", () => {
       }),
     );
 
-    expect(selector).toBe("pingdotgg/codething-mvp");
+    expect(selector).toBe("octocat/codething-mvp");
   });
 
   it("falls back to origin when upstream is missing", async () => {

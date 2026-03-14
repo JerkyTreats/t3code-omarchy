@@ -1409,7 +1409,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
     }),
   );
 
-  it.effect("creates PRs against the upstream repo when origin is a fork", () =>
+  it.effect("creates PRs against the fork origin when upstream is configured", () =>
     Effect.gen(function* () {
       const repoDir = yield* makeTempDir("t3code-git-manager-");
       yield* initRepo(repoDir);
@@ -1437,13 +1437,11 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         ghScenario: {
           prListSequence: [
             JSON.stringify([]),
-            JSON.stringify([]),
-            JSON.stringify([]),
             JSON.stringify([
               {
                 number: 188,
                 title: "Add stacked git actions",
-                url: "https://github.com/pingdotgg/codething-mvp/pull/188",
+                url: "https://github.com/octocat/codething-mvp/pull/188",
                 baseRefName: "main",
                 headRefName: "statemachine",
               },
@@ -1461,14 +1459,12 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
       expect(result.pr.number).toBe(188);
       expect(
         ghCalls.some((call) =>
-          call.includes(
-            "pr create --repo pingdotgg/codething-mvp --base main --head octocat:statemachine",
-          ),
+          call.includes("pr create --repo octocat/codething-mvp --base main --head statemachine"),
         ),
       ).toBe(true);
       expect(
         ghCalls.some((call) =>
-          call.includes("pr list --repo pingdotgg/codething-mvp --head octocat:statemachine"),
+          call.includes("pr list --repo octocat/codething-mvp --head statemachine"),
         ),
       ).toBe(true);
     }),

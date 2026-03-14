@@ -58,6 +58,10 @@ interface BranchHeadContext {
   isCrossRepository: boolean;
 }
 
+function isReservedUpstreamRemoteName(remoteName: string | null): boolean {
+  return remoteName?.trim().toLowerCase() === "upstream";
+}
+
 function parseRepositoryNameFromPullRequestUrl(url: string): string | null {
   const trimmed = url.trim();
   const match = /^https:\/\/github\.com\/[^/]+\/([^/]+)\/pull\/\d+(?:\/.*)?$/i.exec(trimmed);
@@ -467,7 +471,7 @@ export const makeGitManager = Effect.gen(function* () {
 
   const resolveRemoteRepositoryContext = (cwd: string, remoteName: string | null) =>
     Effect.gen(function* () {
-      if (!remoteName) {
+      if (!remoteName || isReservedUpstreamRemoteName(remoteName)) {
         return resolveRepositoryContext(null);
       }
 
@@ -483,7 +487,13 @@ export const makeGitManager = Effect.gen(function* () {
     baseRepositorySelector: string | null,
   ) =>
     Effect.gen(function* () {
-      const remoteName = yield* readConfigValueNullable(cwd, `branch.${details.branch}.remote`);
+      const configuredRemoteName = yield* readConfigValueNullable(
+        cwd,
+        `branch.${details.branch}.remote`,
+      );
+      const remoteName = isReservedUpstreamRemoteName(configuredRemoteName)
+        ? null
+        : configuredRemoteName;
       const headBranchFromUpstream = details.upstreamRef
         ? extractBranchFromRef(details.upstreamRef)
         : "";

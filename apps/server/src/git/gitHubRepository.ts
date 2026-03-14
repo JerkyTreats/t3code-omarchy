@@ -3,6 +3,7 @@ import { Effect } from "effect";
 import type { GitCoreShape } from "./Services/GitCore.ts";
 
 export const DEFAULT_GITHUB_HOSTNAME = "github.com";
+const RESERVED_UPSTREAM_REMOTE_NAME = "upstream";
 
 export function parseGitHubRepoSelector(remoteUrl: string, hostname: string): string | null {
   const trimmed = remoteUrl.trim();
@@ -59,6 +60,17 @@ function appendUnique(target: string[], value: string | null): void {
   target.push(value);
 }
 
+function appendProjectRemoteCandidate(target: string[], value: string | null): void {
+  const normalizedValue = value?.trim() ?? "";
+  if (
+    normalizedValue.length === 0 ||
+    normalizedValue.toLowerCase() === RESERVED_UPSTREAM_REMOTE_NAME
+  ) {
+    return;
+  }
+  appendUnique(target, normalizedValue);
+}
+
 export const resolveGitHubRepositorySelector = (
   cwd: string,
   gitCore: Pick<GitCoreShape, "readConfigValue">,
@@ -66,8 +78,7 @@ export const resolveGitHubRepositorySelector = (
 ) =>
   Effect.gen(function* () {
     const remoteNames: string[] = [];
-    appendUnique(remoteNames, "upstream");
-    appendUnique(remoteNames, "origin");
+    appendProjectRemoteCandidate(remoteNames, "origin");
 
     for (const remoteName of remoteNames) {
       const remoteUrl = yield* gitCore
