@@ -297,6 +297,24 @@ export default function GitPanel({
     githubStatusQuery.data?.repo?.nameWithOwner,
     threads,
   ]);
+  const canMarkIssueResolved = useMemo(() => {
+    if (!activeThreadIssueLink || activeThreadIssueLink.state !== "open") {
+      return false;
+    }
+    if (gitStatusForActions?.pr?.state === "open") {
+      return false;
+    }
+    if (gitStatusForActions?.hasWorkingTreeChanges) {
+      return false;
+    }
+    const latestTurnState = activeServerThread?.latestTurn?.state ?? null;
+    return latestTurnState !== "running";
+  }, [
+    activeServerThread?.latestTurn?.state,
+    activeThreadIssueLink,
+    gitStatusForActions?.hasWorkingTreeChanges,
+    gitStatusForActions?.pr?.state,
+  ]);
   const pendingDefaultBranchActionCopy = pendingDefaultBranchAction
     ? resolveDefaultBranchActionDialogCopy({
         action: pendingDefaultBranchAction.action,
@@ -407,7 +425,7 @@ export default function GitPanel({
           type: "success",
           title:
             nextState === "closed"
-              ? `Closed issue #${activeThreadIssueLink.number}`
+              ? `Marked issue #${activeThreadIssueLink.number} resolved`
               : `Reopened issue #${activeThreadIssueLink.number}`,
           data: threadToastData,
         });
@@ -416,7 +434,7 @@ export default function GitPanel({
           type: "error",
           title:
             nextState === "closed"
-              ? `Could not close issue #${activeThreadIssueLink.number}`
+              ? `Could not resolve issue #${activeThreadIssueLink.number}`
               : `Could not reopen issue #${activeThreadIssueLink.number}`,
           description: error instanceof Error ? error.message : "An error occurred.",
           data: threadToastData,
@@ -1075,6 +1093,7 @@ export default function GitPanel({
               visible={activeThreadIssueLink !== null}
               issueLink={activeThreadIssueLink}
               activePr={gitStatusForActions?.pr ?? null}
+              canMarkIssueResolved={canMarkIssueResolved}
               isClosingIssue={closeIssueMutation.isPending}
               isReopeningIssue={reopenIssueMutation.isPending}
               onOpenIssue={(url) => {

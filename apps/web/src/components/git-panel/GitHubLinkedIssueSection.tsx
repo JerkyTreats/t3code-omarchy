@@ -8,6 +8,7 @@ interface GitHubLinkedIssueSectionProps {
   visible: boolean;
   issueLink: GitHubIssueLink | null;
   activePr: GitStatusResult["pr"] | null;
+  canMarkIssueResolved: boolean;
   isClosingIssue: boolean;
   isReopeningIssue: boolean;
   onOpenIssue: (url: string) => void;
@@ -20,6 +21,7 @@ export function GitHubLinkedIssueSection({
   visible,
   issueLink,
   activePr,
+  canMarkIssueResolved,
   isClosingIssue,
   isReopeningIssue,
   onOpenIssue,
@@ -78,9 +80,9 @@ export function GitHubLinkedIssueSection({
               Open PR
             </Button>
           )}
-          {issueLink.state === "open" && activePr?.state !== "open" && (
+          {issueLink.state === "open" && canMarkIssueResolved && (
             <Button size="xs" className="h-6" disabled={isClosingIssue} onClick={onCloseIssue}>
-              {isClosingIssue ? "Closing..." : "Close issue"}
+              {isClosingIssue ? "Resolving..." : "Mark resolved"}
             </Button>
           )}
           {issueLink.state === "closed" && (

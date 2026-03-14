@@ -199,7 +199,7 @@ export function useGitPanelStackedActions({
           ...(shouldOfferCloseIssueCta
             ? {
                 actionProps: {
-                  children: "Close issue",
+                  children: "Mark resolved",
                   onClick: () => {
                     if (!resolvedIssueLink || !onCloseIssue) return;
                     closeResultToast();
