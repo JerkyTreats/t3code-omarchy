@@ -69,7 +69,7 @@ export function GitHubIssuesSection({
     <GitPanelSection
       title="Issues"
       collapsible
-      defaultOpen={false}
+      defaultOpen
       actions={
         <div className="flex gap-0.5">
           {(["open", "closed", "all"] as const).map((state) => (
