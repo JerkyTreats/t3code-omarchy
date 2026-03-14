@@ -609,6 +609,17 @@ const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
   );
 });
 
+const extendReplacementRangeForTrailingSpace = (
+  text: string,
+  rangeEnd: number,
+  replacement: string,
+): number => {
+  if (!replacement.endsWith(" ")) {
+    return rangeEnd;
+  }
+  return text[rangeEnd] === " " ? rangeEnd + 1 : rangeEnd;
+};
+
 interface ChatViewProps {
   threadId: ThreadId;
 }
