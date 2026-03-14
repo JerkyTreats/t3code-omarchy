@@ -168,6 +168,24 @@ export interface GitHubCliShape {
     readonly state?: "open" | "closed" | "all";
     readonly limit?: number;
   }) => Effect.Effect<ReadonlyArray<GitHubIssueSummary>, GitHubCliError>;
+
+  /**
+   * Close an issue by number.
+   */
+  readonly closeIssue: (input: {
+    readonly cwd?: string;
+    readonly repo?: string;
+    readonly issueNumber: number;
+  }) => Effect.Effect<{ readonly number: number; readonly state: "closed" }, GitHubCliError>;
+
+  /**
+   * Reopen an issue by number.
+   */
+  readonly reopenIssue: (input: {
+    readonly cwd?: string;
+    readonly repo?: string;
+    readonly issueNumber: number;
+  }) => Effect.Effect<{ readonly number: number; readonly state: "open" }, GitHubCliError>;
 }
 
 /**

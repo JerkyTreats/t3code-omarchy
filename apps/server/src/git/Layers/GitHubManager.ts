@@ -1,4 +1,5 @@
 import type {
+  GitHubIssueMutationInput,
   GitHubListIssuesResult,
   GitHubStatusInput,
   GitHubStatusResult,
@@ -136,10 +137,57 @@ const makeGitHubManager = Effect.gen(function* () {
     } satisfies GitHubListIssuesResult;
   });
 
+  const requireRepositorySelector = (
+    input: GitHubIssueMutationInput,
+    operation: "closeIssue" | "reopenIssue",
+  ) =>
+    Effect.gen(function* () {
+      if (input.repo) {
+        return input.repo;
+      }
+      if (input.cwd === null) {
+        return yield* new GitHubCliError({
+          operation,
+          detail: "Select a project before updating a GitHub issue.",
+        });
+      }
+      const repositorySelector = yield* resolveRepositorySelector(
+        input.cwd,
+        DEFAULT_GITHUB_HOSTNAME,
+      );
+      if (!repositorySelector) {
+        return yield* new GitHubCliError({
+          operation,
+          detail: "Could not resolve a GitHub repository for this project.",
+        });
+      }
+      return repositorySelector;
+    });
+
+  const closeIssue: GitHubManagerShape["closeIssue"] = Effect.fnUntraced(function* (input) {
+    const repo = yield* requireRepositorySelector(input, "closeIssue");
+    return yield* gitHubCli.closeIssue({
+      ...(input.cwd !== null ? { cwd: input.cwd } : {}),
+      repo,
+      issueNumber: input.issueNumber,
+    });
+  });
+
+  const reopenIssue: GitHubManagerShape["reopenIssue"] = Effect.fnUntraced(function* (input) {
+    const repo = yield* requireRepositorySelector(input, "reopenIssue");
+    return yield* gitHubCli.reopenIssue({
+      ...(input.cwd !== null ? { cwd: input.cwd } : {}),
+      repo,
+      issueNumber: input.issueNumber,
+    });
+  });
+
   return {
     status,
     login,
     listIssues,
+    closeIssue,
+    reopenIssue,
   } satisfies GitHubManagerShape;
 });
 

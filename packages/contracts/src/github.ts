@@ -69,6 +69,13 @@ export const GitHubListIssuesInput = Schema.Struct({
 });
 export type GitHubListIssuesInput = typeof GitHubListIssuesInput.Type;
 
+export const GitHubIssueMutationInput = Schema.Struct({
+  cwd: Schema.NullOr(TrimmedNonEmptyString),
+  repo: Schema.optional(TrimmedNonEmptyString),
+  issueNumber: PositiveInt,
+});
+export type GitHubIssueMutationInput = typeof GitHubIssueMutationInput.Type;
+
 export const GitHubStatusResult = Schema.Struct({
   installed: Schema.Boolean,
   authenticated: Schema.Boolean,
@@ -86,5 +93,11 @@ export const GitHubListIssuesResult = Schema.Struct({
   issues: Schema.Array(GitHubIssue),
 });
 export type GitHubListIssuesResult = typeof GitHubListIssuesResult.Type;
+
+export const GitHubIssueMutationResult = Schema.Struct({
+  number: PositiveInt,
+  state: GitHubIssueState,
+});
+export type GitHubIssueMutationResult = typeof GitHubIssueMutationResult.Type;
 
 export type GitHubIssueListState = typeof GitHubIssueListState.Type;

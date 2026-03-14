@@ -72,3 +72,43 @@ export function githubLoginMutationOptions(input: {
     },
   });
 }
+
+export function githubCloseIssueMutationOptions(input: {
+  cwd: string | null;
+  queryClient: QueryClient;
+}) {
+  return mutationOptions({
+    mutationKey: ["github", "mutation", "close-issue", input.cwd] as const,
+    mutationFn: async ({ issueNumber, repo }: { issueNumber: number; repo?: string }) => {
+      const api = ensureNativeApi();
+      return api.github.closeIssue({
+        cwd: input.cwd,
+        issueNumber,
+        ...(repo ? { repo } : {}),
+      });
+    },
+    onSuccess: async () => {
+      await invalidateGitHubQueries(input.queryClient);
+    },
+  });
+}
+
+export function githubReopenIssueMutationOptions(input: {
+  cwd: string | null;
+  queryClient: QueryClient;
+}) {
+  return mutationOptions({
+    mutationKey: ["github", "mutation", "reopen-issue", input.cwd] as const,
+    mutationFn: async ({ issueNumber, repo }: { issueNumber: number; repo?: string }) => {
+      const api = ensureNativeApi();
+      return api.github.reopenIssue({
+        cwd: input.cwd,
+        issueNumber,
+        ...(repo ? { repo } : {}),
+      });
+    },
+    onSuccess: async () => {
+      await invalidateGitHubQueries(input.queryClient);
+    },
+  });
+}

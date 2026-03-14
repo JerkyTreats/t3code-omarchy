@@ -616,6 +616,26 @@ const makeGitHubCli = Effect.sync(() => {
           }),
         ),
       ),
+    closeIssue: (input) =>
+      execute({
+        ...(input.cwd ? { cwd: input.cwd } : {}),
+        args: [
+          "issue",
+          "close",
+          String(input.issueNumber),
+          ...(input.repo ? ["--repo", input.repo] : []),
+        ],
+      }).pipe(Effect.as({ number: input.issueNumber, state: "closed" as const })),
+    reopenIssue: (input) =>
+      execute({
+        ...(input.cwd ? { cwd: input.cwd } : {}),
+        args: [
+          "issue",
+          "reopen",
+          String(input.issueNumber),
+          ...(input.repo ? ["--repo", input.repo] : []),
+        ],
+      }).pipe(Effect.as({ number: input.issueNumber, state: "open" as const })),
   } satisfies GitHubCliShape;
 
   return service;

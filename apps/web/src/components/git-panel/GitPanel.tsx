@@ -29,8 +29,10 @@ import { Button } from "~/components/ui/button";
 import { ScrollArea } from "~/components/ui/scroll-area";
 import { toastManager } from "~/components/ui/toast";
 import {
+  githubCloseIssueMutationOptions,
   githubIssuesQueryOptions,
   githubLoginMutationOptions,
+  githubReopenIssueMutationOptions,
   githubStatusQueryOptions,
   invalidateGitHubQueries,
 } from "~/lib/githubReactQuery";
@@ -178,6 +180,12 @@ export default function GitPanel({
 
   const initMutation = useMutation(gitInitMutationOptions({ cwd: workspaceCwd, queryClient }));
   const loginMutation = useMutation(githubLoginMutationOptions({ cwd: repoCwd, queryClient }));
+  const closeIssueMutation = useMutation(
+    githubCloseIssueMutationOptions({ cwd: repoCwd, queryClient }),
+  );
+  const reopenIssueMutation = useMutation(
+    githubReopenIssueMutationOptions({ cwd: repoCwd, queryClient }),
+  );
   const createWorktreeMutation = useMutation(gitCreateWorktreeMutationOptions({ queryClient }));
   const removeWorktreeMutation = useMutation(gitRemoveWorktreeMutationOptions({ queryClient }));
 
@@ -353,6 +361,76 @@ export default function GitPanel({
       }
     },
     [activeThreadId, navigate],
+  );
+  const syncActiveIssueLinkState = useCallback(
+    async (nextState: "open" | "closed") => {
+      const api = readNativeApi();
+      if (!api || !activeThreadId || !activeThreadIssueLink) {
+        return;
+      }
+
+      await api.orchestration.dispatchCommand({
+        type: "thread.meta.update",
+        commandId: newCommandId(),
+        threadId: activeThreadId,
+        issueLink: {
+          ...activeThreadIssueLink,
+          state: nextState,
+        },
+      });
+      const snapshot = await api.orchestration.getSnapshot();
+      syncServerReadModel(snapshot);
+    },
+    [activeThreadId, activeThreadIssueLink, syncServerReadModel],
+  );
+  const updateActiveIssueState = useCallback(
+    async (nextState: "open" | "closed") => {
+      if (!repoCwd || !activeThreadIssueLink) {
+        return;
+      }
+
+      try {
+        if (nextState === "closed") {
+          await closeIssueMutation.mutateAsync({
+            issueNumber: activeThreadIssueLink.number,
+            repo: activeThreadIssueLink.repoNameWithOwner,
+          });
+        } else {
+          await reopenIssueMutation.mutateAsync({
+            issueNumber: activeThreadIssueLink.number,
+            repo: activeThreadIssueLink.repoNameWithOwner,
+          });
+        }
+
+        await syncActiveIssueLinkState(nextState);
+        toastManager.add({
+          type: "success",
+          title:
+            nextState === "closed"
+              ? `Closed issue #${activeThreadIssueLink.number}`
+              : `Reopened issue #${activeThreadIssueLink.number}`,
+          data: threadToastData,
+        });
+      } catch (error) {
+        toastManager.add({
+          type: "error",
+          title:
+            nextState === "closed"
+              ? `Could not close issue #${activeThreadIssueLink.number}`
+              : `Could not reopen issue #${activeThreadIssueLink.number}`,
+          description: error instanceof Error ? error.message : "An error occurred.",
+          data: threadToastData,
+        });
+      }
+    },
+    [
+      activeThreadIssueLink,
+      closeIssueMutation,
+      repoCwd,
+      reopenIssueMutation,
+      syncActiveIssueLinkState,
+      threadToastData,
+    ],
   );
   const startIssueWorkspaceThread = useCallback(
     async (issue: GitHubIssue) => {
@@ -611,6 +689,9 @@ export default function GitPanel({
     gitStatusForActions,
     isDefaultBranch,
     issueLink: activeThreadIssueLink,
+    onCloseIssue: async () => {
+      await updateActiveIssueState("closed");
+    },
     pendingDefaultBranchAction,
     runImmediateGitAction: runImmediateGitActionMutation.mutateAsync,
     setPendingDefaultBranchAction,
@@ -994,11 +1075,19 @@ export default function GitPanel({
               visible={activeThreadIssueLink !== null}
               issueLink={activeThreadIssueLink}
               activePr={gitStatusForActions?.pr ?? null}
+              isClosingIssue={closeIssueMutation.isPending}
+              isReopeningIssue={reopenIssueMutation.isPending}
               onOpenIssue={(url) => {
                 void openExternalUrl(url);
               }}
               onOpenPullRequest={(url) => {
                 void openExternalUrl(url);
+              }}
+              onCloseIssue={() => {
+                void updateActiveIssueState("closed");
+              }}
+              onReopenIssue={() => {
+                void updateActiveIssueState("open");
               }}
             />
 

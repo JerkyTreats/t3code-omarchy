@@ -45,6 +45,7 @@ interface UseGitPanelStackedActionsInput {
   gitStatusForActions: GitStatusResult | null;
   isDefaultBranch: boolean;
   issueLink: GitHubIssueLink | null;
+  onCloseIssue?: (issueLink: GitHubIssueLink) => Promise<void>;
   pendingDefaultBranchAction: PendingDefaultBranchAction | null;
   runImmediateGitAction: (input: {
     action: GitStackedAction;
@@ -61,6 +62,7 @@ export function useGitPanelStackedActions({
   gitStatusForActions,
   isDefaultBranch,
   issueLink,
+  onCloseIssue,
   pendingDefaultBranchAction,
   runImmediateGitAction,
   setPendingDefaultBranchAction,
@@ -175,6 +177,12 @@ export function useGitPanelStackedActions({
           !prUrl &&
           result.push.status === "pushed" &&
           !actionIsDefaultBranch;
+        const shouldOfferCloseIssueCta =
+          result.promote.status === "promoted" &&
+          !!resolvedIssueLink &&
+          resolvedIssueLink.state === "open" &&
+          actionStatus?.pr?.state !== "open" &&
+          !!onCloseIssue;
         const closeResultToast = () => {
           toastManager.close(resolvedProgressToastId);
         };
@@ -188,51 +196,62 @@ export function useGitPanelStackedActions({
             ...threadToastData,
             dismissAfterVisibleMs: 10_000,
           },
-          ...(shouldOfferPushCta
+          ...(shouldOfferCloseIssueCta
             ? {
                 actionProps: {
-                  children: "Push",
+                  children: "Close issue",
                   onClick: () => {
-                    void runGitActionWithToast({
-                      action: "commit_push",
-                      forcePushOnlyProgress: true,
-                      onConfirmed: closeResultToast,
-                      statusOverride: actionStatus,
-                      isDefaultBranchOverride: actionIsDefaultBranch,
-                      ...(resolvedIssueLink ? { issueLink: resolvedIssueLink } : {}),
-                    });
+                    if (!resolvedIssueLink || !onCloseIssue) return;
+                    closeResultToast();
+                    void onCloseIssue(resolvedIssueLink);
                   },
                 },
               }
-            : shouldOfferOpenPrCta
+            : shouldOfferPushCta
               ? {
                   actionProps: {
-                    children: "Open PR",
+                    children: "Push",
                     onClick: () => {
-                      const api = readNativeApi();
-                      if (!api) return;
-                      closeResultToast();
-                      void api.shell.openExternal(prUrl);
+                      void runGitActionWithToast({
+                        action: "commit_push",
+                        forcePushOnlyProgress: true,
+                        onConfirmed: closeResultToast,
+                        statusOverride: actionStatus,
+                        isDefaultBranchOverride: actionIsDefaultBranch,
+                        ...(resolvedIssueLink ? { issueLink: resolvedIssueLink } : {}),
+                      });
                     },
                   },
                 }
-              : shouldOfferCreatePrCta
+              : shouldOfferOpenPrCta
                 ? {
                     actionProps: {
-                      children: "Create PR",
+                      children: "Open PR",
                       onClick: () => {
+                        const api = readNativeApi();
+                        if (!api) return;
                         closeResultToast();
-                        void runGitActionWithToast({
-                          action: "commit_push_pr",
-                          forcePushOnlyProgress: true,
-                          statusOverride: actionStatus,
-                          isDefaultBranchOverride: actionIsDefaultBranch,
-                          ...(resolvedIssueLink ? { issueLink: resolvedIssueLink } : {}),
-                        });
+                        void api.shell.openExternal(prUrl);
                       },
                     },
                   }
-                : {}),
+                : shouldOfferCreatePrCta
+                  ? {
+                      actionProps: {
+                        children: "Create PR",
+                        onClick: () => {
+                          closeResultToast();
+                          void runGitActionWithToast({
+                            action: "commit_push_pr",
+                            forcePushOnlyProgress: true,
+                            statusOverride: actionStatus,
+                            isDefaultBranchOverride: actionIsDefaultBranch,
+                            ...(resolvedIssueLink ? { issueLink: resolvedIssueLink } : {}),
+                          });
+                        },
+                      },
+                    }
+                  : {}),
         });
       } catch (err) {
         stopProgressUpdates();
@@ -248,6 +267,7 @@ export function useGitPanelStackedActions({
       gitStatusForActions,
       isDefaultBranch,
       issueLink,
+      onCloseIssue,
       runImmediateGitAction,
       setPendingDefaultBranchAction,
       threadToastData,

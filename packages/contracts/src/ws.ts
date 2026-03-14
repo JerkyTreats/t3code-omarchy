@@ -27,7 +27,12 @@ import {
   GitRunStackedActionInput,
   GitStatusInput,
 } from "./git";
-import { GitHubListIssuesInput, GitHubLoginInput, GitHubStatusInput } from "./github";
+import {
+  GitHubIssueMutationInput,
+  GitHubListIssuesInput,
+  GitHubLoginInput,
+  GitHubStatusInput,
+} from "./github";
 import {
   TerminalClearInput,
   TerminalCloseInput,
@@ -75,6 +80,8 @@ export const WS_METHODS = {
   githubStatus: "github.status",
   githubLogin: "github.login",
   githubListIssues: "github.listIssues",
+  githubCloseIssue: "github.closeIssue",
+  githubReopenIssue: "github.reopenIssue",
 
   // Terminal methods
   terminalOpen: "terminal.open",
@@ -147,6 +154,8 @@ const WebSocketRequestBody = Schema.Union([
   tagRequestBody(WS_METHODS.githubStatus, GitHubStatusInput),
   tagRequestBody(WS_METHODS.githubLogin, GitHubLoginInput),
   tagRequestBody(WS_METHODS.githubListIssues, GitHubListIssuesInput),
+  tagRequestBody(WS_METHODS.githubCloseIssue, GitHubIssueMutationInput),
+  tagRequestBody(WS_METHODS.githubReopenIssue, GitHubIssueMutationInput),
 
   // Terminal methods
   tagRequestBody(WS_METHODS.terminalOpen, TerminalOpenInput),

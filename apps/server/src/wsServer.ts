@@ -869,6 +869,16 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
         return yield* gitHubManager.listIssues(body);
       }
 
+      case WS_METHODS.githubCloseIssue: {
+        const body = stripRequestTag(request.body);
+        return yield* gitHubManager.closeIssue(body);
+      }
+
+      case WS_METHODS.githubReopenIssue: {
+        const body = stripRequestTag(request.body);
+        return yield* gitHubManager.reopenIssue(body);
+      }
+
       case WS_METHODS.terminalOpen: {
         const body = stripRequestTag(request.body);
         return yield* terminalManager.open(body);

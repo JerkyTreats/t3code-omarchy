@@ -60,6 +60,16 @@ function makeLayer(input?: { repoCalls?: string[]; issueCalls?: string[] }) {
       input?.issueCalls?.push(request.repo ?? "");
       return Effect.succeed([]);
     },
+    closeIssue: (request) =>
+      Effect.succeed({
+        number: request.issueNumber,
+        state: "closed" as const,
+      }),
+    reopenIssue: (request) =>
+      Effect.succeed({
+        number: request.issueNumber,
+        state: "open" as const,
+      }),
   };
 
   const remoteUrls = new Map<string, string>([

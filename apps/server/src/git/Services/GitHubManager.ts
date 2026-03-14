@@ -1,4 +1,6 @@
 import type {
+  GitHubIssueMutationInput,
+  GitHubIssueMutationResult,
   GitHubListIssuesInput,
   GitHubListIssuesResult,
   GitHubLoginInput,
@@ -16,6 +18,12 @@ export interface GitHubManagerShape {
   readonly listIssues: (
     input: GitHubListIssuesInput,
   ) => Effect.Effect<GitHubListIssuesResult, GitHubCliError>;
+  readonly closeIssue: (
+    input: GitHubIssueMutationInput,
+  ) => Effect.Effect<GitHubIssueMutationResult, GitHubCliError>;
+  readonly reopenIssue: (
+    input: GitHubIssueMutationInput,
+  ) => Effect.Effect<GitHubIssueMutationResult, GitHubCliError>;
 }
 
 export class GitHubManager extends ServiceMap.Service<GitHubManager, GitHubManagerShape>()(
