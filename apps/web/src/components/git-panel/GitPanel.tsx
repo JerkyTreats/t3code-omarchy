@@ -1,4 +1,11 @@
-import type { GitMergeBranchesResult, ThreadId } from "@t3tools/contracts";
+import {
+  DEFAULT_MODEL_BY_PROVIDER,
+  DEFAULT_PROVIDER_INTERACTION_MODE,
+  DEFAULT_RUNTIME_MODE,
+  type GitHubIssue,
+  type GitMergeBranchesResult,
+  ThreadId,
+} from "@t3tools/contracts";
 import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
@@ -40,7 +47,12 @@ import {
   gitStatusQueryOptions,
   invalidateGitQueries,
 } from "~/lib/gitReactQuery";
-import { cn } from "~/lib/utils";
+import {
+  buildIssueResolutionPrompt,
+  buildIssueThreadTitle,
+  buildIssueWorkspaceBranchName,
+} from "~/githubIssueThreads";
+import { cn, newCommandId, newMessageId, newThreadId } from "~/lib/utils";
 import { preferredTerminalEditor, resolvePathLinkTarget } from "~/terminal-links";
 import { readNativeApi } from "~/nativeApi";
 import { useComposerDraftStore } from "~/composerDraftStore";
@@ -92,8 +104,10 @@ export default function GitPanel({
   activeThreadId,
 }: GitPanelProps) {
   const navigate = useNavigate();
+  const projects = useStore((store) => store.projects);
   const threads = useStore((store) => store.threads);
   const setThreadBranchAction = useStore((store) => store.setThreadBranch);
+  const syncServerReadModel = useStore((store) => store.syncServerReadModel);
   const activeServerThread = useMemo(
     () => threads.find((thread) => thread.id === activeThreadId) ?? null,
     [activeThreadId, threads],
@@ -131,8 +145,13 @@ export default function GitPanel({
   const [mergeExpanded] = useState(false);
   const [promotionTargetBranch] = useState<string | null>(null);
   const [isPromoteDialogOpen, setIsPromoteDialogOpen] = useState(false);
+  const [resolvingIssueNumber, setResolvingIssueNumber] = useState<number | null>(null);
   const primaryWorkspaceStatusCwd =
     workspaceCwd !== null && repoRoot !== null && workspaceCwd !== repoRoot ? repoRoot : null;
+  const activeProject = useMemo(
+    () => projects.find((project) => project.id === activeProjectId) ?? null,
+    [activeProjectId, projects],
+  );
 
   const { data: gitStatus = null, error: gitStatusError } = useQuery(
     gitStatusQueryOptions(workspaceCwd),
@@ -201,6 +220,12 @@ export default function GitPanel({
     [localBranches],
   );
   const activeWorkspaceBranch = gitStatusForActions?.branch ?? currentBranch;
+  const issueThreadRuntimeMode =
+    activeServerThread?.runtimeMode ?? activeDraftThread?.runtimeMode ?? DEFAULT_RUNTIME_MODE;
+  const issueThreadInteractionMode =
+    activeServerThread?.interactionMode ??
+    activeDraftThread?.interactionMode ??
+    DEFAULT_PROVIDER_INTERACTION_MODE;
   const activeWorkspaceBranchMeta = useMemo(
     () => localBranches.find((branch) => branch.name === activeWorkspaceBranch) ?? null,
     [activeWorkspaceBranch, localBranches],
@@ -300,6 +325,158 @@ export default function GitPanel({
       }
     },
     [activeThreadId, navigate],
+  );
+  const startIssueWorkspaceThread = useCallback(
+    async (issue: GitHubIssue) => {
+      const api = readNativeApi();
+      if (!api || !repoCwd || !activeProject) {
+        toastManager.add({
+          type: "error",
+          title: "Issue workspaces unavailable",
+          description: "Open a project backed thread before starting an issue workspace.",
+          data: threadToastData,
+        });
+        return;
+      }
+
+      const localBranchNames = localBranches.map((branch) => branch.name);
+      const repoDefaultBranch = githubStatusQuery.data?.repo?.defaultBranch ?? null;
+      const baseBranch =
+        repoDefaultBranch && localBranchNames.includes(repoDefaultBranch)
+          ? repoDefaultBranch
+          : (defaultBranch ?? activeWorkspaceBranch ?? null);
+
+      if (!baseBranch) {
+        toastManager.add({
+          type: "error",
+          title: "No base branch available",
+          description: "Fetch or create a base branch before starting an issue workspace.",
+          data: threadToastData,
+        });
+        return;
+      }
+
+      const threadId = newThreadId();
+      const createdAt = new Date().toISOString();
+      const branchName = buildIssueWorkspaceBranchName(issue, localBranchNames);
+      const prompt = buildIssueResolutionPrompt({
+        issue,
+        baseBranch,
+        repoNameWithOwner: githubStatusQuery.data?.repo?.nameWithOwner ?? null,
+      });
+      const title = buildIssueThreadTitle(issue);
+      const model =
+        activeServerThread?.model ?? activeProject.model ?? DEFAULT_MODEL_BY_PROVIDER.codex;
+      const provider = activeServerThread?.session?.provider;
+
+      setResolvingIssueNumber(issue.number);
+
+      let createdThread = false;
+      let worktreePath: string | null = null;
+      try {
+        const worktreeResult = await createWorktreeMutation.mutateAsync({
+          cwd: repoCwd,
+          branch: baseBranch,
+          newBranch: branchName,
+        });
+        worktreePath = worktreeResult.worktree.path;
+
+        await api.orchestration.dispatchCommand({
+          type: "thread.create",
+          commandId: newCommandId(),
+          threadId,
+          projectId: activeProject.id,
+          title,
+          model,
+          runtimeMode: issueThreadRuntimeMode,
+          interactionMode: issueThreadInteractionMode,
+          branch: worktreeResult.worktree.branch,
+          worktreePath: worktreeResult.worktree.path,
+          createdAt,
+        });
+        createdThread = true;
+
+        await api.orchestration.dispatchCommand({
+          type: "thread.turn.start",
+          commandId: newCommandId(),
+          threadId,
+          message: {
+            messageId: newMessageId(),
+            role: "user",
+            text: prompt,
+            attachments: [],
+          },
+          ...(provider ? { provider } : {}),
+          runtimeMode: issueThreadRuntimeMode,
+          interactionMode: issueThreadInteractionMode,
+          createdAt,
+        });
+
+        const snapshot = await api.orchestration.getSnapshot();
+        syncServerReadModel(snapshot);
+        await navigateToThread(threadId);
+        toastManager.add({
+          type: "success",
+          title: `Started issue workspace for #${issue.number}`,
+          description: worktreeResult.worktree.branch,
+          data: { threadId },
+        });
+      } catch (error) {
+        if (createdThread) {
+          await api.orchestration
+            .dispatchCommand({
+              type: "thread.delete",
+              commandId: newCommandId(),
+              threadId,
+            })
+            .catch(() => undefined);
+        }
+        if (worktreePath) {
+          await removeWorktreeMutation
+            .mutateAsync({
+              cwd: repoCwd,
+              path: worktreePath,
+              force: true,
+            })
+            .catch(() => undefined);
+        }
+        await api.orchestration
+          .getSnapshot()
+          .then((snapshot) => {
+            syncServerReadModel(snapshot);
+          })
+          .catch(() => undefined);
+        toastManager.add({
+          type: "error",
+          title: `Could not start issue workspace for #${issue.number}`,
+          description:
+            error instanceof Error
+              ? error.message
+              : "An error occurred while creating the issue workspace.",
+          data: threadToastData,
+        });
+      } finally {
+        setResolvingIssueNumber(null);
+      }
+    },
+    [
+      activeProject,
+      activeServerThread?.model,
+      activeServerThread?.session?.provider,
+      activeWorkspaceBranch,
+      createWorktreeMutation,
+      defaultBranch,
+      githubStatusQuery.data?.repo?.defaultBranch,
+      githubStatusQuery.data?.repo?.nameWithOwner,
+      issueThreadInteractionMode,
+      issueThreadRuntimeMode,
+      localBranches,
+      navigateToThread,
+      removeWorktreeMutation,
+      repoCwd,
+      syncServerReadModel,
+      threadToastData,
+    ],
   );
   const { focusDraftThread, focusPrimaryWorkspaceDraft, persistThreadWorkspaceContext } =
     useGitPanelThreadRouting({
@@ -792,6 +969,10 @@ export default function GitPanel({
               onOpenIssue={(url) => {
                 void openExternalUrl(url);
               }}
+              onResolveIssue={(issue) => {
+                void startIssueWorkspaceThread(issue);
+              }}
+              resolvingIssueNumber={resolvingIssueNumber}
             />
           </div>
         </ScrollArea>

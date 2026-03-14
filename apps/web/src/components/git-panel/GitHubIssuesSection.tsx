@@ -36,6 +36,8 @@ interface GitHubIssuesSectionProps {
   errorMessage: string | null;
   issues: readonly GitHubIssue[];
   onOpenIssue: (url: string) => void;
+  onResolveIssue: (issue: GitHubIssue) => void;
+  resolvingIssueNumber: number | null;
 }
 
 export function GitHubIssuesSection({
@@ -48,6 +50,8 @@ export function GitHubIssuesSection({
   errorMessage,
   issues,
   onOpenIssue,
+  onResolveIssue,
+  resolvingIssueNumber,
 }: GitHubIssuesSectionProps) {
   if (!visible) {
     return null;
@@ -83,27 +87,40 @@ export function GitHubIssuesSection({
       ) : issues.length > 0 ? (
         <div className="space-y-1">
           {issues.map((issue) => (
-            <button
-              type="button"
+            <div
               key={issue.number}
-              className="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-accent/50"
-              onClick={() => onOpenIssue(issue.url)}
+              className="flex items-start gap-2 rounded-md px-2 py-1.5 transition-colors hover:bg-accent/50"
             >
-              <span className="shrink-0 font-mono text-xs text-muted-foreground">
-                #{issue.number}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm">{issue.title}</p>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  {issue.author && <span>@{issue.author}</span>}
-                  <span>{formatGitHubTimestamp(issue.updatedAt)}</span>
+              <button
+                type="button"
+                className="flex min-w-0 flex-1 items-start gap-2 text-left"
+                onClick={() => onOpenIssue(issue.url)}
+              >
+                <span className="shrink-0 font-mono text-xs text-muted-foreground">
+                  #{issue.number}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm">{issue.title}</p>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    {issue.author && <span>@{issue.author}</span>}
+                    <span>{formatGitHubTimestamp(issue.updatedAt)}</span>
+                  </div>
                 </div>
-              </div>
-              <GitStatusDot
-                level={issue.state === "open" ? "success" : "neutral"}
-                className="mt-1.5"
-              />
-            </button>
+                <GitStatusDot
+                  level={issue.state === "open" ? "success" : "neutral"}
+                  className="mt-1.5"
+                />
+              </button>
+              <Button
+                size="xs"
+                variant="outline"
+                className="h-6 shrink-0"
+                disabled={resolvingIssueNumber !== null}
+                onClick={() => onResolveIssue(issue)}
+              >
+                {resolvingIssueNumber === issue.number ? "Starting..." : "Resolve"}
+              </Button>
+            </div>
           ))}
         </div>
       ) : (

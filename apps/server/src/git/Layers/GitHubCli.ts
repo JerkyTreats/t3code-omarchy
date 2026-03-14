@@ -271,6 +271,7 @@ function parseIssues(raw: string): ReadonlyArray<{
   title: string;
   state: "open" | "closed";
   url: string;
+  body: string | null;
   createdAt: string;
   updatedAt: string;
   labels: ReadonlyArray<{
@@ -295,6 +296,7 @@ function parseIssues(raw: string): ReadonlyArray<{
     title: string;
     state: "open" | "closed";
     url: string;
+    body: string | null;
     createdAt: string;
     updatedAt: string;
     labels: ReadonlyArray<{
@@ -317,6 +319,7 @@ function parseIssues(raw: string): ReadonlyArray<{
     const number = record.number;
     const title = record.title;
     const url = record.url;
+    const body = record.body;
     const createdAt = record.createdAt;
     const updatedAt = record.updatedAt;
 
@@ -378,6 +381,7 @@ function parseIssues(raw: string): ReadonlyArray<{
       title,
       state: normalizedState,
       url,
+      body: typeof body === "string" ? body : null,
       createdAt,
       updatedAt,
       labels,
@@ -593,7 +597,7 @@ const makeGitHubCli = Effect.sync(() => {
           "--limit",
           String(input.limit ?? 25),
           "--json",
-          "number,title,state,url,createdAt,updatedAt,labels,assignees,author",
+          "number,title,state,url,body,createdAt,updatedAt,labels,assignees,author",
         ],
       }).pipe(
         Effect.map((result) => result.stdout),

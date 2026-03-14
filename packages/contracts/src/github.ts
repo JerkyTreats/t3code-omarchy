@@ -31,6 +31,7 @@ export const GitHubIssue = Schema.Struct({
   title: TrimmedNonEmptyString,
   state: GitHubIssueState,
   url: Schema.String,
+  body: Schema.NullOr(Schema.String),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
   labels: Schema.Array(GitHubIssueLabel),

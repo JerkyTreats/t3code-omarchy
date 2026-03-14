@@ -1,4 +1,5 @@
 import { Cache, Data, Duration, Effect, Exit, FileSystem, Layer, Path } from "effect";
+import { buildWorktreeDirectoryName, resolveUniqueBranchName } from "@t3tools/shared/git";
 
 import { GitCommandError } from "../Errors.ts";
 import { GitService } from "../Services/GitService.ts";
@@ -314,25 +315,8 @@ const makeGitCore = Effect.gen(function* () {
     desiredBranch: string,
   ): Effect.Effect<string, GitCommandError> =>
     Effect.gen(function* () {
-      const isDesiredTaken = yield* branchExists(cwd, desiredBranch);
-      if (!isDesiredTaken) {
-        return desiredBranch;
-      }
-
-      for (let suffix = 1; suffix <= 100; suffix += 1) {
-        const candidate = `${desiredBranch}-${suffix}`;
-        const isCandidateTaken = yield* branchExists(cwd, candidate);
-        if (!isCandidateTaken) {
-          return candidate;
-        }
-      }
-
-      return yield* createGitCommandError(
-        "GitCore.renameBranch",
-        cwd,
-        ["branch", "-m", "--", desiredBranch],
-        `Could not find an available branch name for '${desiredBranch}'.`,
-      );
+      const localBranchNames = yield* listLocalBranchNames(cwd);
+      return resolveUniqueBranchName(localBranchNames, desiredBranch);
     });
 
   const resolveCurrentUpstream = (
@@ -1315,11 +1299,11 @@ const makeGitCore = Effect.gen(function* () {
   const createWorktree: GitCoreShape["createWorktree"] = (input) =>
     Effect.gen(function* () {
       const targetBranch = input.newBranch ?? input.branch;
-      const sanitizedBranch = targetBranch.replace(/\//g, "-");
       const repoName = path.basename(input.cwd);
       const homeDir = process.env.HOME ?? process.env.USERPROFILE ?? "/tmp";
       const worktreePath =
-        input.path ?? path.join(homeDir, ".t3", "worktrees", repoName, sanitizedBranch);
+        input.path ??
+        path.join(homeDir, ".t3", "worktrees", repoName, buildWorktreeDirectoryName(targetBranch));
       const args = input.newBranch
         ? ["worktree", "add", "-b", input.newBranch, worktreePath, input.branch]
         : ["worktree", "add", worktreePath, input.branch];
