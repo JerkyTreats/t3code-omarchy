@@ -7,6 +7,7 @@
  * @module ProjectionThreadRepository
  */
 import {
+  GitHubIssueLink,
   IsoDateTime,
   ProjectId,
   ProviderInteractionMode,
@@ -28,6 +29,9 @@ export const ProjectionThread = Schema.Struct({
   interactionMode: ProviderInteractionMode,
   branch: Schema.NullOr(Schema.String),
   worktreePath: Schema.NullOr(Schema.String),
+  issueLink: Schema.optional(Schema.NullOr(GitHubIssueLink)).pipe(
+    Schema.withDecodingDefault(() => null),
+  ),
   latestTurnId: Schema.NullOr(TurnId),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,

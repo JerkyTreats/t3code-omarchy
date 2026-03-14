@@ -1,6 +1,7 @@
+import { GitHubIssueLink } from "@t3tools/contracts";
+import { Effect, Layer, Schema, Struct } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
-import { Effect, Layer } from "effect";
 
 import { toPersistenceSqlError } from "../Errors.ts";
 import {
@@ -14,6 +15,11 @@ import {
 
 const makeProjectionThreadRepository = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
+  const ProjectionThreadDbRow = ProjectionThread.mapFields(
+    Struct.assign({
+      issueLink: Schema.NullOr(Schema.fromJsonString(GitHubIssueLink)),
+    }),
+  );
 
   const upsertProjectionThreadRow = SqlSchema.void({
     Request: ProjectionThread,
@@ -28,6 +34,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           interaction_mode,
           branch,
           worktree_path,
+          issue_link_json,
           latest_turn_id,
           created_at,
           updated_at,
@@ -42,6 +49,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           ${row.interactionMode},
           ${row.branch},
           ${row.worktreePath},
+          ${row.issueLink ? JSON.stringify(row.issueLink) : null},
           ${row.latestTurnId},
           ${row.createdAt},
           ${row.updatedAt},
@@ -56,6 +64,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           interaction_mode = excluded.interaction_mode,
           branch = excluded.branch,
           worktree_path = excluded.worktree_path,
+          issue_link_json = excluded.issue_link_json,
           latest_turn_id = excluded.latest_turn_id,
           created_at = excluded.created_at,
           updated_at = excluded.updated_at,
@@ -65,7 +74,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
 
   const getProjectionThreadRow = SqlSchema.findOneOption({
     Request: GetProjectionThreadInput,
-    Result: ProjectionThread,
+    Result: ProjectionThreadDbRow,
     execute: ({ threadId }) =>
       sql`
         SELECT
@@ -77,6 +86,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           interaction_mode AS "interactionMode",
           branch,
           worktree_path AS "worktreePath",
+          issue_link_json AS "issueLink",
           latest_turn_id AS "latestTurnId",
           created_at AS "createdAt",
           updated_at AS "updatedAt",
@@ -88,7 +98,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
 
   const listProjectionThreadRows = SqlSchema.findAll({
     Request: ListProjectionThreadsByProjectInput,
-    Result: ProjectionThread,
+    Result: ProjectionThreadDbRow,
     execute: ({ projectId }) =>
       sql`
         SELECT
@@ -100,6 +110,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           interaction_mode AS "interactionMode",
           branch,
           worktree_path AS "worktreePath",
+          issue_link_json AS "issueLink",
           latest_turn_id AS "latestTurnId",
           created_at AS "createdAt",
           updated_at AS "updatedAt",

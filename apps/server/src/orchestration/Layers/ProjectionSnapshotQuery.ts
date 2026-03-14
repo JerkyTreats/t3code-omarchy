@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 
 import {
   ChatAttachment,
+  GitHubIssueLink,
   IsoDateTime,
   MessageId,
   NonNegativeInt,
@@ -55,7 +56,11 @@ const ProjectionThreadMessageDbRowSchema = ProjectionThreadMessage.mapFields(
   }),
 );
 const ProjectionThreadProposedPlanDbRowSchema = ProjectionThreadProposedPlan;
-const ProjectionThreadDbRowSchema = ProjectionThread;
+const ProjectionThreadDbRowSchema = ProjectionThread.mapFields(
+  Struct.assign({
+    issueLink: Schema.NullOr(Schema.fromJsonString(GitHubIssueLink)),
+  }),
+);
 const ProjectionThreadActivityDbRowSchema = ProjectionThreadActivity.mapFields(
   Struct.assign({
     payload: Schema.fromJsonString(Schema.Unknown),
@@ -171,6 +176,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           interaction_mode AS "interactionMode",
           branch,
           worktree_path AS "worktreePath",
+          issue_link_json AS "issueLink",
           latest_turn_id AS "latestTurnId",
           created_at AS "createdAt",
           updated_at AS "updatedAt",
@@ -543,6 +549,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
             interactionMode: row.interactionMode,
             branch: row.branch,
             worktreePath: sanitizePersistedWorktreePath(row.worktreePath),
+            issueLink: row.issueLink ?? null,
             latestTurn: latestTurnByThread.get(row.threadId) ?? null,
             createdAt: row.createdAt,
             updatedAt: row.updatedAt,
