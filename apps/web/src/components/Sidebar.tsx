@@ -60,16 +60,11 @@ import {
 } from "./ui/sidebar";
 import { formatWorktreePathForDisplay, getOrphanedWorktreePathForThread } from "../worktreeCleanup";
 import { isNonEmpty as isNonEmptyString } from "effect/String";
+import { resolveSidebarNewThreadEnvMode } from "./Sidebar.logic";
+import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 
 const EMPTY_KEYBINDINGS: ResolvedKeybindingsConfig = [];
 const THREAD_PREVIEW_LIMIT = 6;
-
-async function copyTextToClipboard(text: string): Promise<void> {
-  if (typeof navigator === "undefined" || navigator.clipboard?.writeText === undefined) {
-    throw new Error("Clipboard API unavailable.");
-  }
-  await navigator.clipboard.writeText(text);
-}
 
 function formatRelativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -550,7 +545,9 @@ export default function Sidebar() {
           defaultModel: DEFAULT_MODEL_BY_PROVIDER.codex,
           createdAt,
         });
-        await handleNewThread(projectId).catch(() => undefined);
+        await handleNewThread(projectId, {
+          envMode: appSettings.defaultThreadEnvMode,
+        }).catch(() => undefined);
       } catch (error) {
         setIsAddingProject(false);
         toastManager.add({
@@ -563,7 +560,13 @@ export default function Sidebar() {
       }
       finishAddingProject();
     },
-    [focusMostRecentThreadForProject, handleNewThread, isAddingProject, projects],
+    [
+      appSettings.defaultThreadEnvMode,
+      focusMostRecentThreadForProject,
+      handleNewThread,
+      isAddingProject,
+      projects,
+    ],
   );
 
   const handleAddProject = () => {
@@ -635,62 +638,14 @@ export default function Sidebar() {
     [],
   );
 
-  const handleThreadContextMenu = useCallback(
-    async (threadId: ThreadId, position: { x: number; y: number }) => {
+  const deleteThread = useCallback(
+    async (threadId: ThreadId): Promise<void> => {
       const api = readNativeApi();
       if (!api) return;
-      const clicked = await api.contextMenu.show(
-        [
-          { id: "rename", label: "Rename thread" },
-          { id: "mark-unread", label: "Mark unread" },
-          { id: "copy-thread-id", label: "Copy Thread ID" },
-          { id: "delete", label: "Delete", destructive: true },
-        ],
-        position,
-      );
-      const thread = threads.find((t) => t.id === threadId);
+
+      const thread = threads.find((entry) => entry.id === threadId);
       if (!thread) return;
 
-      if (clicked === "rename") {
-        setRenamingThreadId(threadId);
-        setRenamingTitle(thread.title);
-        renamingCommittedRef.current = false;
-        return;
-      }
-
-      if (clicked === "mark-unread") {
-        markThreadUnread(threadId);
-        return;
-      }
-      if (clicked === "copy-thread-id") {
-        try {
-          await copyTextToClipboard(threadId);
-          toastManager.add({
-            type: "success",
-            title: "Thread ID copied",
-            description: threadId,
-          });
-        } catch (error) {
-          toastManager.add({
-            type: "error",
-            title: "Failed to copy thread ID",
-            description: error instanceof Error ? error.message : "An error occurred.",
-          });
-        }
-        return;
-      }
-      if (clicked !== "delete") return;
-      if (appSettings.confirmThreadDelete) {
-        const confirmed = await api.dialogs.confirm(
-          [
-            `Delete thread "${thread.title}"?`,
-            "This permanently clears conversation history for this thread.",
-          ].join("\n"),
-        );
-        if (!confirmed) {
-          return;
-        }
-      }
       const threadProject = projects.find((project) => project.id === thread.projectId);
       const orphanedWorktreePath = getOrphanedWorktreePathForThread(threads, threadId);
       const displayWorktreePath = orphanedWorktreePath
@@ -776,17 +731,80 @@ export default function Sidebar() {
       }
     },
     [
-      appSettings.confirmThreadDelete,
       clearComposerDraftForThread,
       clearProjectDraftThreadById,
       clearTerminalState,
-      markThreadUnread,
       navigate,
       projects,
       removeWorktreeMutation,
       routeThreadId,
       threads,
     ],
+  );
+
+  const { copyToClipboard } = useCopyToClipboard<{ threadId: ThreadId }>({
+    onCopy: (ctx) => {
+      toastManager.add({
+        type: "success",
+        title: "Thread ID copied",
+        description: ctx.threadId,
+      });
+    },
+    onError: (error) => {
+      toastManager.add({
+        type: "error",
+        title: "Failed to copy thread ID",
+        description: error instanceof Error ? error.message : "An error occurred.",
+      });
+    },
+  });
+
+  const handleThreadContextMenu = useCallback(
+    async (threadId: ThreadId, position: { x: number; y: number }) => {
+      const api = readNativeApi();
+      if (!api) return;
+      const clicked = await api.contextMenu.show(
+        [
+          { id: "rename", label: "Rename thread" },
+          { id: "mark-unread", label: "Mark unread" },
+          { id: "copy-thread-id", label: "Copy Thread ID" },
+          { id: "delete", label: "Delete", destructive: true },
+        ],
+        position,
+      );
+      const thread = threads.find((t) => t.id === threadId);
+      if (!thread) return;
+
+      if (clicked === "rename") {
+        setRenamingThreadId(threadId);
+        setRenamingTitle(thread.title);
+        renamingCommittedRef.current = false;
+        return;
+      }
+
+      if (clicked === "mark-unread") {
+        markThreadUnread(threadId);
+        return;
+      }
+      if (clicked === "copy-thread-id") {
+        copyToClipboard(threadId, { threadId });
+        return;
+      }
+      if (clicked !== "delete") return;
+      if (appSettings.confirmThreadDelete) {
+        const confirmed = await api.dialogs.confirm(
+          [
+            `Delete thread "${thread.title}"?`,
+            "This permanently clears conversation history for this thread.",
+          ].join("\n"),
+        );
+        if (!confirmed) {
+          return;
+        }
+      }
+      await deleteThread(threadId);
+    },
+    [appSettings.confirmThreadDelete, copyToClipboard, deleteThread, markThreadUnread, threads],
   );
 
   const handleProjectContextMenu = useCallback(
@@ -1137,7 +1155,11 @@ export default function Sidebar() {
                               onClick={(event) => {
                                 event.preventDefault();
                                 event.stopPropagation();
-                                void handleNewThread(project.id);
+                                void handleNewThread(project.id, {
+                                  envMode: resolveSidebarNewThreadEnvMode({
+                                    defaultEnvMode: appSettings.defaultThreadEnvMode,
+                                  }),
+                                });
                               }}
                             >
                               <SquarePenIcon className="size-3.5" />
