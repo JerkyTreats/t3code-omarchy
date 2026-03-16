@@ -30,8 +30,11 @@ function formatGitHubTimestamp(value: string): string {
 
 interface GitHubIssuesSectionProps {
   visible: boolean;
+  canCreateIssue: boolean;
   issueState: GitHubIssueListState;
+  onCreateIssue: () => void;
   onIssueStateChange: (state: GitHubIssueListState) => void;
+  isCreatingIssue: boolean;
   isLoading: boolean;
   isFetching: boolean;
   issuesDisabled: boolean;
@@ -47,8 +50,11 @@ interface GitHubIssuesSectionProps {
 
 export function GitHubIssuesSection({
   visible,
+  canCreateIssue,
   issueState,
+  onCreateIssue,
   onIssueStateChange,
+  isCreatingIssue,
   isLoading,
   isFetching,
   issuesDisabled,
@@ -71,18 +77,29 @@ export function GitHubIssuesSection({
       collapsible
       defaultOpen
       actions={
-        <div className="flex gap-0.5">
-          {(["open", "closed", "all"] as const).map((state) => (
-            <Button
-              key={state}
-              variant={issueState === state ? "secondary" : "ghost"}
-              size="xs"
-              onClick={() => onIssueStateChange(state)}
-              className="h-5 px-1.5 text-[10px]"
-            >
-              {state.charAt(0).toUpperCase() + state.slice(1)}
-            </Button>
-          ))}
+        <div className="flex items-center gap-1">
+          <Button
+            variant="outline"
+            size="xs"
+            onClick={onCreateIssue}
+            disabled={!canCreateIssue || isCreatingIssue}
+            className="h-5 px-1.5 text-[10px]"
+          >
+            {isCreatingIssue ? "Creating..." : "New"}
+          </Button>
+          <div className="flex gap-0.5">
+            {(["open", "closed", "all"] as const).map((state) => (
+              <Button
+                key={state}
+                variant={issueState === state ? "secondary" : "ghost"}
+                size="xs"
+                onClick={() => onIssueStateChange(state)}
+                className="h-5 px-1.5 text-[10px]"
+              >
+                {state.charAt(0).toUpperCase() + state.slice(1)}
+              </Button>
+            ))}
+          </div>
         </div>
       }
     >

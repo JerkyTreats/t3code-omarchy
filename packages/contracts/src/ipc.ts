@@ -25,6 +25,8 @@ import type {
   GitStatusResult,
 } from "./git";
 import type {
+  GitHubCreateIssueInput,
+  GitHubCreateIssueResult,
   GitHubIssueMutationInput,
   GitHubIssueMutationResult,
   GitHubListIssuesInput,
@@ -189,6 +191,7 @@ export interface NativeApi {
     status: (input: GitHubStatusInput) => Promise<GitHubStatusResult>;
     login: (input: GitHubLoginInput) => Promise<GitHubStatusResult>;
     listIssues: (input: GitHubListIssuesInput) => Promise<GitHubListIssuesResult>;
+    createIssue: (input: GitHubCreateIssueInput) => Promise<GitHubCreateIssueResult>;
     closeIssue: (input: GitHubIssueMutationInput) => Promise<GitHubIssueMutationResult>;
     reopenIssue: (input: GitHubIssueMutationInput) => Promise<GitHubIssueMutationResult>;
   };

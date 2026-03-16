@@ -29,6 +29,7 @@ import { Button } from "~/components/ui/button";
 import { ScrollArea } from "~/components/ui/scroll-area";
 import { toastManager } from "~/components/ui/toast";
 import {
+  githubCreateIssueMutationOptions,
   githubCloseIssueMutationOptions,
   githubIssuesQueryOptions,
   githubLoginMutationOptions,
@@ -61,6 +62,7 @@ import { readNativeApi } from "~/nativeApi";
 import { useComposerDraftStore } from "~/composerDraftStore";
 import { useStore } from "~/store";
 import { GitHubAuthSection } from "./GitHubAuthSection";
+import { GitHubCreateIssueDialog } from "./GitHubCreateIssueDialog";
 import { GitHubLinkedIssueSection } from "./GitHubLinkedIssueSection";
 import { GitHubIssuesSection } from "./GitHubIssuesSection";
 import { GitSyncSection } from "./GitSyncSection";
@@ -142,6 +144,7 @@ export default function GitPanel({
   const queryClient = useQueryClient();
   const [isCommitDialogOpen, setIsCommitDialogOpen] = useState(false);
   const [issueState, setIssueState] = useState<"open" | "closed" | "all">("open");
+  const [isCreateIssueDialogOpen, setIsCreateIssueDialogOpen] = useState(false);
   const [pendingDefaultBranchAction, setPendingDefaultBranchAction] =
     useState<PendingDefaultBranchAction | null>(null);
   const [mergeSourceBranch, setMergeSourceBranch] = useState("");
@@ -180,6 +183,9 @@ export default function GitPanel({
 
   const initMutation = useMutation(gitInitMutationOptions({ cwd: workspaceCwd, queryClient }));
   const loginMutation = useMutation(githubLoginMutationOptions({ cwd: repoCwd, queryClient }));
+  const createIssueMutation = useMutation(
+    githubCreateIssueMutationOptions({ cwd: repoCwd, queryClient }),
+  );
   const closeIssueMutation = useMutation(
     githubCloseIssueMutationOptions({ cwd: repoCwd, queryClient }),
   );
@@ -449,6 +455,36 @@ export default function GitPanel({
       syncActiveIssueLinkState,
       threadToastData,
     ],
+  );
+  const createIssue = useCallback(
+    async (input: { title: string; body: string }) => {
+      try {
+        const result = await createIssueMutation.mutateAsync({
+          title: input.title,
+          body: input.body.length > 0 ? input.body : null,
+          ...(githubStatusQuery.data?.repo?.nameWithOwner
+            ? { repo: githubStatusQuery.data.repo.nameWithOwner }
+            : {}),
+        });
+
+        setIssueState((current) => (current === "closed" ? "open" : current));
+        setIsCreateIssueDialogOpen(false);
+        toastManager.add({
+          type: "success",
+          title: `Created issue #${result.number}`,
+          description: result.title,
+          data: threadToastData,
+        });
+      } catch (error) {
+        toastManager.add({
+          type: "error",
+          title: "Could not create issue",
+          description: error instanceof Error ? error.message : "An error occurred.",
+          data: threadToastData,
+        });
+      }
+    },
+    [createIssueMutation, githubStatusQuery.data?.repo?.nameWithOwner, threadToastData],
   );
   const startIssueWorkspaceThread = useCallback(
     async (issue: GitHubIssue) => {
@@ -1118,8 +1154,14 @@ export default function GitPanel({
                 githubStatusQuery.data?.authenticated === true &&
                 githubStatusQuery.data?.repo !== null
               }
+              canCreateIssue={!issuesDisabled}
               issueState={issueState}
+              onCreateIssue={() => {
+                createIssueMutation.reset();
+                setIsCreateIssueDialogOpen(true);
+              }}
               onIssueStateChange={setIssueState}
+              isCreatingIssue={createIssueMutation.isPending}
               isLoading={githubIssuesQuery.isLoading}
               isFetching={githubIssuesQuery.isFetching}
               issuesDisabled={issuesDisabled}
@@ -1143,6 +1185,22 @@ export default function GitPanel({
           </div>
         </ScrollArea>
       </div>
+
+      <GitHubCreateIssueDialog
+        open={isCreateIssueDialogOpen}
+        repoNameWithOwner={githubStatusQuery.data?.repo?.nameWithOwner ?? null}
+        isSubmitting={createIssueMutation.isPending}
+        errorMessage={createIssueMutation.error?.message ?? null}
+        onOpenChange={(open) => {
+          if (!open) {
+            createIssueMutation.reset();
+          }
+          setIsCreateIssueDialogOpen(open);
+        }}
+        onSubmit={(input) => {
+          void createIssue(input);
+        }}
+      />
 
       <GitCommitDialog
         open={isCommitDialogOpen}

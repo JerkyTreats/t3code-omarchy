@@ -1,4 +1,6 @@
 import type {
+  GitHubCreateIssueInput,
+  GitHubCreateIssueResult,
   GitHubIssueMutationInput,
   GitHubIssueMutationResult,
   GitHubListIssuesInput,
@@ -18,6 +20,9 @@ export interface GitHubManagerShape {
   readonly listIssues: (
     input: GitHubListIssuesInput,
   ) => Effect.Effect<GitHubListIssuesResult, GitHubCliError>;
+  readonly createIssue: (
+    input: GitHubCreateIssueInput,
+  ) => Effect.Effect<GitHubCreateIssueResult, GitHubCliError>;
   readonly closeIssue: (
     input: GitHubIssueMutationInput,
   ) => Effect.Effect<GitHubIssueMutationResult, GitHubCliError>;

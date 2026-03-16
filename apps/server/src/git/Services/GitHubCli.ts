@@ -170,6 +170,16 @@ export interface GitHubCliShape {
   }) => Effect.Effect<ReadonlyArray<GitHubIssueSummary>, GitHubCliError>;
 
   /**
+   * Create an issue and return the created issue metadata.
+   */
+  readonly createIssue: (input: {
+    readonly cwd?: string;
+    readonly repo?: string;
+    readonly title: string;
+    readonly body?: string | null;
+  }) => Effect.Effect<GitHubIssueSummary, GitHubCliError>;
+
+  /**
    * Close an issue by number.
    */
   readonly closeIssue: (input: {

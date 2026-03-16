@@ -485,6 +485,19 @@ function createGitHubCliWithFakeGh(scenario: FakeGhScenario = {}): {
           defaultBranch: scenario.defaultBranch ?? "main",
         }),
       listIssues: () => Effect.succeed([]),
+      createIssue: (input) =>
+        Effect.succeed({
+          number: 321,
+          title: input.title,
+          state: "open" as const,
+          url: "https://github.com/pingdotgg/codething-mvp/issues/321",
+          body: input.body ?? null,
+          createdAt: "2025-01-01T00:00:00.000Z",
+          updatedAt: "2025-01-01T00:00:00.000Z",
+          labels: [],
+          assignees: [],
+          author: "test",
+        }),
       closeIssue: (input) =>
         execute({
           ...(input.cwd ? { cwd: input.cwd } : {}),

@@ -76,6 +76,14 @@ export const GitHubIssueMutationInput = Schema.Struct({
 });
 export type GitHubIssueMutationInput = typeof GitHubIssueMutationInput.Type;
 
+export const GitHubCreateIssueInput = Schema.Struct({
+  cwd: Schema.NullOr(TrimmedNonEmptyString),
+  repo: Schema.optional(TrimmedNonEmptyString),
+  title: TrimmedNonEmptyString,
+  body: Schema.optional(Schema.NullOr(Schema.String)),
+});
+export type GitHubCreateIssueInput = typeof GitHubCreateIssueInput.Type;
+
 export const GitHubStatusResult = Schema.Struct({
   installed: Schema.Boolean,
   authenticated: Schema.Boolean,
@@ -99,5 +107,8 @@ export const GitHubIssueMutationResult = Schema.Struct({
   state: GitHubIssueState,
 });
 export type GitHubIssueMutationResult = typeof GitHubIssueMutationResult.Type;
+
+export const GitHubCreateIssueResult = GitHubIssue;
+export type GitHubCreateIssueResult = typeof GitHubCreateIssueResult.Type;
 
 export type GitHubIssueListState = typeof GitHubIssueListState.Type;

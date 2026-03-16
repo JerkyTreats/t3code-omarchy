@@ -7,6 +7,7 @@ import {
   GitHubCli,
   type GitHubRepositoryCloneUrls,
   type GitHubCliShape,
+  type GitHubIssueSummary,
   type GitHubPullRequestSummary,
 } from "../Services/GitHubCli.ts";
 
@@ -266,131 +267,137 @@ function parseRepository(raw: string): {
   };
 }
 
-function parseIssues(raw: string): ReadonlyArray<{
-  number: number;
-  title: string;
-  state: "open" | "closed";
-  url: string;
-  body: string | null;
-  createdAt: string;
-  updatedAt: string;
-  labels: ReadonlyArray<{
-    name: string;
-    color: string | null;
-  }>;
-  assignees: ReadonlyArray<{
-    login: string;
-  }>;
-  author: string | null;
-}> {
+function parseIssues(raw: string): ReadonlyArray<GitHubIssueSummary> {
+  return parseIssueCollection(raw, "GitHub CLI returned invalid issue list JSON.");
+}
+
+function normalizeIssue(entry: unknown): GitHubIssueSummary | null {
+  if (!entry || typeof entry !== "object") {
+    return null;
+  }
+
+  const record = entry as Record<string, unknown>;
+  const state = record.state;
+  const number = record.number;
+  const title = record.title;
+  const url = record.url;
+  const body = record.body;
+  const createdAt = record.createdAt;
+  const updatedAt = record.updatedAt;
+
+  if (
+    typeof number !== "number" ||
+    !Number.isInteger(number) ||
+    number <= 0 ||
+    typeof title !== "string" ||
+    typeof url !== "string" ||
+    typeof createdAt !== "string" ||
+    typeof updatedAt !== "string"
+  ) {
+    return null;
+  }
+
+  const normalizedState = state === "CLOSED" ? "closed" : state === "OPEN" ? "open" : null;
+  if (!normalizedState) {
+    return null;
+  }
+
+  const labels = Array.isArray(record.labels)
+    ? record.labels.flatMap((label) => {
+        if (!label || typeof label !== "object") {
+          return [];
+        }
+        const labelRecord = label as Record<string, unknown>;
+        const name = labelRecord.name;
+        const color = labelRecord.color;
+        if (typeof name !== "string" || name.trim().length === 0) {
+          return [];
+        }
+        return [
+          { name, color: typeof color === "string" && color.trim().length > 0 ? color : null },
+        ];
+      })
+    : [];
+
+  const assignees = Array.isArray(record.assignees)
+    ? record.assignees.flatMap((assignee) => {
+        if (!assignee || typeof assignee !== "object") {
+          return [];
+        }
+        const login = (assignee as Record<string, unknown>).login;
+        if (typeof login !== "string" || login.trim().length === 0) {
+          return [];
+        }
+        return [{ login }];
+      })
+    : [];
+
+  const authorRecord = record.author;
+  const author =
+    authorRecord && typeof authorRecord === "object"
+      ? (authorRecord as { login?: unknown }).login
+      : null;
+
+  return {
+    number,
+    title,
+    state: normalizedState,
+    url,
+    body: typeof body === "string" ? body : null,
+    createdAt,
+    updatedAt,
+    labels,
+    assignees,
+    author: typeof author === "string" && author.trim().length > 0 ? author : null,
+  };
+}
+
+function parseIssueCollection(
+  raw: string,
+  invalidDetail: string,
+): ReadonlyArray<GitHubIssueSummary> {
   const trimmed = raw.trim();
   if (trimmed.length === 0) return [];
 
   const parsed: unknown = JSON.parse(trimmed);
   if (!Array.isArray(parsed)) {
-    throw new Error("GitHub CLI returned invalid issue list JSON.");
+    throw new Error(invalidDetail);
   }
 
-  const issues: Array<{
-    number: number;
-    title: string;
-    state: "open" | "closed";
-    url: string;
-    body: string | null;
-    createdAt: string;
-    updatedAt: string;
-    labels: ReadonlyArray<{
-      name: string;
-      color: string | null;
-    }>;
-    assignees: ReadonlyArray<{
-      login: string;
-    }>;
-    author: string | null;
-  }> = [];
+  const issues: GitHubIssueSummary[] = [];
 
   for (const entry of parsed) {
-    if (!entry || typeof entry !== "object") {
-      continue;
+    const issue = normalizeIssue(entry);
+    if (issue) {
+      issues.push(issue);
     }
-
-    const record = entry as Record<string, unknown>;
-    const state = record.state;
-    const number = record.number;
-    const title = record.title;
-    const url = record.url;
-    const body = record.body;
-    const createdAt = record.createdAt;
-    const updatedAt = record.updatedAt;
-
-    if (
-      typeof number !== "number" ||
-      !Number.isInteger(number) ||
-      number <= 0 ||
-      typeof title !== "string" ||
-      typeof url !== "string" ||
-      typeof createdAt !== "string" ||
-      typeof updatedAt !== "string"
-    ) {
-      continue;
-    }
-
-    const normalizedState = state === "CLOSED" ? "closed" : state === "OPEN" ? "open" : null;
-    if (!normalizedState) {
-      continue;
-    }
-
-    const labels = Array.isArray(record.labels)
-      ? record.labels.flatMap((label) => {
-          if (!label || typeof label !== "object") {
-            return [];
-          }
-          const labelRecord = label as Record<string, unknown>;
-          const name = labelRecord.name;
-          const color = labelRecord.color;
-          if (typeof name !== "string" || name.trim().length === 0) {
-            return [];
-          }
-          return [
-            { name, color: typeof color === "string" && color.trim().length > 0 ? color : null },
-          ];
-        })
-      : [];
-
-    const assignees = Array.isArray(record.assignees)
-      ? record.assignees.flatMap((assignee) => {
-          if (!assignee || typeof assignee !== "object") {
-            return [];
-          }
-          const login = (assignee as Record<string, unknown>).login;
-          if (typeof login !== "string" || login.trim().length === 0) {
-            return [];
-          }
-          return [{ login }];
-        })
-      : [];
-
-    const authorRecord = record.author;
-    const author =
-      authorRecord && typeof authorRecord === "object"
-        ? (authorRecord as { login?: unknown }).login
-        : null;
-
-    issues.push({
-      number,
-      title,
-      state: normalizedState,
-      url,
-      body: typeof body === "string" ? body : null,
-      createdAt,
-      updatedAt,
-      labels,
-      assignees,
-      author: typeof author === "string" && author.trim().length > 0 ? author : null,
-    });
   }
 
   return issues;
+}
+
+function parseIssue(raw: string): GitHubIssueSummary | null {
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  const parsed: unknown = JSON.parse(trimmed);
+  return normalizeIssue(parsed);
+}
+
+function parseCreatedIssueReference(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  const urlMatch = trimmed.match(/https?:\/\/\S+/u);
+  if (urlMatch) {
+    return urlMatch[0];
+  }
+
+  return trimmed.includes(" ") ? null : trimmed;
 }
 
 const makeGitHubCli = Effect.sync(() => {
@@ -615,6 +622,70 @@ const makeGitHubCli = Effect.sync(() => {
               }),
           }),
         ),
+      ),
+    createIssue: (input) =>
+      execute({
+        ...(input.cwd ? { cwd: input.cwd } : {}),
+        args: [
+          "issue",
+          "create",
+          ...(input.repo ? ["--repo", input.repo] : []),
+          "--title",
+          input.title,
+          "--body",
+          input.body ?? "",
+        ],
+      }).pipe(
+        Effect.map((result) => result.stdout),
+        Effect.flatMap((raw) => {
+          const reference = parseCreatedIssueReference(raw);
+          if (!reference) {
+            return Effect.fail(
+              new GitHubCliError({
+                operation: "createIssue",
+                detail: "GitHub CLI did not return the created issue reference.",
+              }),
+            );
+          }
+
+          return execute({
+            ...(input.cwd ? { cwd: input.cwd } : {}),
+            args: [
+              "issue",
+              "view",
+              reference,
+              ...(input.repo ? ["--repo", input.repo] : []),
+              "--json",
+              "number,title,state,url,body,createdAt,updatedAt,labels,assignees,author",
+            ],
+          }).pipe(
+            Effect.map((result) => result.stdout),
+            Effect.flatMap((viewRaw) =>
+              Effect.try({
+                try: () => parseIssue(viewRaw),
+                catch: (error: unknown) =>
+                  new GitHubCliError({
+                    operation: "createIssue",
+                    detail:
+                      error instanceof Error
+                        ? `GitHub CLI returned invalid created issue JSON: ${error.message}`
+                        : "GitHub CLI returned invalid created issue JSON.",
+                    ...(error !== undefined ? { cause: error } : {}),
+                  }),
+              }),
+            ),
+            Effect.flatMap((issue) =>
+              issue
+                ? Effect.succeed(issue)
+                : Effect.fail(
+                    new GitHubCliError({
+                      operation: "createIssue",
+                      detail: "GitHub CLI returned incomplete created issue data.",
+                    }),
+                  ),
+            ),
+          );
+        }),
       ),
     closeIssue: (input) =>
       execute({

@@ -93,6 +93,35 @@ export function githubCloseIssueMutationOptions(input: {
   });
 }
 
+export function githubCreateIssueMutationOptions(input: {
+  cwd: string | null;
+  queryClient: QueryClient;
+}) {
+  return mutationOptions({
+    mutationKey: ["github", "mutation", "create-issue", input.cwd] as const,
+    mutationFn: async ({
+      title,
+      body,
+      repo,
+    }: {
+      title: string;
+      body?: string | null;
+      repo?: string;
+    }) => {
+      const api = ensureNativeApi();
+      return api.github.createIssue({
+        cwd: input.cwd,
+        title,
+        ...(body !== undefined ? { body } : {}),
+        ...(repo ? { repo } : {}),
+      });
+    },
+    onSuccess: async () => {
+      await invalidateGitHubQueries(input.queryClient);
+    },
+  });
+}
+
 export function githubReopenIssueMutationOptions(input: {
   cwd: string | null;
   queryClient: QueryClient;

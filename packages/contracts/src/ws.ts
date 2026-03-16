@@ -28,6 +28,7 @@ import {
   GitStatusInput,
 } from "./git";
 import {
+  GitHubCreateIssueInput,
   GitHubIssueMutationInput,
   GitHubListIssuesInput,
   GitHubLoginInput,
@@ -80,6 +81,7 @@ export const WS_METHODS = {
   githubStatus: "github.status",
   githubLogin: "github.login",
   githubListIssues: "github.listIssues",
+  githubCreateIssue: "github.createIssue",
   githubCloseIssue: "github.closeIssue",
   githubReopenIssue: "github.reopenIssue",
 
@@ -154,6 +156,7 @@ const WebSocketRequestBody = Schema.Union([
   tagRequestBody(WS_METHODS.githubStatus, GitHubStatusInput),
   tagRequestBody(WS_METHODS.githubLogin, GitHubLoginInput),
   tagRequestBody(WS_METHODS.githubListIssues, GitHubListIssuesInput),
+  tagRequestBody(WS_METHODS.githubCreateIssue, GitHubCreateIssueInput),
   tagRequestBody(WS_METHODS.githubCloseIssue, GitHubIssueMutationInput),
   tagRequestBody(WS_METHODS.githubReopenIssue, GitHubIssueMutationInput),
 

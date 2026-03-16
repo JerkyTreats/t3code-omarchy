@@ -60,6 +60,21 @@ function makeLayer(input?: { repoCalls?: string[]; issueCalls?: string[] }) {
       input?.issueCalls?.push(request.repo ?? "");
       return Effect.succeed([]);
     },
+    createIssue: (request) => {
+      input?.issueCalls?.push(request.repo ?? "");
+      return Effect.succeed({
+        number: 321,
+        title: request.title,
+        state: "open" as const,
+        url: `https://github.com/${request.repo ?? "unknown/unknown"}/issues/321`,
+        body: request.body ?? null,
+        createdAt: "2025-01-01T00:00:00.000Z",
+        updatedAt: "2025-01-01T00:00:00.000Z",
+        labels: [],
+        assignees: [],
+        author: "tester",
+      });
+    },
     closeIssue: (request) =>
       Effect.succeed({
         number: request.issueNumber,
@@ -143,6 +158,17 @@ describe("GitHubManager", () => {
 
     expect(result.repo?.nameWithOwner).toBe("pingdotgg/t3code");
     expect(repoCalls).toEqual(["pingdotgg/t3code"]);
+    expect(issueCalls).toEqual(["pingdotgg/t3code"]);
+  });
+
+  it("prefers the upstream repo when creating issues", async () => {
+    const issueCalls: string[] = [];
+    const result = await runManager(makeLayer({ issueCalls }), (manager) =>
+      manager.createIssue({ cwd: "/repo", title: "New panel issue", body: "body" }),
+    );
+
+    expect(result.number).toBe(321);
+    expect(result.title).toBe("New panel issue");
     expect(issueCalls).toEqual(["pingdotgg/t3code"]);
   });
 });

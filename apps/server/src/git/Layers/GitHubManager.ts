@@ -1,4 +1,5 @@
 import type {
+  GitHubCreateIssueInput,
   GitHubIssueMutationInput,
   GitHubListIssuesResult,
   GitHubStatusInput,
@@ -138,8 +139,8 @@ const makeGitHubManager = Effect.gen(function* () {
   });
 
   const requireRepositorySelector = (
-    input: GitHubIssueMutationInput,
-    operation: "closeIssue" | "reopenIssue",
+    input: GitHubIssueMutationInput | GitHubCreateIssueInput,
+    operation: "createIssue" | "closeIssue" | "reopenIssue",
   ) =>
     Effect.gen(function* () {
       if (input.repo) {
@@ -148,7 +149,10 @@ const makeGitHubManager = Effect.gen(function* () {
       if (input.cwd === null) {
         return yield* new GitHubCliError({
           operation,
-          detail: "Select a project before updating a GitHub issue.",
+          detail:
+            operation === "createIssue"
+              ? "Select a project before creating a GitHub issue."
+              : "Select a project before updating a GitHub issue.",
         });
       }
       const repositorySelector = yield* resolveRepositorySelector(
@@ -163,6 +167,16 @@ const makeGitHubManager = Effect.gen(function* () {
       }
       return repositorySelector;
     });
+
+  const createIssue: GitHubManagerShape["createIssue"] = Effect.fnUntraced(function* (input) {
+    const repo = yield* requireRepositorySelector(input, "createIssue");
+    return yield* gitHubCli.createIssue({
+      ...(input.cwd !== null ? { cwd: input.cwd } : {}),
+      repo,
+      title: input.title,
+      body: input.body ?? null,
+    });
+  });
 
   const closeIssue: GitHubManagerShape["closeIssue"] = Effect.fnUntraced(function* (input) {
     const repo = yield* requireRepositorySelector(input, "closeIssue");
@@ -186,6 +200,7 @@ const makeGitHubManager = Effect.gen(function* () {
     status,
     login,
     listIssues,
+    createIssue,
     closeIssue,
     reopenIssue,
   } satisfies GitHubManagerShape;

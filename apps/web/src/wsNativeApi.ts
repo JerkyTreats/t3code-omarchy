@@ -153,6 +153,7 @@ export function createWsNativeApi(): NativeApi {
       status: (input) => transport.request(WS_METHODS.githubStatus, input),
       login: (input) => transport.request(WS_METHODS.githubLogin, input),
       listIssues: (input) => transport.request(WS_METHODS.githubListIssues, input),
+      createIssue: (input) => transport.request(WS_METHODS.githubCreateIssue, input),
       closeIssue: (input) => transport.request(WS_METHODS.githubCloseIssue, input),
       reopenIssue: (input) => transport.request(WS_METHODS.githubReopenIssue, input),
     },
