@@ -8,7 +8,6 @@ import {
 import { deriveTimelineEntries, formatElapsed } from "../../session-logic";
 import { AUTO_SCROLL_BOTTOM_THRESHOLD_PX } from "../../chat-scroll";
 import { type TurnDiffSummary } from "../../types";
-import { summarizeTurnDiffStats } from "../../lib/turnDiffTree";
 import ChatMarkdown from "../ChatMarkdown";
 import {
   BotIcon,
@@ -29,8 +28,6 @@ import { clamp } from "effect/Number";
 import { estimateTimelineMessageHeight } from "../timelineHeight";
 import { buildExpandedImagePreview, ExpandedImagePreview } from "./ExpandedImagePreview";
 import { ProposedPlanCard } from "./ProposedPlanCard";
-import { ChangedFilesTree } from "./ChangedFilesTree";
-import { DiffStatLabel, hasNonZeroStat } from "./DiffStatLabel";
 import { MessageCopyButton } from "./MessageCopyButton";
 import { computeMessageDurationStart, normalizeCompactToolLabel } from "./MessagesTimeline.logic";
 import { cn } from "~/lib/utils";
@@ -73,17 +70,17 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   timelineEntries,
   completionDividerBeforeEntryId,
   completionSummary,
-  turnDiffSummaryByAssistantMessageId,
+  turnDiffSummaryByAssistantMessageId: _turnDiffSummaryByAssistantMessageId,
   nowIso,
   expandedWorkGroups,
   onToggleWorkGroup,
-  onOpenTurnDiff,
+  onOpenTurnDiff: _onOpenTurnDiff,
   revertTurnCountByUserMessageId,
   onRevertUserMessage,
   isRevertingCheckpoint,
   onImageExpand,
   markdownCwd,
-  resolvedTheme,
+  resolvedTheme: _resolvedTheme,
   timestampFormat,
   workspaceRoot,
 }: MessagesTimelineProps) {
@@ -274,15 +271,6 @@ export const MessagesTimeline = memo(function MessagesTimeline({
 
   const virtualRows = rowVirtualizer.getVirtualItems();
   const nonVirtualizedRows = rows.slice(virtualizedRowCount);
-  const [allDirectoriesExpandedByTurnId, setAllDirectoriesExpandedByTurnId] = useState<
-    Record<string, boolean>
-  >({});
-  const onToggleAllDirectories = useCallback((turnId: TurnId) => {
-    setAllDirectoriesExpandedByTurnId((current) => ({
-      ...current,
-      [turnId]: !(current[turnId] ?? true),
-    }));
-  }, []);
 
   const renderRowContent = (row: TimelineRow) => (
     <div
@@ -429,62 +417,6 @@ export const MessagesTimeline = memo(function MessagesTimeline({
                   cwd={markdownCwd}
                   isStreaming={Boolean(row.message.streaming)}
                 />
-                {(() => {
-                  const turnSummary = turnDiffSummaryByAssistantMessageId.get(row.message.id);
-                  if (!turnSummary) return null;
-                  const checkpointFiles = turnSummary.files;
-                  if (checkpointFiles.length === 0) return null;
-                  const summaryStat = summarizeTurnDiffStats(checkpointFiles);
-                  const changedFileCountLabel = String(checkpointFiles.length);
-                  const allDirectoriesExpanded =
-                    allDirectoriesExpandedByTurnId[turnSummary.turnId] ?? true;
-                  return (
-                    <div className="mt-2 rounded-lg border border-border/80 bg-card/45 p-2.5">
-                      <div className="mb-1.5 flex items-center justify-between gap-2">
-                        <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground/65">
-                          <span>Changed files ({changedFileCountLabel})</span>
-                          {hasNonZeroStat(summaryStat) && (
-                            <>
-                              <span className="mx-1">•</span>
-                              <DiffStatLabel
-                                additions={summaryStat.additions}
-                                deletions={summaryStat.deletions}
-                              />
-                            </>
-                          )}
-                        </p>
-                        <div className="flex items-center gap-1.5">
-                          <Button
-                            type="button"
-                            size="xs"
-                            variant="outline"
-                            onClick={() => onToggleAllDirectories(turnSummary.turnId)}
-                          >
-                            {allDirectoriesExpanded ? "Collapse all" : "Expand all"}
-                          </Button>
-                          <Button
-                            type="button"
-                            size="xs"
-                            variant="outline"
-                            onClick={() =>
-                              onOpenTurnDiff(turnSummary.turnId, checkpointFiles[0]?.path)
-                            }
-                          >
-                            View diff
-                          </Button>
-                        </div>
-                      </div>
-                      <ChangedFilesTree
-                        key={`changed-files-tree:${turnSummary.turnId}`}
-                        turnId={turnSummary.turnId}
-                        files={checkpointFiles}
-                        allDirectoriesExpanded={allDirectoriesExpanded}
-                        resolvedTheme={resolvedTheme}
-                        onOpenTurnDiff={onOpenTurnDiff}
-                      />
-                    </div>
-                  );
-                })()}
                 <p className="mt-1.5 text-[10px] text-muted-foreground/30">
                   {formatMessageMeta(
                     row.message.createdAt,
@@ -600,8 +532,8 @@ type TimelineRow =
   | { kind: "working"; id: string; createdAt: string | null };
 
 function estimateTimelineProposedPlanHeight(proposedPlan: TimelineProposedPlan): number {
-  const estimatedLines = Math.max(1, Math.ceil(proposedPlan.planMarkdown.length / 72));
-  return 120 + Math.min(estimatedLines * 22, 880);
+  const estimatedLines = Math.max(1, Math.ceil(proposedPlan.planMarkdown.length / 120));
+  return 150 + Math.min(estimatedLines * 12, 72);
 }
 
 function formatWorkingTimer(startIso: string, endIso: string): string | null {

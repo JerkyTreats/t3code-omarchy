@@ -99,11 +99,13 @@ import {
 } from "../pendingUserInput";
 import { useStore } from "../store";
 import {
+  buildCollapsedProposedPlanPreviewMarkdown,
   buildPlanImplementationThreadTitle,
   buildPlanImplementationPrompt,
   buildProposedPlanMarkdownFilename,
   proposedPlanTitle,
   resolvePlanFollowUpSubmission,
+  stripDisplayedPlanMarkdown,
 } from "../proposedPlan";
 import { truncateTitle } from "../truncateTitle";
 import {
@@ -113,18 +115,12 @@ import {
   MAX_THREAD_TERMINAL_COUNT,
   type ChatMessage,
   type Thread,
-  type TurnDiffFileChange,
   type TurnDiffSummary,
 } from "../types";
 import { basenameOfPath, getVscodeIconUrlForEntry } from "../vscode-icons";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { useTheme } from "../hooks/useTheme";
 import { useTurnDiffSummaries } from "../hooks/useTurnDiffSummaries";
-import {
-  buildTurnDiffTree,
-  summarizeTurnDiffStats,
-  type TurnDiffTreeNode,
-} from "../lib/turnDiffTree";
 import BranchToolbar from "./BranchToolbar";
 import GitActionsControl from "./GitActionsControl";
 import GitPanel from "./git-panel/GitPanel";
@@ -3577,47 +3573,54 @@ export default function ChatView({ threadId }: ChatViewProps) {
       {/* Error banner */}
       <ProviderHealthBanner status={activeProviderStatus} />
       <ThreadErrorBanner error={activeThread.error} />
-      <PlanModePanel activePlan={activePlan} timestampFormat={timestampFormat} />
 
       {/* Messages */}
-      <div
-        ref={setMessagesScrollContainerRef}
-        className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain px-3 py-3 sm:px-5 sm:py-4"
-        onScroll={onMessagesScroll}
-        onClickCapture={onMessagesClickCapture}
-        onWheel={onMessagesWheel}
-        onPointerDown={onMessagesPointerDown}
-        onPointerUp={onMessagesPointerUp}
-        onPointerCancel={onMessagesPointerCancel}
-        onTouchStart={onMessagesTouchStart}
-        onTouchMove={onMessagesTouchMove}
-        onTouchEnd={onMessagesTouchEnd}
-        onTouchCancel={onMessagesTouchEnd}
-      >
-        <MessagesTimeline
-          key={activeThread.id}
-          hasMessages={timelineEntries.length > 0}
-          isWorking={isWorking}
-          activeTurnInProgress={isWorking || !latestTurnSettled}
-          activeTurnStartedAt={activeWorkStartedAt}
-          scrollContainer={messagesScrollElement}
-          timelineEntries={timelineEntries}
-          completionDividerBeforeEntryId={completionDividerBeforeEntryId}
-          completionSummary={completionSummary}
-          turnDiffSummaryByAssistantMessageId={turnDiffSummaryByAssistantMessageId}
-          nowIso={nowIso}
-          expandedWorkGroups={expandedWorkGroups}
-          onToggleWorkGroup={onToggleWorkGroup}
-          onOpenTurnDiff={onOpenTurnDiff}
-          revertTurnCountByUserMessageId={revertTurnCountByUserMessageId}
-          onRevertUserMessage={onRevertUserMessage}
-          isRevertingCheckpoint={isRevertingCheckpoint}
-          onImageExpand={onExpandTimelineImage}
-          markdownCwd={gitCwd ?? undefined}
-          resolvedTheme={resolvedTheme}
-          workspaceRoot={activeProject?.cwd ?? undefined}
-          timestampFormat={timestampFormat}
-        />
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        {activePlan && !diffOpen && !githubOpen ? (
+          <PlanModePanel activePlan={activePlan} timestampFormat={timestampFormat} />
+        ) : null}
+        <div
+          ref={setMessagesScrollContainerRef}
+          className={cn(
+            "min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain px-3 py-3 sm:px-5 sm:py-4",
+            activePlan && !diffOpen && !githubOpen && "pt-24 sm:pt-26",
+          )}
+          onScroll={onMessagesScroll}
+          onClickCapture={onMessagesClickCapture}
+          onWheel={onMessagesWheel}
+          onPointerDown={onMessagesPointerDown}
+          onPointerUp={onMessagesPointerUp}
+          onPointerCancel={onMessagesPointerCancel}
+          onTouchStart={onMessagesTouchStart}
+          onTouchMove={onMessagesTouchMove}
+          onTouchEnd={onMessagesTouchEnd}
+          onTouchCancel={onMessagesTouchEnd}
+        >
+          <MessagesTimeline
+            key={activeThread.id}
+            hasMessages={timelineEntries.length > 0}
+            isWorking={isWorking}
+            activeTurnInProgress={isWorking || !latestTurnSettled}
+            activeTurnStartedAt={activeWorkStartedAt}
+            scrollContainer={messagesScrollElement}
+            timelineEntries={timelineEntries}
+            completionDividerBeforeEntryId={completionDividerBeforeEntryId}
+            completionSummary={completionSummary}
+            turnDiffSummaryByAssistantMessageId={turnDiffSummaryByAssistantMessageId}
+            nowIso={nowIso}
+            expandedWorkGroups={expandedWorkGroups}
+            onToggleWorkGroup={onToggleWorkGroup}
+            onOpenTurnDiff={onOpenTurnDiff}
+            revertTurnCountByUserMessageId={revertTurnCountByUserMessageId}
+            onRevertUserMessage={onRevertUserMessage}
+            isRevertingCheckpoint={isRevertingCheckpoint}
+            onImageExpand={onExpandTimelineImage}
+            markdownCwd={gitCwd ?? undefined}
+            resolvedTheme={resolvedTheme}
+            workspaceRoot={activeProject?.cwd ?? undefined}
+            timestampFormat={timestampFormat}
+          />
+        </div>
       </div>
 
       {/* Input bar */}
@@ -4465,43 +4468,71 @@ const PlanModePanel = memo(function PlanModePanel({
 }: PlanModePanelProps) {
   if (!activePlan) return null;
 
+  const [expanded, setExpanded] = useState(false);
+  useEffect(() => {
+    setExpanded(false);
+  }, [activePlan.createdAt]);
+
+  const completedCount = activePlan.steps.filter((step) => step.status === "completed").length;
+  const inProgressCount = activePlan.steps.filter((step) => step.status === "inProgress").length;
+  const pendingCount = activePlan.steps.filter((step) => step.status === "pending").length;
+
   return (
-    <div className="pt-3 mx-auto max-w-3xl">
-      <div className="rounded-xl border border-border/70 bg-muted/30 p-4">
-        <div className="flex items-center gap-2">
-          <Badge variant="secondary">Plan</Badge>
-          <span className="text-xs text-muted-foreground">
-            Updated {formatTimestamp(activePlan.createdAt, timestampFormat)}
-          </span>
+    <div className="pointer-events-none absolute inset-x-3 top-3 z-20 flex justify-center lg:justify-end sm:inset-x-5">
+      <div className="pointer-events-auto w-full max-w-[420px] rounded-2xl border border-border/45 bg-background/35 p-4 shadow-[0_18px_60px_-28px_rgba(0,0,0,0.75)] backdrop-blur-xl supports-[backdrop-filter]:bg-background/24">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <Badge variant="secondary">Plan</Badge>
+            <span className="text-xs text-muted-foreground">
+              Updated {formatTimestamp(activePlan.createdAt, timestampFormat)}
+            </span>
+          </div>
+          <Button size="xs" variant="outline" onClick={() => setExpanded((value) => !value)}>
+            {expanded ? (
+              <ChevronDownIcon aria-hidden="true" className="size-3.5" />
+            ) : (
+              <ChevronRightIcon aria-hidden="true" className="size-3.5" />
+            )}
+            {expanded ? "Collapse" : "Expand"}
+          </Button>
         </div>
-        {activePlan.explanation ? (
-          <p className="mt-2 text-sm text-muted-foreground">{activePlan.explanation}</p>
-        ) : null}
-        <div className="mt-3 space-y-2">
-          {activePlan.steps.map((step) => (
-            <div
-              key={`${step.status}:${step.step}`}
-              className="flex items-start gap-3 rounded-lg border border-border/60 bg-background/80 px-3 py-2"
-            >
-              <Badge
-                variant={
-                  step.status === "completed"
-                    ? "default"
-                    : step.status === "inProgress"
-                      ? "secondary"
-                      : "outline"
-                }
-              >
-                {step.status === "inProgress"
-                  ? "In progress"
-                  : step.status === "completed"
-                    ? "Done"
-                    : "Pending"}
-              </Badge>
-              <div className="min-w-0 flex-1 text-sm">{step.step}</div>
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <span>{completedCount} done</span>
+          {inProgressCount > 0 ? <span>{inProgressCount} in progress</span> : null}
+          {pendingCount > 0 ? <span>{pendingCount} pending</span> : null}
+        </div>
+        {expanded ? (
+          <>
+            {activePlan.explanation ? (
+              <p className="mt-3 text-sm text-muted-foreground">{activePlan.explanation}</p>
+            ) : null}
+            <div className="mt-3 space-y-2">
+              {activePlan.steps.map((step) => (
+                <div
+                  key={`${step.status}:${step.step}`}
+                  className="flex items-start gap-3 rounded-lg border border-border/60 bg-background/80 px-3 py-2"
+                >
+                  <Badge
+                    variant={
+                      step.status === "completed"
+                        ? "default"
+                        : step.status === "inProgress"
+                          ? "secondary"
+                          : "outline"
+                    }
+                  >
+                    {step.status === "inProgress"
+                      ? "In progress"
+                      : step.status === "completed"
+                        ? "Done"
+                        : "Pending"}
+                  </Badge>
+                  <div className="min-w-0 flex-1 text-sm">{step.step}</div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          </>
+        ) : null}
       </div>
     </div>
   );
@@ -4623,155 +4654,6 @@ const MessageCopyButton = memo(function MessageCopyButton({ text }: { text: stri
   );
 });
 
-function hasNonZeroStat(stat: { additions: number; deletions: number }): boolean {
-  return stat.additions > 0 || stat.deletions > 0;
-}
-
-const DiffStatLabel = memo(function DiffStatLabel(props: {
-  additions: number;
-  deletions: number;
-  showParentheses?: boolean;
-}) {
-  const { additions, deletions, showParentheses = false } = props;
-  return (
-    <>
-      {showParentheses && <span className="text-muted-foreground/70">(</span>}
-      <span className="text-success">+{additions}</span>
-      <span className="mx-0.5 text-muted-foreground/70">/</span>
-      <span className="text-destructive">-{deletions}</span>
-      {showParentheses && <span className="text-muted-foreground/70">)</span>}
-    </>
-  );
-});
-
-function collectDirectoryPaths(nodes: ReadonlyArray<TurnDiffTreeNode>): string[] {
-  const paths: string[] = [];
-  for (const node of nodes) {
-    if (node.kind !== "directory") continue;
-    paths.push(node.path);
-    paths.push(...collectDirectoryPaths(node.children));
-  }
-  return paths;
-}
-
-function buildDirectoryExpansionState(
-  directoryPaths: ReadonlyArray<string>,
-  expanded: boolean,
-): Record<string, boolean> {
-  const expandedState: Record<string, boolean> = {};
-  for (const directoryPath of directoryPaths) {
-    expandedState[directoryPath] = expanded;
-  }
-  return expandedState;
-}
-
-const ChangedFilesTree = memo(function ChangedFilesTree(props: {
-  turnId: TurnId;
-  files: ReadonlyArray<TurnDiffFileChange>;
-  allDirectoriesExpanded: boolean;
-  resolvedTheme: "light" | "dark";
-  onOpenTurnDiff: (turnId: TurnId, filePath?: string) => void;
-}) {
-  const { files, allDirectoriesExpanded, onOpenTurnDiff, resolvedTheme, turnId } = props;
-  const treeNodes = useMemo(() => buildTurnDiffTree(files), [files]);
-  const directoryPathsKey = useMemo(
-    () => collectDirectoryPaths(treeNodes).join("\u0000"),
-    [treeNodes],
-  );
-  const allDirectoryExpansionState = useMemo(
-    () =>
-      buildDirectoryExpansionState(
-        directoryPathsKey ? directoryPathsKey.split("\u0000") : [],
-        allDirectoriesExpanded,
-      ),
-    [allDirectoriesExpanded, directoryPathsKey],
-  );
-  const [expandedDirectories, setExpandedDirectories] = useState<Record<string, boolean>>(() =>
-    buildDirectoryExpansionState(directoryPathsKey ? directoryPathsKey.split("\u0000") : [], true),
-  );
-  useEffect(() => {
-    setExpandedDirectories(allDirectoryExpansionState);
-  }, [allDirectoryExpansionState]);
-
-  const toggleDirectory = useCallback((pathValue: string, fallbackExpanded: boolean) => {
-    setExpandedDirectories((current) => ({
-      ...current,
-      [pathValue]: !(current[pathValue] ?? fallbackExpanded),
-    }));
-  }, []);
-
-  const renderTreeNode = (node: TurnDiffTreeNode, depth: number) => {
-    const leftPadding = 8 + depth * 14;
-    if (node.kind === "directory") {
-      const isExpanded = expandedDirectories[node.path] ?? depth === 0;
-      return (
-        <div key={`dir:${node.path}`}>
-          <button
-            type="button"
-            className="group flex w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left hover:bg-background/80"
-            style={{ paddingLeft: `${leftPadding}px` }}
-            onClick={() => toggleDirectory(node.path, depth === 0)}
-          >
-            <ChevronRightIcon
-              aria-hidden="true"
-              className={cn(
-                "size-3.5 shrink-0 text-muted-foreground/70 transition-transform group-hover:text-foreground/80",
-                isExpanded && "rotate-90",
-              )}
-            />
-            {isExpanded ? (
-              <FolderIcon className="size-3.5 shrink-0 text-muted-foreground/75" />
-            ) : (
-              <FolderClosedIcon className="size-3.5 shrink-0 text-muted-foreground/75" />
-            )}
-            <span className="truncate font-mono text-[11px] text-muted-foreground/90 group-hover:text-foreground/90">
-              {node.name}
-            </span>
-            {hasNonZeroStat(node.stat) && (
-              <span className="ml-auto shrink-0 font-mono text-[10px] tabular-nums">
-                <DiffStatLabel additions={node.stat.additions} deletions={node.stat.deletions} />
-              </span>
-            )}
-          </button>
-          {isExpanded && (
-            <div className="space-y-0.5">
-              {node.children.map((childNode) => renderTreeNode(childNode, depth + 1))}
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    return (
-      <button
-        key={`file:${node.path}`}
-        type="button"
-        className="group flex w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left hover:bg-background/80"
-        style={{ paddingLeft: `${leftPadding}px` }}
-        onClick={() => onOpenTurnDiff(turnId, node.path)}
-      >
-        <span aria-hidden="true" className="size-3.5 shrink-0" />
-        <VscodeEntryIcon
-          pathValue={node.path}
-          kind="file"
-          theme={resolvedTheme}
-          className="size-3.5 text-muted-foreground/70"
-        />
-        <span className="truncate font-mono text-[11px] text-muted-foreground/80 group-hover:text-foreground/90">
-          {node.name}
-        </span>
-        {node.stat && (
-          <span className="ml-auto shrink-0 font-mono text-[10px] tabular-nums">
-            <DiffStatLabel additions={node.stat.additions} deletions={node.stat.deletions} />
-          </span>
-        )}
-      </button>
-    );
-  };
-
-  return <div className="space-y-0.5">{treeNodes.map((node) => renderTreeNode(node, 0))}</div>;
-});
-
 const ProposedPlanCard = memo(function ProposedPlanCard({
   planMarkdown,
   cwd,
@@ -4787,8 +4669,9 @@ const ProposedPlanCard = memo(function ProposedPlanCard({
   const [isSavingToWorkspace, setIsSavingToWorkspace] = useState(false);
   const savePathInputId = useId();
   const title = proposedPlanTitle(planMarkdown) ?? "Proposed plan";
-  const lineCount = planMarkdown.split("\n").length;
-  const canCollapse = planMarkdown.length > 900 || lineCount > 20;
+  const displayedPlanMarkdown = stripDisplayedPlanMarkdown(planMarkdown);
+  const collapsedPreview = buildCollapsedProposedPlanPreviewMarkdown(planMarkdown, { maxLines: 5 });
+  const canCollapse = collapsedPreview.trimEnd() !== displayedPlanMarkdown.trimEnd();
   const downloadFilename = buildProposedPlanMarkdownFilename(planMarkdown);
   const saveContents = normalizePlanMarkdownForExport(planMarkdown);
 
@@ -4862,34 +4745,43 @@ const ProposedPlanCard = memo(function ProposedPlanCard({
           <Badge variant="secondary">Plan</Badge>
           <p className="truncate text-sm font-medium text-foreground">{title}</p>
         </div>
-        <Menu>
-          <MenuTrigger
-            render={<Button aria-label="Plan actions" size="icon-xs" variant="outline" />}
-          >
-            <EllipsisIcon aria-hidden="true" className="size-4" />
-          </MenuTrigger>
-          <MenuPopup align="end">
-            <MenuItem onClick={handleDownload}>Download as markdown</MenuItem>
-            <MenuItem onClick={openSaveDialog} disabled={!workspaceRoot || isSavingToWorkspace}>
-              Save to workspace
-            </MenuItem>
-          </MenuPopup>
-        </Menu>
+        <div className="flex items-center gap-2">
+          {canCollapse ? (
+            <Button size="xs" variant="outline" onClick={() => setExpanded((value) => !value)}>
+              {expanded ? (
+                <ChevronDownIcon aria-hidden="true" className="size-3.5" />
+              ) : (
+                <ChevronRightIcon aria-hidden="true" className="size-3.5" />
+              )}
+              {expanded ? "Collapse" : "Expand"}
+            </Button>
+          ) : null}
+          <Menu>
+            <MenuTrigger
+              render={<Button aria-label="Plan actions" size="icon-xs" variant="outline" />}
+            >
+              <EllipsisIcon aria-hidden="true" className="size-4" />
+            </MenuTrigger>
+            <MenuPopup align="end">
+              <MenuItem onClick={handleDownload}>Download as markdown</MenuItem>
+              <MenuItem onClick={openSaveDialog} disabled={!workspaceRoot || isSavingToWorkspace}>
+                Save to workspace
+              </MenuItem>
+            </MenuPopup>
+          </Menu>
+        </div>
       </div>
-      <div className="mt-4">
-        <div className={cn("relative", canCollapse && !expanded && "max-h-104 overflow-hidden")}>
-          <ChatMarkdown text={planMarkdown} cwd={cwd} isStreaming={false} />
+      <div className="mt-3">
+        <div className={cn("relative", canCollapse && !expanded && "max-h-60 overflow-hidden")}>
+          <ChatMarkdown
+            text={canCollapse && !expanded ? collapsedPreview : displayedPlanMarkdown}
+            cwd={cwd}
+            isStreaming={false}
+          />
           {canCollapse && !expanded ? (
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-linear-to-t from-card/95 via-card/80 to-transparent" />
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-linear-to-t from-card/95 via-card/75 to-transparent" />
           ) : null}
         </div>
-        {canCollapse ? (
-          <div className="mt-4 flex justify-center">
-            <Button size="sm" variant="outline" onClick={() => setExpanded((value) => !value)}>
-              {expanded ? "Collapse plan" : "Expand plan"}
-            </Button>
-          </div>
-        ) : null}
       </div>
 
       <Dialog
@@ -4994,8 +4886,8 @@ type TimelineRow =
   | { kind: "working"; id: string; createdAt: string | null };
 
 function estimateTimelineProposedPlanHeight(proposedPlan: TimelineProposedPlan): number {
-  const estimatedLines = Math.max(1, Math.ceil(proposedPlan.planMarkdown.length / 72));
-  return 120 + Math.min(estimatedLines * 22, 880);
+  const estimatedLines = Math.max(1, Math.ceil(proposedPlan.planMarkdown.length / 120));
+  return 150 + Math.min(estimatedLines * 12, 72);
 }
 
 const MessagesTimeline = memo(function MessagesTimeline({
@@ -5007,17 +4899,17 @@ const MessagesTimeline = memo(function MessagesTimeline({
   timelineEntries,
   completionDividerBeforeEntryId,
   completionSummary,
-  turnDiffSummaryByAssistantMessageId,
+  turnDiffSummaryByAssistantMessageId: _turnDiffSummaryByAssistantMessageId,
   nowIso,
   expandedWorkGroups,
   onToggleWorkGroup,
-  onOpenTurnDiff,
+  onOpenTurnDiff: _onOpenTurnDiff,
   revertTurnCountByUserMessageId,
   onRevertUserMessage,
   isRevertingCheckpoint,
   onImageExpand,
   markdownCwd,
-  resolvedTheme,
+  resolvedTheme: _resolvedTheme,
   workspaceRoot,
   timestampFormat,
 }: MessagesTimelineProps) {
@@ -5203,15 +5095,6 @@ const MessagesTimeline = memo(function MessagesTimeline({
 
   const virtualRows = rowVirtualizer.getVirtualItems();
   const nonVirtualizedRows = rows.slice(virtualizedRowCount);
-  const [allDirectoriesExpandedByTurnId, setAllDirectoriesExpandedByTurnId] = useState<
-    Record<string, boolean>
-  >({});
-  const onToggleAllDirectories = useCallback((turnId: TurnId) => {
-    setAllDirectoriesExpandedByTurnId((current) => ({
-      ...current,
-      [turnId]: !(current[turnId] ?? true),
-    }));
-  }, []);
 
   const renderRowContent = (row: TimelineRow) => (
     <div
@@ -5400,62 +5283,6 @@ const MessagesTimeline = memo(function MessagesTimeline({
                   cwd={markdownCwd}
                   isStreaming={Boolean(row.message.streaming)}
                 />
-                {(() => {
-                  const turnSummary = turnDiffSummaryByAssistantMessageId.get(row.message.id);
-                  if (!turnSummary) return null;
-                  const checkpointFiles = turnSummary.files;
-                  if (checkpointFiles.length === 0) return null;
-                  const summaryStat = summarizeTurnDiffStats(checkpointFiles);
-                  const changedFileCountLabel = String(checkpointFiles.length);
-                  const allDirectoriesExpanded =
-                    allDirectoriesExpandedByTurnId[turnSummary.turnId] ?? true;
-                  return (
-                    <div className="mt-2 rounded-lg border border-border/80 bg-card/45 p-2.5">
-                      <div className="mb-1.5 flex items-center justify-between gap-2">
-                        <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground/65">
-                          <span>Changed files ({changedFileCountLabel})</span>
-                          {hasNonZeroStat(summaryStat) && (
-                            <>
-                              <span className="mx-1">•</span>
-                              <DiffStatLabel
-                                additions={summaryStat.additions}
-                                deletions={summaryStat.deletions}
-                              />
-                            </>
-                          )}
-                        </p>
-                        <div className="flex items-center gap-1.5">
-                          <Button
-                            type="button"
-                            size="xs"
-                            variant="outline"
-                            onClick={() => onToggleAllDirectories(turnSummary.turnId)}
-                          >
-                            {allDirectoriesExpanded ? "Collapse all" : "Expand all"}
-                          </Button>
-                          <Button
-                            type="button"
-                            size="xs"
-                            variant="outline"
-                            onClick={() =>
-                              onOpenTurnDiff(turnSummary.turnId, checkpointFiles[0]?.path)
-                            }
-                          >
-                            View diff
-                          </Button>
-                        </div>
-                      </div>
-                      <ChangedFilesTree
-                        key={`changed-files-tree:${turnSummary.turnId}`}
-                        turnId={turnSummary.turnId}
-                        files={checkpointFiles}
-                        allDirectoriesExpanded={allDirectoriesExpanded}
-                        resolvedTheme={resolvedTheme}
-                        onOpenTurnDiff={onOpenTurnDiff}
-                      />
-                    </div>
-                  );
-                })()}
                 <p className="mt-1.5 text-[10px] text-muted-foreground/30">
                   {formatMessageMeta(
                     row.message.createdAt,

@@ -8,7 +8,7 @@ import {
   stripDisplayedPlanMarkdown,
 } from "../../proposedPlan";
 import ChatMarkdown from "../ChatMarkdown";
-import { EllipsisIcon } from "lucide-react";
+import { ChevronDownIcon, ChevronRightIcon, EllipsisIcon } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
@@ -41,12 +41,9 @@ export const ProposedPlanCard = memo(function ProposedPlanCard({
   const [isSavingToWorkspace, setIsSavingToWorkspace] = useState(false);
   const savePathInputId = useId();
   const title = proposedPlanTitle(planMarkdown) ?? "Proposed plan";
-  const lineCount = planMarkdown.split("\n").length;
-  const canCollapse = planMarkdown.length > 900 || lineCount > 20;
   const displayedPlanMarkdown = stripDisplayedPlanMarkdown(planMarkdown);
-  const collapsedPreview = canCollapse
-    ? buildCollapsedProposedPlanPreviewMarkdown(planMarkdown, { maxLines: 10 })
-    : null;
+  const collapsedPreview = buildCollapsedProposedPlanPreviewMarkdown(planMarkdown, { maxLines: 5 });
+  const canCollapse = collapsedPreview.trimEnd() !== displayedPlanMarkdown.trimEnd();
   const downloadFilename = buildProposedPlanMarkdownFilename(planMarkdown);
   const saveContents = normalizePlanMarkdownForExport(planMarkdown);
 
@@ -120,43 +117,48 @@ export const ProposedPlanCard = memo(function ProposedPlanCard({
           <Badge variant="secondary">Plan</Badge>
           <p className="truncate text-sm font-medium text-foreground">{title}</p>
         </div>
-        <Menu>
-          <MenuTrigger
-            render={<Button aria-label="Plan actions" size="icon-xs" variant="outline" />}
-          >
-            <EllipsisIcon aria-hidden="true" className="size-4" />
-          </MenuTrigger>
-          <MenuPopup align="end">
-            <MenuItem onClick={handleDownload}>Download as markdown</MenuItem>
-            <MenuItem onClick={openSaveDialog} disabled={!workspaceRoot || isSavingToWorkspace}>
-              Save to workspace
-            </MenuItem>
-          </MenuPopup>
-        </Menu>
+        <div className="flex items-center gap-2">
+          {canCollapse ? (
+            <Button
+              size="xs"
+              variant="outline"
+              data-scroll-anchor-ignore
+              onClick={() => setExpanded((value) => !value)}
+            >
+              {expanded ? (
+                <ChevronDownIcon aria-hidden="true" className="size-3.5" />
+              ) : (
+                <ChevronRightIcon aria-hidden="true" className="size-3.5" />
+              )}
+              {expanded ? "Collapse" : "Expand"}
+            </Button>
+          ) : null}
+          <Menu>
+            <MenuTrigger
+              render={<Button aria-label="Plan actions" size="icon-xs" variant="outline" />}
+            >
+              <EllipsisIcon aria-hidden="true" className="size-4" />
+            </MenuTrigger>
+            <MenuPopup align="end">
+              <MenuItem onClick={handleDownload}>Download as markdown</MenuItem>
+              <MenuItem onClick={openSaveDialog} disabled={!workspaceRoot || isSavingToWorkspace}>
+                Save to workspace
+              </MenuItem>
+            </MenuPopup>
+          </Menu>
+        </div>
       </div>
-      <div className="mt-4">
-        <div className={cn("relative", canCollapse && !expanded && "max-h-104 overflow-hidden")}>
+      <div className="mt-3">
+        <div className={cn("relative", canCollapse && !expanded && "max-h-60 overflow-hidden")}>
           {canCollapse && !expanded ? (
             <ChatMarkdown text={collapsedPreview ?? ""} cwd={cwd} isStreaming={false} />
           ) : (
             <ChatMarkdown text={displayedPlanMarkdown} cwd={cwd} isStreaming={false} />
           )}
           {canCollapse && !expanded ? (
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-linear-to-t from-card/95 via-card/80 to-transparent" />
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-linear-to-t from-card/95 via-card/75 to-transparent" />
           ) : null}
         </div>
-        {canCollapse ? (
-          <div className="mt-4 flex justify-center">
-            <Button
-              size="sm"
-              variant="outline"
-              data-scroll-anchor-ignore
-              onClick={() => setExpanded((value) => !value)}
-            >
-              {expanded ? "Collapse plan" : "Expand plan"}
-            </Button>
-          </div>
-        ) : null}
       </div>
 
       <Dialog
