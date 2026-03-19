@@ -36,6 +36,7 @@ function makeThread(overrides: Partial<Thread> = {}): Thread {
 
 function makeState(thread: Thread): AppState {
   return {
+    pendingThreadTurnStarts: {},
     projects: [
       {
         id: ProjectId.makeUnsafe("project-1"),
@@ -156,6 +157,7 @@ describe("store pure functions", () => {
     const project2 = ProjectId.makeUnsafe("project-2");
     const project3 = ProjectId.makeUnsafe("project-3");
     const state: AppState = {
+      pendingThreadTurnStarts: {},
       projects: [
         {
           id: project1,
@@ -211,6 +213,7 @@ describe("store read model sync", () => {
     const project2 = ProjectId.makeUnsafe("project-2");
     const project3 = ProjectId.makeUnsafe("project-3");
     const initialState: AppState = {
+      pendingThreadTurnStarts: {},
       projects: [
         {
           id: project2,

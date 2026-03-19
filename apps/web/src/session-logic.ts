@@ -307,17 +307,20 @@ export function deriveActivePlanState(
   activities: ReadonlyArray<OrchestrationThreadActivity>,
   latestTurnId: TurnId | undefined,
 ): ActivePlanState | null {
-  const ordered = [...activities].toSorted(compareActivitiesByOrder);
-  const candidates = ordered.filter((activity) => {
+  let latest: OrchestrationThreadActivity | null = null;
+
+  for (const activity of activities) {
     if (activity.kind !== "turn.plan.updated") {
-      return false;
+      continue;
     }
-    if (!latestTurnId) {
-      return true;
+    if (latestTurnId && activity.turnId !== latestTurnId) {
+      continue;
     }
-    return activity.turnId === latestTurnId;
-  });
-  const latest = candidates.at(-1);
+    if (!latest || compareActivitiesByOrder(activity, latest) > 0) {
+      latest = activity;
+    }
+  }
+
   if (!latest) {
     return null;
   }
@@ -618,7 +621,7 @@ function extractChangedFiles(payload: Record<string, unknown> | null): string[] 
   return changedFiles;
 }
 
-function compareActivitiesByOrder(
+export function compareActivitiesByOrder(
   left: OrchestrationThreadActivity,
   right: OrchestrationThreadActivity,
 ): number {

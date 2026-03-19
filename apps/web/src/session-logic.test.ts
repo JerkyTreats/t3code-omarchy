@@ -265,6 +265,57 @@ describe("deriveActivePlanState", () => {
       steps: [{ step: "Implement Codex user input", status: "inProgress" }],
     });
   });
+
+  it("prefers the newest plan update even when activities arrive out of order", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "plan-newest",
+        createdAt: "2026-02-23T00:00:03.000Z",
+        sequence: 3,
+        kind: "turn.plan.updated",
+        summary: "Plan updated",
+        tone: "info",
+        turnId: "turn-1",
+        payload: {
+          explanation: "Newest plan",
+          plan: [{ step: "Ship it", status: "inProgress" }],
+        },
+      }),
+      makeActivity({
+        id: "plan-oldest",
+        createdAt: "2026-02-23T00:00:01.000Z",
+        sequence: 1,
+        kind: "turn.plan.updated",
+        summary: "Plan updated",
+        tone: "info",
+        turnId: "turn-1",
+        payload: {
+          explanation: "Oldest plan",
+          plan: [{ step: "Inspect it", status: "pending" }],
+        },
+      }),
+      makeActivity({
+        id: "plan-middle",
+        createdAt: "2026-02-23T00:00:02.000Z",
+        sequence: 2,
+        kind: "turn.plan.updated",
+        summary: "Plan updated",
+        tone: "info",
+        turnId: "turn-1",
+        payload: {
+          explanation: "Middle plan",
+          plan: [{ step: "Build it", status: "completed" }],
+        },
+      }),
+    ];
+
+    expect(deriveActivePlanState(activities, TurnId.makeUnsafe("turn-1"))).toEqual({
+      createdAt: "2026-02-23T00:00:03.000Z",
+      turnId: "turn-1",
+      explanation: "Newest plan",
+      steps: [{ step: "Ship it", status: "inProgress" }],
+    });
+  });
 });
 
 describe("findLatestProposedPlan", () => {

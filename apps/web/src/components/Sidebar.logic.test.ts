@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  deriveThreadActivityStatusFlags,
   hasUnseenCompletion,
   resolveSidebarNewThreadEnvMode,
   resolveThreadRowClassName,
@@ -22,10 +23,32 @@ function makeLatestTurn(overrides?: {
   };
 }
 
+function makePlanActivity(input: {
+  createdAt?: string;
+  sequence?: number;
+  turnId?: string;
+  steps: ReadonlyArray<{
+    step: string;
+    status: "pending" | "inProgress" | "completed";
+  }>;
+}): NonNullable<Parameters<typeof deriveThreadActivityStatusFlags>[0]>[number] {
+  return {
+    id: `evt-${input.sequence ?? 1}` as never,
+    tone: "info",
+    kind: "turn.plan.updated",
+    summary: "Plan updated",
+    payload: { plan: input.steps },
+    turnId: (input.turnId ?? "turn-1") as never,
+    sequence: input.sequence ?? 1,
+    createdAt: input.createdAt ?? "2026-03-09T10:00:00.000Z",
+  };
+}
+
 describe("hasUnseenCompletion", () => {
   it("returns true when a thread completed after its last visit", () => {
     expect(
       hasUnseenCompletion({
+        activities: [],
         interactionMode: "default",
         latestTurn: makeLatestTurn(),
         lastVisitedAt: "2026-03-09T10:04:00.000Z",
@@ -85,6 +108,7 @@ describe("resolveSidebarNewThreadEnvMode", () => {
 
 describe("resolveThreadStatusPill", () => {
   const baseThread = {
+    activities: [],
     interactionMode: "plan" as const,
     latestTurn: null,
     lastVisitedAt: undefined,
@@ -118,6 +142,27 @@ describe("resolveThreadStatusPill", () => {
     ).toMatchObject({ label: "Awaiting Input", pulse: false });
   });
 
+  it("suppresses a stale completed pill while a new local turn is starting", () => {
+    expect(
+      resolveThreadStatusPill({
+        thread: {
+          ...baseThread,
+          interactionMode: "default",
+          latestTurn: makeLatestTurn(),
+          lastVisitedAt: "2026-03-09T10:04:00.000Z",
+          session: {
+            ...baseThread.session,
+            status: "ready",
+            orchestrationStatus: "ready",
+          },
+        },
+        hasPendingApprovals: false,
+        hasPendingLocalTurnStart: true,
+        hasPendingUserInput: false,
+      }),
+    ).toMatchObject({ label: "Working", pulse: true });
+  });
+
   it("falls back to working when the thread is actively running without blockers", () => {
     expect(
       resolveThreadStatusPill({
@@ -126,6 +171,116 @@ describe("resolveThreadStatusPill", () => {
         hasPendingUserInput: false,
       }),
     ).toMatchObject({ label: "Working", pulse: true });
+  });
+
+  it("shows current plan progress while the thread is running", () => {
+    expect(
+      resolveThreadStatusPill({
+        thread: {
+          ...baseThread,
+          activities: [
+            makePlanActivity({
+              steps: [
+                { step: "Collect moonbeans", status: "completed" },
+                { step: "Polish the cloud", status: "completed" },
+                { step: "Fold the thunder", status: "inProgress" },
+                { step: "Ship the rainbow", status: "pending" },
+              ],
+            }),
+          ],
+          latestTurn: makeLatestTurn({ completedAt: null }),
+        },
+        hasPendingApprovals: false,
+        hasPendingUserInput: false,
+      }),
+    ).toMatchObject({ label: "3/4", pulse: true });
+  });
+
+  it("uses the latest plan update for the active turn", () => {
+    expect(
+      resolveThreadStatusPill({
+        thread: {
+          ...baseThread,
+          activities: [
+            makePlanActivity({
+              sequence: 1,
+              steps: [
+                { step: "Warm the spoon", status: "completed" },
+                { step: "Stir the void", status: "inProgress" },
+              ],
+            }),
+            makePlanActivity({
+              sequence: 2,
+              steps: [
+                { step: "Warm the spoon", status: "completed" },
+                { step: "Stir the void", status: "completed" },
+                { step: "Tune the toaster", status: "inProgress" },
+                { step: "Launch the pancake", status: "pending" },
+              ],
+            }),
+          ],
+          latestTurn: makeLatestTurn({ completedAt: null }),
+        },
+        hasPendingApprovals: false,
+        hasPendingUserInput: false,
+      }),
+    ).toMatchObject({ label: "3/4", pulse: true });
+  });
+
+  it("uses the newest plan update even when activities are out of array order", () => {
+    expect(
+      resolveThreadStatusPill({
+        thread: {
+          ...baseThread,
+          activities: [
+            makePlanActivity({
+              sequence: 3,
+              createdAt: "2026-03-09T10:00:03.000Z",
+              steps: [
+                { step: "Warm the spoon", status: "completed" },
+                { step: "Stir the void", status: "completed" },
+                { step: "Tune the toaster", status: "inProgress" },
+                { step: "Launch the pancake", status: "pending" },
+              ],
+            }),
+            makePlanActivity({
+              sequence: 1,
+              createdAt: "2026-03-09T10:00:01.000Z",
+              steps: [
+                { step: "Warm the spoon", status: "completed" },
+                { step: "Stir the void", status: "inProgress" },
+              ],
+            }),
+          ],
+          latestTurn: makeLatestTurn({ completedAt: null }),
+        },
+        hasPendingApprovals: false,
+        hasPendingUserInput: false,
+      }),
+    ).toMatchObject({ label: "3/4", pulse: true });
+  });
+
+  it("shows completed once every plan step is complete", () => {
+    expect(
+      resolveThreadStatusPill({
+        thread: {
+          ...baseThread,
+          activities: [
+            makePlanActivity({
+              steps: [
+                { step: "Wake the bears", status: "completed" },
+                { step: "Bake the stars", status: "completed" },
+                { step: "Paint the wind", status: "completed" },
+                { step: "Wave goodbye", status: "completed" },
+              ],
+            }),
+          ],
+          latestTurn: makeLatestTurn({ completedAt: null }),
+        },
+        hasPendingApprovals: false,
+        hasPendingUserInput: false,
+      }),
+    ).toMatchObject({ label: "Completed", pulse: false });
   });
 
   it("shows plan ready when a settled plan turn has a proposed plan ready for follow-up", () => {
@@ -204,6 +359,130 @@ describe("resolveThreadStatusPill", () => {
         hasPendingUserInput: false,
       }),
     ).toMatchObject({ label: "Completed", pulse: false });
+  });
+});
+
+describe("deriveThreadActivityStatusFlags", () => {
+  it("tracks pending approvals and pending user input in one pass", () => {
+    expect(
+      deriveThreadActivityStatusFlags([
+        {
+          id: "evt-approval-requested" as never,
+          tone: "approval",
+          kind: "approval.requested",
+          summary: "Approval requested",
+          payload: {
+            requestId: "approval-1",
+            requestKind: "command",
+          },
+          turnId: "turn-1" as never,
+          sequence: 1,
+          createdAt: "2026-03-09T10:00:00.000Z",
+        },
+        {
+          id: "evt-user-input-requested" as never,
+          tone: "info",
+          kind: "user-input.requested",
+          summary: "User input requested",
+          payload: {
+            requestId: "input-1",
+            questions: [
+              {
+                id: "question-1",
+                header: "Need input",
+                question: "Pick one",
+                options: [{ label: "A", description: "Option A" }],
+              },
+            ],
+          },
+          turnId: "turn-1" as never,
+          sequence: 2,
+          createdAt: "2026-03-09T10:00:01.000Z",
+        },
+        {
+          id: "evt-approval-resolved" as never,
+          tone: "approval",
+          kind: "approval.resolved",
+          summary: "Approval resolved",
+          payload: {
+            requestId: "approval-1",
+          },
+          turnId: "turn-1" as never,
+          sequence: 3,
+          createdAt: "2026-03-09T10:00:02.000Z",
+        },
+      ]),
+    ).toEqual({
+      hasPendingApprovals: false,
+      hasPendingUserInput: true,
+    });
+  });
+
+  it("stays correct when request activities are out of array order", () => {
+    expect(
+      deriveThreadActivityStatusFlags([
+        {
+          id: "evt-user-input-resolved" as never,
+          tone: "info",
+          kind: "user-input.resolved",
+          summary: "User input resolved",
+          payload: {
+            requestId: "input-1",
+          },
+          turnId: "turn-1" as never,
+          sequence: 4,
+          createdAt: "2026-03-09T10:00:03.000Z",
+        },
+        {
+          id: "evt-approval-requested" as never,
+          tone: "approval",
+          kind: "approval.requested",
+          summary: "Approval requested",
+          payload: {
+            requestId: "approval-1",
+            requestKind: "command",
+          },
+          turnId: "turn-1" as never,
+          sequence: 1,
+          createdAt: "2026-03-09T10:00:00.000Z",
+        },
+        {
+          id: "evt-approval-resolved" as never,
+          tone: "approval",
+          kind: "approval.resolved",
+          summary: "Approval resolved",
+          payload: {
+            requestId: "approval-1",
+          },
+          turnId: "turn-1" as never,
+          sequence: 2,
+          createdAt: "2026-03-09T10:00:01.000Z",
+        },
+        {
+          id: "evt-user-input-requested" as never,
+          tone: "info",
+          kind: "user-input.requested",
+          summary: "User input requested",
+          payload: {
+            requestId: "input-1",
+            questions: [
+              {
+                id: "question-1",
+                header: "Need input",
+                question: "Pick one",
+                options: [{ label: "A", description: "Option A" }],
+              },
+            ],
+          },
+          turnId: "turn-1" as never,
+          sequence: 3,
+          createdAt: "2026-03-09T10:00:02.000Z",
+        },
+      ]),
+    ).toEqual({
+      hasPendingApprovals: false,
+      hasPendingUserInput: false,
+    });
   });
 });
 
