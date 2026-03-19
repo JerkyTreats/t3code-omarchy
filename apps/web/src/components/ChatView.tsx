@@ -89,6 +89,7 @@ import {
   hasActionableProposedPlan,
   hasToolActivityForTurn,
   isLatestTurnSettled,
+  isThreadRuntimeWorking,
   formatElapsed,
 } from "../session-logic";
 import { formatTimestamp } from "../timestampFormat";
@@ -637,8 +638,6 @@ interface ChatViewProps {
 }
 
 export default function ChatView({ threadId }: ChatViewProps) {
-  const clearThreadTurnStartPending = useStore((store) => store.clearThreadTurnStartPending);
-  const markThreadTurnStartPending = useStore((store) => store.markThreadTurnStartPending);
   const threads = useStore((store) => store.threads);
   const projects = useStore((store) => store.projects);
   const markThreadVisited = useStore((store) => store.markThreadVisited);
@@ -757,7 +756,6 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const attachmentPreviewHandoffByMessageIdRef = useRef<Record<string, string[]>>({});
   const attachmentPreviewHandoffTimeoutByMessageIdRef = useRef<Record<string, number>>({});
   const sendInFlightRef = useRef(false);
-  const pendingTurnStartThreadIdRef = useRef<ThreadId | null>(null);
   const dragDepthRef = useRef(0);
   const terminalOpenByThreadRef = useRef<Record<string, boolean>>({});
   const setMessagesScrollContainerRef = useCallback((element: HTMLDivElement | null) => {
@@ -953,7 +951,11 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const phase = derivePhase(activeThread?.session ?? null);
   const isSendBusy = sendPhase !== "idle";
   const isPreparingWorktree = sendPhase === "preparing-worktree";
-  const isWorking = phase === "running" || isSendBusy || isConnecting || isRevertingCheckpoint;
+  const isWorking =
+    isThreadRuntimeWorking(activeThread?.runtime ?? null) ||
+    isSendBusy ||
+    isConnecting ||
+    isRevertingCheckpoint;
   const nowIso = new Date(nowTick).toISOString();
   const activeWorkStartedAt = deriveActiveWorkStartedAt(
     activeLatestTurn,
@@ -2351,13 +2353,9 @@ export default function ChatView({ threadId }: ChatViewProps) {
   }, []);
 
   const resetSendPhase = useCallback(() => {
-    if (pendingTurnStartThreadIdRef.current) {
-      clearThreadTurnStartPending(pendingTurnStartThreadIdRef.current);
-      pendingTurnStartThreadIdRef.current = null;
-    }
     setSendPhase("idle");
     setSendStartedAt(null);
-  }, [clearThreadTurnStartPending]);
+  }, []);
 
   useEffect(() => {
     if (sendPhase === "idle") {
@@ -2763,8 +2761,6 @@ export default function ChatView({ threadId }: ChatViewProps) {
     }
 
     sendInFlightRef.current = true;
-    pendingTurnStartThreadIdRef.current = threadIdForSend;
-    markThreadTurnStartPending(threadIdForSend);
     beginSendPhase(baseBranchForWorktree ? "preparing-worktree" : "sending-turn");
 
     const composerImagesSnapshot = [...composerImages];
@@ -3189,8 +3185,6 @@ export default function ChatView({ threadId }: ChatViewProps) {
       const messageCreatedAt = new Date().toISOString();
 
       sendInFlightRef.current = true;
-      pendingTurnStartThreadIdRef.current = threadIdForSend;
-      markThreadTurnStartPending(threadIdForSend);
       beginSendPhase("sending-turn");
       setThreadError(threadIdForSend, null);
       setOptimisticUserMessages((existing) => [
@@ -3264,7 +3258,6 @@ export default function ChatView({ threadId }: ChatViewProps) {
       activeThread,
       activeProposedPlan,
       beginSendPhase,
-      markThreadTurnStartPending,
       forceStickToBottom,
       isConnecting,
       isSendBusy,

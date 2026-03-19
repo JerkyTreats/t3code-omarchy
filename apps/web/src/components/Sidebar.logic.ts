@@ -6,6 +6,8 @@ import {
   findLatestProposedPlan,
   hasActionableProposedPlan,
   isLatestTurnSettled,
+  isThreadRuntimeConnecting,
+  isThreadRuntimeWorking,
 } from "../session-logic";
 
 export const THREAD_SELECTION_SAFE_SELECTOR = "[data-thread-item], [data-thread-selection-safe]";
@@ -20,7 +22,13 @@ export interface ThreadStatusPill {
 
 type ThreadStatusInput = Pick<
   Thread,
-  "interactionMode" | "latestTurn" | "lastVisitedAt" | "proposedPlans" | "session" | "activities"
+  | "interactionMode"
+  | "latestTurn"
+  | "lastVisitedAt"
+  | "proposedPlans"
+  | "runtime"
+  | "session"
+  | "activities"
 >;
 
 export interface ThreadActivityStatusFlags {
@@ -225,12 +233,11 @@ export function resolveThreadRowClassName(input: {
 }
 
 export function resolveThreadStatusPill(input: {
-  hasPendingLocalTurnStart?: boolean;
   thread: ThreadStatusInput;
   hasPendingApprovals: boolean;
   hasPendingUserInput: boolean;
 }): ThreadStatusPill | null {
-  const { hasPendingApprovals, hasPendingLocalTurnStart, hasPendingUserInput, thread } = input;
+  const { hasPendingApprovals, hasPendingUserInput, thread } = input;
 
   if (hasPendingApprovals) {
     return {
@@ -250,7 +257,9 @@ export function resolveThreadStatusPill(input: {
     };
   }
 
-  if (hasPendingLocalTurnStart) {
+  const activePlanProgress = deriveActivePlanProgress(thread);
+
+  if (thread.runtime?.turnStatus === "pending") {
     return {
       label: "Working",
       colorClass: "text-sky-600 dark:text-sky-300/80",
@@ -259,9 +268,7 @@ export function resolveThreadStatusPill(input: {
     };
   }
 
-  const activePlanProgress = deriveActivePlanProgress(thread);
-
-  if (thread.session?.status === "running") {
+  if (thread.runtime?.turnStatus === "running" || isThreadRuntimeWorking(thread.runtime)) {
     if (activePlanProgress) {
       if (activePlanProgress.completedAllSteps) {
         return {
@@ -286,7 +293,7 @@ export function resolveThreadStatusPill(input: {
     };
   }
 
-  if (thread.session?.status === "connecting") {
+  if (isThreadRuntimeConnecting(thread.runtime)) {
     return {
       label: "Connecting",
       colorClass: "text-sky-600 dark:text-sky-300/80",

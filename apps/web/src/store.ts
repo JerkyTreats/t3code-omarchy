@@ -20,7 +20,6 @@ import { Debouncer } from "@tanstack/react-pacer";
 
 export interface AppState {
   projects: Project[];
-  pendingThreadTurnStarts: Record<string, true>;
   threads: Thread[];
   threadsHydrated: boolean;
 }
@@ -40,7 +39,6 @@ const LEGACY_PERSISTED_STATE_KEYS = [
 
 const initialState: AppState = {
   projects: [],
-  pendingThreadTurnStarts: {},
   threads: [],
   threadsHydrated: false,
 };
@@ -313,6 +311,7 @@ export function syncServerReadModel(state: AppState, readModel: OrchestrationRea
         })),
         error: thread.session?.lastError ?? null,
         createdAt: thread.createdAt,
+        runtime: thread.runtime ?? null,
         latestTurn: thread.latestTurn,
         lastVisitedAt: existing?.lastVisitedAt ?? thread.updatedAt,
         branch: thread.branch,
@@ -332,51 +331,9 @@ export function syncServerReadModel(state: AppState, readModel: OrchestrationRea
     });
   return {
     ...state,
-    pendingThreadTurnStarts: Object.fromEntries(
-      Object.entries(state.pendingThreadTurnStarts).filter(([threadId]) => {
-        const matchingThread = threads.find((thread) => thread.id === threadId);
-        if (!matchingThread) {
-          return false;
-        }
-        if (
-          matchingThread.session?.status === "running" ||
-          matchingThread.session?.status === "connecting"
-        ) {
-          return false;
-        }
-        if (matchingThread.latestTurn?.state === "running") {
-          return false;
-        }
-        return true;
-      }),
-    ),
     projects,
     threads,
     threadsHydrated: true,
-  };
-}
-
-export function markThreadTurnStartPending(state: AppState, threadId: ThreadId): AppState {
-  if (state.pendingThreadTurnStarts[threadId]) {
-    return state;
-  }
-  return {
-    ...state,
-    pendingThreadTurnStarts: {
-      ...state.pendingThreadTurnStarts,
-      [threadId]: true,
-    },
-  };
-}
-
-export function clearThreadTurnStartPending(state: AppState, threadId: ThreadId): AppState {
-  if (!state.pendingThreadTurnStarts[threadId]) {
-    return state;
-  }
-  const { [threadId]: _removed, ...rest } = state.pendingThreadTurnStarts;
-  return {
-    ...state,
-    pendingThreadTurnStarts: rest,
   };
 }
 
@@ -480,8 +437,6 @@ export function setThreadBranch(
 // ── Zustand store ────────────────────────────────────────────────────
 
 interface AppStore extends AppState {
-  clearThreadTurnStartPending: (threadId: ThreadId) => void;
-  markThreadTurnStartPending: (threadId: ThreadId) => void;
   syncServerReadModel: (readModel: OrchestrationReadModel) => void;
   markThreadVisited: (threadId: ThreadId, visitedAt?: string) => void;
   markThreadUnread: (threadId: ThreadId) => void;
@@ -494,10 +449,6 @@ interface AppStore extends AppState {
 
 export const useStore = create<AppStore>((set) => ({
   ...readPersistedState(),
-  clearThreadTurnStartPending: (threadId) =>
-    set((state) => clearThreadTurnStartPending(state, threadId)),
-  markThreadTurnStartPending: (threadId) =>
-    set((state) => markThreadTurnStartPending(state, threadId)),
   syncServerReadModel: (readModel) => set((state) => syncServerReadModel(state, readModel)),
   markThreadVisited: (threadId, visitedAt) =>
     set((state) => markThreadVisited(state, threadId, visitedAt)),

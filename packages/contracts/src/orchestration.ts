@@ -258,6 +258,33 @@ export const OrchestrationLatestTurn = Schema.Struct({
 });
 export type OrchestrationLatestTurn = typeof OrchestrationLatestTurn.Type;
 
+export const OrchestrationPendingTurnStart = Schema.Struct({
+  messageId: MessageId,
+  requestedAt: IsoDateTime,
+  sourceProposedPlanThreadId: Schema.NullOr(ThreadId),
+  sourceProposedPlanId: Schema.NullOr(OrchestrationProposedPlanId),
+});
+export type OrchestrationPendingTurnStart = typeof OrchestrationPendingTurnStart.Type;
+
+export const OrchestrationThreadRuntimeTurnStatus = Schema.Literals([
+  "idle",
+  "pending",
+  "running",
+  "interrupted",
+  "completed",
+  "error",
+]);
+export type OrchestrationThreadRuntimeTurnStatus = typeof OrchestrationThreadRuntimeTurnStatus.Type;
+
+export const OrchestrationThreadRuntime = Schema.Struct({
+  sessionStatus: Schema.NullOr(OrchestrationSessionStatus),
+  turnStatus: OrchestrationThreadRuntimeTurnStatus,
+  turnId: Schema.NullOr(TurnId),
+  pendingTurn: Schema.NullOr(OrchestrationPendingTurnStart),
+  updatedAt: IsoDateTime,
+});
+export type OrchestrationThreadRuntime = typeof OrchestrationThreadRuntime.Type;
+
 export const OrchestrationThread = Schema.Struct({
   id: ThreadId,
   projectId: ProjectId,
@@ -272,6 +299,7 @@ export const OrchestrationThread = Schema.Struct({
   issueLink: Schema.optional(Schema.NullOr(GitHubIssueLink)).pipe(
     Schema.withDecodingDefault(() => null),
   ),
+  runtime: Schema.optional(OrchestrationThreadRuntime),
   latestTurn: Schema.NullOr(OrchestrationLatestTurn),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,

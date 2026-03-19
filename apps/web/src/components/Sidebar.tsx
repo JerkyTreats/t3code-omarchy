@@ -202,7 +202,6 @@ function ProjectFavicon({ cwd }: { cwd: string }) {
 
 export default function Sidebar() {
   const projects = useStore((store) => store.projects);
-  const pendingThreadTurnStarts = useStore((store) => store.pendingThreadTurnStarts);
   const threads = useStore((store) => store.threads);
   const markThreadUnread = useStore((store) => store.markThreadUnread);
   const toggleProject = useStore((store) => store.toggleProject);
@@ -1171,7 +1170,6 @@ export default function Sidebar() {
                             EMPTY_THREAD_ACTIVITY_STATUS_FLAGS;
                           const threadStatus = resolveThreadStatusPill({
                             thread,
-                            hasPendingLocalTurnStart: Boolean(pendingThreadTurnStarts[thread.id]),
                             hasPendingApprovals: threadActivityStatus.hasPendingApprovals,
                             hasPendingUserInput: threadActivityStatus.hasPendingUserInput,
                           });

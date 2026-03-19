@@ -7,12 +7,14 @@ import {
   MessageId,
   NonNegativeInt,
   OrchestrationCheckpointFile,
+  OrchestrationPendingTurnStart,
   OrchestrationReadModel,
   ProjectScript,
   TurnId,
   type OrchestrationCheckpointSummary,
   type OrchestrationLatestTurn,
   type OrchestrationMessage,
+  type OrchestrationThreadRuntime,
   type OrchestrationProposedPlan,
   type OrchestrationProject,
   type OrchestrationSession,
@@ -37,6 +39,7 @@ import { ProjectionThreadMessage } from "../../persistence/Services/ProjectionTh
 import { ProjectionThreadProposedPlan } from "../../persistence/Services/ProjectionThreadProposedPlans.ts";
 import { ProjectionThreadSession } from "../../persistence/Services/ProjectionThreadSessions.ts";
 import { ProjectionThread } from "../../persistence/Services/ProjectionThreads.ts";
+import { ProjectionPendingTurnStart } from "../../persistence/Services/ProjectionTurns.ts";
 import { ORCHESTRATION_PROJECTOR_NAMES } from "./ProjectionPipeline.ts";
 import {
   ProjectionSnapshotQuery,
@@ -82,6 +85,7 @@ const ProjectionLatestTurnDbRowSchema = Schema.Struct({
   completedAt: Schema.NullOr(IsoDateTime),
   assistantMessageId: Schema.NullOr(MessageId),
 });
+const ProjectionPendingTurnStartDbRowSchema = ProjectionPendingTurnStart;
 const ProjectionStateDbRowSchema = ProjectionState;
 
 const REQUIRED_SNAPSHOT_PROJECTORS = [
@@ -131,6 +135,70 @@ function sanitizePersistedWorktreePath(worktreePath: string | null): string | nu
   }
 
   return existsSync(worktreePath) ? worktreePath : null;
+}
+
+function deriveThreadRuntime(input: {
+  pendingTurn: OrchestrationPendingTurnStart | null;
+  latestTurn: OrchestrationLatestTurn | null;
+  session: OrchestrationSession | null;
+  threadUpdatedAt: string;
+}): OrchestrationThreadRuntime {
+  const { latestTurn, pendingTurn, session, threadUpdatedAt } = input;
+  let updatedAt = threadUpdatedAt;
+
+  if (pendingTurn) {
+    updatedAt = maxIso(updatedAt, pendingTurn.requestedAt);
+  }
+  if (latestTurn) {
+    updatedAt = maxIso(updatedAt, latestTurn.requestedAt);
+    if (latestTurn.startedAt !== null) {
+      updatedAt = maxIso(updatedAt, latestTurn.startedAt);
+    }
+    if (latestTurn.completedAt !== null) {
+      updatedAt = maxIso(updatedAt, latestTurn.completedAt);
+    }
+  }
+  if (session) {
+    updatedAt = maxIso(updatedAt, session.updatedAt);
+  }
+
+  if (session?.status === "running" && session.activeTurnId !== null) {
+    return {
+      sessionStatus: session.status,
+      turnStatus: "running",
+      turnId: session.activeTurnId,
+      pendingTurn: null,
+      updatedAt,
+    };
+  }
+
+  if (pendingTurn) {
+    return {
+      sessionStatus: session?.status ?? null,
+      turnStatus: "pending",
+      turnId: null,
+      pendingTurn,
+      updatedAt,
+    };
+  }
+
+  if (latestTurn) {
+    return {
+      sessionStatus: session?.status ?? null,
+      turnStatus: latestTurn.state,
+      turnId: latestTurn.turnId,
+      pendingTurn: null,
+      updatedAt,
+    };
+  }
+
+  return {
+    sessionStatus: session?.status ?? null,
+    turnStatus: "idle",
+    turnId: null,
+    pendingTurn: null,
+    updatedAt,
+  };
 }
 
 function toPersistenceSqlOrDecodeError(sqlOperation: string, decodeOperation: string) {
@@ -309,6 +377,26 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
       `,
   });
 
+  const listPendingTurnStartRows = SqlSchema.findAll({
+    Request: Schema.Void,
+    Result: ProjectionPendingTurnStartDbRowSchema,
+    execute: () =>
+      sql`
+        SELECT
+          thread_id AS "threadId",
+          pending_message_id AS "messageId",
+          source_proposed_plan_thread_id AS "sourceProposedPlanThreadId",
+          source_proposed_plan_id AS "sourceProposedPlanId",
+          requested_at AS "requestedAt"
+        FROM projection_turns
+        WHERE turn_id IS NULL
+          AND state = 'pending'
+          AND pending_message_id IS NOT NULL
+          AND checkpoint_turn_count IS NULL
+        ORDER BY thread_id ASC, requested_at DESC
+      `,
+  });
+
   const listProjectionStateRows = SqlSchema.findAll({
     Request: Schema.Void,
     Result: ProjectionStateDbRowSchema,
@@ -335,6 +423,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
             sessionRows,
             checkpointRows,
             latestTurnRows,
+            pendingTurnStartRows,
             stateRows,
           ] = yield* Effect.all([
             listProjectRows(undefined).pipe(
@@ -401,6 +490,14 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
                 ),
               ),
             ),
+            listPendingTurnStartRows(undefined).pipe(
+              Effect.mapError(
+                toPersistenceSqlOrDecodeError(
+                  "ProjectionSnapshotQuery.getSnapshot:listPendingTurnStarts:query",
+                  "ProjectionSnapshotQuery.getSnapshot:listPendingTurnStarts:decodeRows",
+                ),
+              ),
+            ),
             listProjectionStateRows(undefined).pipe(
               Effect.mapError(
                 toPersistenceSqlOrDecodeError(
@@ -415,6 +512,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           const proposedPlansByThread = new Map<string, Array<OrchestrationProposedPlan>>();
           const activitiesByThread = new Map<string, Array<OrchestrationThreadActivity>>();
           const checkpointsByThread = new Map<string, Array<OrchestrationCheckpointSummary>>();
+          const pendingTurnStartByThread = new Map<string, OrchestrationPendingTurnStart>();
           const sessionsByThread = new Map<string, OrchestrationSession>();
           const latestTurnByThread = new Map<string, OrchestrationLatestTurn>();
 
@@ -492,6 +590,19 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
             checkpointsByThread.set(row.threadId, threadCheckpoints);
           }
 
+          for (const row of pendingTurnStartRows) {
+            updatedAt = maxIso(updatedAt, row.requestedAt);
+            if (pendingTurnStartByThread.has(row.threadId)) {
+              continue;
+            }
+            pendingTurnStartByThread.set(row.threadId, {
+              messageId: row.messageId,
+              requestedAt: row.requestedAt,
+              sourceProposedPlanThreadId: row.sourceProposedPlanThreadId,
+              sourceProposedPlanId: row.sourceProposedPlanId,
+            });
+          }
+
           for (const row of latestTurnRows) {
             updatedAt = maxIso(updatedAt, row.requestedAt);
             if (row.startedAt !== null) {
@@ -544,26 +655,38 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
             deletedAt: row.deletedAt,
           }));
 
-          const threads: Array<OrchestrationThread> = threadRows.map((row) => ({
-            id: row.threadId,
-            projectId: row.projectId,
-            title: row.title,
-            model: row.model,
-            runtimeMode: row.runtimeMode,
-            interactionMode: row.interactionMode,
-            branch: row.branch,
-            worktreePath: sanitizePersistedWorktreePath(row.worktreePath),
-            issueLink: row.issueLink ?? null,
-            latestTurn: latestTurnByThread.get(row.threadId) ?? null,
-            createdAt: row.createdAt,
-            updatedAt: row.updatedAt,
-            deletedAt: row.deletedAt,
-            messages: messagesByThread.get(row.threadId) ?? [],
-            proposedPlans: proposedPlansByThread.get(row.threadId) ?? [],
-            activities: activitiesByThread.get(row.threadId) ?? [],
-            checkpoints: checkpointsByThread.get(row.threadId) ?? [],
-            session: sessionsByThread.get(row.threadId) ?? null,
-          }));
+          const threads: Array<OrchestrationThread> = threadRows.map((row) => {
+            const latestTurn = latestTurnByThread.get(row.threadId) ?? null;
+            const session = sessionsByThread.get(row.threadId) ?? null;
+            const pendingTurn = pendingTurnStartByThread.get(row.threadId) ?? null;
+
+            return {
+              id: row.threadId,
+              projectId: row.projectId,
+              title: row.title,
+              model: row.model,
+              runtimeMode: row.runtimeMode,
+              interactionMode: row.interactionMode,
+              branch: row.branch,
+              worktreePath: sanitizePersistedWorktreePath(row.worktreePath),
+              issueLink: row.issueLink ?? null,
+              runtime: deriveThreadRuntime({
+                pendingTurn,
+                latestTurn,
+                session,
+                threadUpdatedAt: row.updatedAt,
+              }),
+              latestTurn,
+              createdAt: row.createdAt,
+              updatedAt: row.updatedAt,
+              deletedAt: row.deletedAt,
+              messages: messagesByThread.get(row.threadId) ?? [],
+              proposedPlans: proposedPlansByThread.get(row.threadId) ?? [],
+              activities: activitiesByThread.get(row.threadId) ?? [],
+              checkpoints: checkpointsByThread.get(row.threadId) ?? [],
+              session,
+            };
+          });
 
           const snapshot = {
             snapshotSequence: computeSnapshotSequence(stateRows),

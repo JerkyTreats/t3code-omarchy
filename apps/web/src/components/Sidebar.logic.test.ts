@@ -107,12 +107,20 @@ describe("resolveSidebarNewThreadEnvMode", () => {
 });
 
 describe("resolveThreadStatusPill", () => {
+  const runningRuntime = {
+    sessionStatus: "running" as const,
+    turnStatus: "running" as const,
+    turnId: "turn-1" as never,
+    pendingTurn: null,
+    updatedAt: "2026-03-09T10:00:00.000Z",
+  };
   const baseThread = {
     activities: [],
     interactionMode: "plan" as const,
     latestTurn: null,
     lastVisitedAt: undefined,
     proposedPlans: [],
+    runtime: null,
     session: {
       provider: "codex" as const,
       status: "running" as const,
@@ -150,6 +158,18 @@ describe("resolveThreadStatusPill", () => {
           interactionMode: "default",
           latestTurn: makeLatestTurn(),
           lastVisitedAt: "2026-03-09T10:04:00.000Z",
+          runtime: {
+            sessionStatus: "ready",
+            turnStatus: "pending",
+            turnId: null,
+            pendingTurn: {
+              messageId: "message-1" as never,
+              requestedAt: "2026-03-09T10:05:30.000Z",
+              sourceProposedPlanThreadId: null,
+              sourceProposedPlanId: null,
+            },
+            updatedAt: "2026-03-09T10:05:30.000Z",
+          },
           session: {
             ...baseThread.session,
             status: "ready",
@@ -157,7 +177,6 @@ describe("resolveThreadStatusPill", () => {
           },
         },
         hasPendingApprovals: false,
-        hasPendingLocalTurnStart: true,
         hasPendingUserInput: false,
       }),
     ).toMatchObject({ label: "Working", pulse: true });
@@ -166,7 +185,10 @@ describe("resolveThreadStatusPill", () => {
   it("falls back to working when the thread is actively running without blockers", () => {
     expect(
       resolveThreadStatusPill({
-        thread: baseThread,
+        thread: {
+          ...baseThread,
+          runtime: runningRuntime,
+        },
         hasPendingApprovals: false,
         hasPendingUserInput: false,
       }),
@@ -190,6 +212,18 @@ describe("resolveThreadStatusPill", () => {
               ],
             }),
           ],
+          runtime: {
+            sessionStatus: "ready",
+            turnStatus: "pending",
+            turnId: null,
+            pendingTurn: {
+              messageId: "message-2" as never,
+              requestedAt: "2026-03-09T07:19:00.000Z",
+              sourceProposedPlanThreadId: null,
+              sourceProposedPlanId: null,
+            },
+            updatedAt: "2026-03-09T07:19:00.000Z",
+          },
           latestTurn: null,
         },
         hasPendingApprovals: false,
@@ -213,6 +247,7 @@ describe("resolveThreadStatusPill", () => {
               ],
             }),
           ],
+          runtime: runningRuntime,
           latestTurn: makeLatestTurn({ completedAt: null }),
         },
         hasPendingApprovals: false,
@@ -244,6 +279,7 @@ describe("resolveThreadStatusPill", () => {
               ],
             }),
           ],
+          runtime: runningRuntime,
           latestTurn: makeLatestTurn({ completedAt: null }),
         },
         hasPendingApprovals: false,
@@ -277,6 +313,7 @@ describe("resolveThreadStatusPill", () => {
               ],
             }),
           ],
+          runtime: runningRuntime,
           latestTurn: makeLatestTurn({ completedAt: null }),
         },
         hasPendingApprovals: false,
@@ -300,6 +337,7 @@ describe("resolveThreadStatusPill", () => {
               ],
             }),
           ],
+          runtime: runningRuntime,
           latestTurn: makeLatestTurn({ completedAt: null }),
         },
         hasPendingApprovals: false,

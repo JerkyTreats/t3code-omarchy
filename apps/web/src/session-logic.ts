@@ -2,6 +2,7 @@ import {
   ApprovalRequestId,
   isToolLifecycleItemType,
   type OrchestrationLatestTurn,
+  type OrchestrationThreadRuntime,
   type OrchestrationThreadActivity,
   type OrchestrationProposedPlanId,
   type ProviderKind,
@@ -121,6 +122,7 @@ export function formatElapsed(startIso: string, endIso: string | undefined): str
 
 type LatestTurnTiming = Pick<OrchestrationLatestTurn, "turnId" | "startedAt" | "completedAt">;
 type SessionActivityState = Pick<ThreadSession, "orchestrationStatus" | "activeTurnId">;
+type ThreadRuntimeActivityState = Pick<OrchestrationThreadRuntime, "sessionStatus" | "turnStatus">;
 
 export function isLatestTurnSettled(
   latestTurn: LatestTurnTiming | null,
@@ -142,6 +144,35 @@ export function deriveActiveWorkStartedAt(
     return latestTurn?.startedAt ?? sendStartedAt;
   }
   return sendStartedAt;
+}
+
+export function isThreadRuntimeWorking(
+  runtime: ThreadRuntimeActivityState | null | undefined,
+): boolean {
+  if (!runtime) {
+    return false;
+  }
+
+  return (
+    runtime.turnStatus === "pending" ||
+    runtime.turnStatus === "running" ||
+    runtime.sessionStatus === "starting" ||
+    runtime.sessionStatus === "running"
+  );
+}
+
+export function isThreadRuntimeConnecting(
+  runtime: ThreadRuntimeActivityState | null | undefined,
+): boolean {
+  if (!runtime) {
+    return false;
+  }
+
+  return (
+    runtime.sessionStatus === "starting" &&
+    runtime.turnStatus !== "pending" &&
+    runtime.turnStatus !== "running"
+  );
 }
 
 function requestKindFromRequestType(requestType: unknown): PendingApproval["requestKind"] | null {
