@@ -22,6 +22,7 @@ import {
   type GitActionMenuItem,
   resolveDefaultBranchActionDialogCopy,
 } from "../GitActionsControl.logic";
+import { useAppSettings } from "~/appSettings";
 import { deriveWorkspaceStatusInfo, resolveDefaultMergeSourceBranch } from "./GitPanel.logic";
 import { resolveEffectiveEnvMode } from "../BranchToolbar.logic";
 import { Badge } from "~/components/ui/badge";
@@ -109,6 +110,7 @@ export default function GitPanel({
   repoRoot,
   activeThreadId,
 }: GitPanelProps) {
+  const { settings } = useAppSettings();
   const navigate = useNavigate();
   const projects = useStore((store) => store.projects);
   const threads = useStore((store) => store.threads);
@@ -209,7 +211,11 @@ export default function GitPanel({
   const isGitHubAuthenticated = githubStatusQuery.data?.authenticated === true;
 
   const runImmediateGitActionMutation = useMutation(
-    gitRunStackedActionMutationOptions({ cwd: workspaceCwd, queryClient }),
+    gitRunStackedActionMutationOptions({
+      cwd: workspaceCwd,
+      queryClient,
+      model: settings.textGenerationModel ?? null,
+    }),
   );
   const pullMutation = useMutation(gitPullMutationOptions({ cwd: workspaceCwd, queryClient }));
   const mergeBranchesMutation = useMutation(
