@@ -173,6 +173,31 @@ describe("resolveThreadStatusPill", () => {
     ).toMatchObject({ label: "Working", pulse: true });
   });
 
+  it("does not reuse a stale historical plan when the latest turn is missing", () => {
+    expect(
+      resolveThreadStatusPill({
+        thread: {
+          ...baseThread,
+          activities: [
+            makePlanActivity({
+              createdAt: "2026-03-09T06:20:46.000Z",
+              turnId: "turn-old",
+              steps: [
+                { step: "Capture Tailscale versions and sources", status: "completed" },
+                { step: "Write DNS capability whitepaper", status: "completed" },
+                { step: "Update plan and endpoint spec", status: "completed" },
+                { step: "Run doc sanity checks", status: "completed" },
+              ],
+            }),
+          ],
+          latestTurn: null,
+        },
+        hasPendingApprovals: false,
+        hasPendingUserInput: false,
+      }),
+    ).toMatchObject({ label: "Working", pulse: true });
+  });
+
   it("shows current plan progress while the thread is running", () => {
     expect(
       resolveThreadStatusPill({

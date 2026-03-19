@@ -266,6 +266,25 @@ describe("deriveActivePlanState", () => {
     });
   });
 
+  it("returns null when there is no latest turn to associate with a plan", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "plan-old",
+        createdAt: "2026-02-23T06:20:46.000Z",
+        kind: "turn.plan.updated",
+        summary: "Plan updated",
+        tone: "info",
+        turnId: "turn-old",
+        payload: {
+          explanation: "Old plan",
+          plan: [{ step: "Capture Tailscale versions and sources", status: "completed" }],
+        },
+      }),
+    ];
+
+    expect(deriveActivePlanState(activities, undefined)).toBeNull();
+  });
+
   it("prefers the newest plan update even when activities arrive out of order", () => {
     const activities: OrchestrationThreadActivity[] = [
       makeActivity({

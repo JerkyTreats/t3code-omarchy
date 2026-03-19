@@ -307,13 +307,17 @@ export function deriveActivePlanState(
   activities: ReadonlyArray<OrchestrationThreadActivity>,
   latestTurnId: TurnId | undefined,
 ): ActivePlanState | null {
+  if (!latestTurnId) {
+    return null;
+  }
+
   let latest: OrchestrationThreadActivity | null = null;
 
   for (const activity of activities) {
     if (activity.kind !== "turn.plan.updated") {
       continue;
     }
-    if (latestTurnId && activity.turnId !== latestTurnId) {
+    if (activity.turnId !== latestTurnId) {
       continue;
     }
     if (!latest || compareActivitiesByOrder(activity, latest) > 0) {
