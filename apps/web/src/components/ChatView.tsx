@@ -731,6 +731,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
     Record<string, string>
   >(() => readLastInvokedScriptByProjectFromStorage());
   const messagesScrollRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const [messagesScrollElement, setMessagesScrollElement] = useState<HTMLDivElement | null>(null);
   const shouldAutoScrollRef = useRef(true);
   const lastKnownScrollTopRef = useRef(0);
@@ -1936,8 +1937,15 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const scrollMessagesToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
     const scrollContainer = messagesScrollRef.current;
     if (!scrollContainer) return;
-    scrollContainer.scrollTo({ top: scrollContainer.scrollHeight, behavior });
-    lastKnownScrollTopRef.current = scrollContainer.scrollTop;
+
+    const scrollToBottomPosition = () => {
+      messagesEndRef.current?.scrollIntoView({ block: "end", behavior });
+      scrollContainer.scrollTo({ top: scrollContainer.scrollHeight, behavior });
+      lastKnownScrollTopRef.current = scrollContainer.scrollTop;
+    };
+
+    scrollToBottomPosition();
+    window.requestAnimationFrame(scrollToBottomPosition);
     shouldAutoScrollRef.current = true;
   }, []);
   const cancelPendingStickToBottom = useCallback(() => {
@@ -3706,6 +3714,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
             workspaceRoot={activeProject?.cwd ?? undefined}
             timestampFormat={timestampFormat}
           />
+          <div ref={messagesEndRef} aria-hidden="true" className="h-px w-full" />
         </div>
         {showScrollToBottom ? (
           <div className="pointer-events-none absolute bottom-1 left-1/2 z-30 flex -translate-x-1/2 justify-center py-1.5">
@@ -4527,15 +4536,33 @@ const PlanModePanel = memo(function PlanModePanel({
 
   return (
     <div className="pointer-events-none absolute inset-x-3 top-3 z-20 flex justify-center lg:justify-end sm:inset-x-5">
-      <div className="pointer-events-auto w-full max-w-[560px] rounded-2xl border border-border/45 bg-background/35 p-3 shadow-[0_18px_60px_-28px_rgba(0,0,0,0.75)] backdrop-blur-xl supports-[backdrop-filter]:bg-background/24">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-2 overflow-hidden whitespace-nowrap">
-            <Badge variant="secondary" className="shrink-0">
-              Plan
-            </Badge>
-            <div className="flex min-w-0 items-center gap-2 overflow-hidden text-xs text-muted-foreground">
-              <span className="hidden shrink-0 md:inline">{planUpdatedLabel}</span>
-              <span className="hidden h-1 w-1 shrink-0 rounded-full bg-border/80 md:block" />
+      <div className="pointer-events-auto w-auto max-w-full rounded-2xl border border-border/45 bg-background/35 px-2.5 py-2 shadow-[0_18px_60px_-28px_rgba(0,0,0,0.75)] backdrop-blur-xl supports-[backdrop-filter]:bg-background/24">
+        <div className="flex items-center justify-between gap-1.5">
+          <div className="flex min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap">
+            <Button
+              size="icon-xs"
+              variant="ghost"
+              className="shrink-0"
+              onClick={() => setExpanded((value) => !value)}
+              aria-label={expanded ? "Collapse plan panel" : "Expand plan panel"}
+            >
+              {expanded ? (
+                <ChevronDownIcon aria-hidden="true" className="size-3.5" />
+              ) : (
+                <ChevronRightIcon aria-hidden="true" className="size-3.5" />
+              )}
+            </Button>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Badge variant="secondary" className="shrink-0 cursor-default">
+                    Plan
+                  </Badge>
+                }
+              />
+              <TooltipPopup side="bottom">{planUpdatedLabel}</TooltipPopup>
+            </Tooltip>
+            <div className="flex min-w-0 items-center gap-1.5 overflow-hidden text-xs text-muted-foreground">
               <span className="shrink-0">{completedCount} done</span>
               {inProgressCount > 0 ? (
                 <>
@@ -4549,23 +4576,9 @@ const PlanModePanel = memo(function PlanModePanel({
                   <span className="shrink-0">{pendingCount} pending</span>
                 </>
               ) : null}
-              {activePlan.explanation ? (
-                <>
-                  <span className="hidden h-1 w-1 shrink-0 rounded-full bg-border/80 sm:block" />
-                  <span className="hidden truncate sm:block">{activePlan.explanation}</span>
-                </>
-              ) : null}
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
-            <Button size="xs" variant="outline" onClick={() => setExpanded((value) => !value)}>
-              {expanded ? (
-                <ChevronDownIcon aria-hidden="true" className="size-3.5" />
-              ) : (
-                <ChevronRightIcon aria-hidden="true" className="size-3.5" />
-              )}
-              {expanded ? "Collapse" : "Expand"}
-            </Button>
             <Button
               size="icon-xs"
               variant="ghost"
@@ -4579,7 +4592,7 @@ const PlanModePanel = memo(function PlanModePanel({
         {expanded ? (
           <div className="mt-3 border-t border-border/50 pt-3">
             {activePlan.explanation ? (
-              <p className="mt-3 text-sm text-muted-foreground">{activePlan.explanation}</p>
+              <p className="text-sm text-muted-foreground">{activePlan.explanation}</p>
             ) : null}
             <div className="mt-3 space-y-2">
               {activePlan.steps.map((step) => (
