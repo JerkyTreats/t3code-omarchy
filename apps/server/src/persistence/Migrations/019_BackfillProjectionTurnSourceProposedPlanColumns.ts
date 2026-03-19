@@ -3,6 +3,7 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 export default Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
+
   const columns = yield* sql`PRAGMA table_info(projection_turns)`.values;
   const hasSourceProposedPlanThreadIdColumn = columns.some(
     (column) => column[1] === "source_proposed_plan_thread_id",
