@@ -290,6 +290,7 @@ const make = Effect.gen(function* () {
 
   const sendTurnForThread = Effect.fnUntraced(function* (input: {
     readonly threadId: ThreadId;
+    readonly turnId?: TurnId;
     readonly messageText: string;
     readonly attachments?: ReadonlyArray<ChatAttachment>;
     readonly provider?: ProviderKind;
@@ -325,7 +326,7 @@ const make = Effect.gen(function* () {
         : (yield* providerService.getCapabilities(activeSession.provider)).sessionModelSwitch;
     const modelForTurn = sessionModelSwitch === "unsupported" ? activeSession?.model : input.model;
 
-    yield* providerService.sendTurn({
+    const turnStartResult = yield* providerService.sendTurn({
       threadId: input.threadId,
       ...(normalizedInput ? { input: normalizedInput } : {}),
       ...(normalizedAttachments.length > 0 ? { attachments: normalizedAttachments } : {}),
@@ -333,6 +334,14 @@ const make = Effect.gen(function* () {
       ...(input.modelOptions !== undefined ? { modelOptions: input.modelOptions } : {}),
       ...(input.interactionMode !== undefined ? { interactionMode: input.interactionMode } : {}),
     });
+
+    return {
+      turnStartResult,
+      providerName:
+        activeSession?.provider ?? thread.session?.providerName ?? input.provider ?? null,
+      runtimeMode: thread.runtimeMode,
+      orchestrationTurnId: input.turnId ?? null,
+    } as const;
   });
 
   const maybeGenerateAndRenameWorktreeBranchForFirstTurn = Effect.fnUntraced(function* (input: {
@@ -439,8 +448,9 @@ const make = Effect.gen(function* () {
       ...(message.attachments !== undefined ? { attachments: message.attachments } : {}),
     }).pipe(Effect.forkScoped);
 
-    yield* sendTurnForThread({
+    const startedTurn = yield* sendTurnForThread({
       threadId: event.payload.threadId,
+      ...(event.payload.turnId !== undefined ? { turnId: event.payload.turnId } : {}),
       messageText: message.text,
       ...(message.attachments !== undefined ? { attachments: message.attachments } : {}),
       ...(event.payload.provider !== undefined ? { provider: event.payload.provider } : {}),
@@ -454,6 +464,26 @@ const make = Effect.gen(function* () {
       interactionMode: event.payload.interactionMode,
       createdAt: event.payload.createdAt,
     });
+
+    if (!startedTurn) {
+      return;
+    }
+
+    if (startedTurn.orchestrationTurnId !== null) {
+      yield* setThreadSession({
+        threadId: event.payload.threadId,
+        session: {
+          threadId: event.payload.threadId,
+          status: "starting",
+          providerName: startedTurn.providerName,
+          runtimeMode: startedTurn.runtimeMode,
+          activeTurnId: startedTurn.orchestrationTurnId,
+          lastError: null,
+          updatedAt: event.payload.createdAt,
+        },
+        createdAt: event.payload.createdAt,
+      });
+    }
   });
 
   const processTurnInterruptRequested = Effect.fnUntraced(function* (

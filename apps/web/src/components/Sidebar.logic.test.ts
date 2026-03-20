@@ -163,6 +163,7 @@ describe("resolveThreadStatusPill", () => {
             turnStatus: "pending",
             turnId: null,
             pendingTurn: {
+              turnId: null,
               messageId: "message-1" as never,
               requestedAt: "2026-03-09T10:05:30.000Z",
               sourceProposedPlanThreadId: null,
@@ -217,6 +218,7 @@ describe("resolveThreadStatusPill", () => {
             turnStatus: "pending",
             turnId: null,
             pendingTurn: {
+              turnId: null,
               messageId: "message-2" as never,
               requestedAt: "2026-03-09T07:19:00.000Z",
               sourceProposedPlanThreadId: null,
@@ -322,7 +324,7 @@ describe("resolveThreadStatusPill", () => {
     ).toMatchObject({ label: "3/4", pulse: true });
   });
 
-  it("shows completed once every plan step is complete", () => {
+  it("shows full plan progress while the turn is still active", () => {
     expect(
       resolveThreadStatusPill({
         thread: {
@@ -343,7 +345,7 @@ describe("resolveThreadStatusPill", () => {
         hasPendingApprovals: false,
         hasPendingUserInput: false,
       }),
-    ).toMatchObject({ label: "Completed", pulse: false });
+    ).toMatchObject({ label: "4/4", pulse: true });
   });
 
   it("shows plan ready when a settled plan turn has a proposed plan ready for follow-up", () => {

@@ -270,16 +270,10 @@ export function resolveThreadStatusPill(input: {
 
   if (thread.runtime?.turnStatus === "running" || isThreadRuntimeWorking(thread.runtime)) {
     if (activePlanProgress) {
-      if (activePlanProgress.completedAllSteps) {
-        return {
-          label: "Completed",
-          colorClass: "text-emerald-600 dark:text-emerald-300/90",
-          dotClass: "bg-emerald-500 dark:bg-emerald-300/90",
-          pulse: false,
-        };
-      }
       return {
-        label: `${activePlanProgress.currentStepNumber}/${activePlanProgress.totalSteps}`,
+        label: activePlanProgress.completedAllSteps
+          ? `${activePlanProgress.totalSteps}/${activePlanProgress.totalSteps}`
+          : `${activePlanProgress.currentStepNumber}/${activePlanProgress.totalSteps}`,
         colorClass: "text-sky-600 dark:text-sky-300/80",
         dotClass: "bg-sky-500 dark:bg-sky-300/80",
         pulse: true,

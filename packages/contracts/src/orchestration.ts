@@ -259,6 +259,7 @@ export const OrchestrationLatestTurn = Schema.Struct({
 export type OrchestrationLatestTurn = typeof OrchestrationLatestTurn.Type;
 
 export const OrchestrationPendingTurnStart = Schema.Struct({
+  turnId: Schema.NullOr(TurnId),
   messageId: MessageId,
   requestedAt: IsoDateTime,
   sourceProposedPlanThreadId: Schema.NullOr(ThreadId),
@@ -715,6 +716,7 @@ export const ThreadMessageSentPayload = Schema.Struct({
 
 export const ThreadTurnStartRequestedPayload = Schema.Struct({
   threadId: ThreadId,
+  turnId: Schema.optional(TurnId),
   messageId: MessageId,
   provider: Schema.optional(ProviderKind),
   model: Schema.optional(TrimmedNonEmptyString),

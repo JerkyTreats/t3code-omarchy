@@ -176,7 +176,7 @@ function deriveThreadRuntime(input: {
     return {
       sessionStatus: session?.status ?? null,
       turnStatus: "pending",
-      turnId: null,
+      turnId: pendingTurn.turnId,
       pendingTurn,
       updatedAt,
     };
@@ -373,6 +373,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           assistant_message_id AS "assistantMessageId"
         FROM projection_turns
         WHERE turn_id IS NOT NULL
+          AND state <> 'pending'
         ORDER BY thread_id ASC, requested_at DESC, turn_id DESC
       `,
   });
@@ -384,13 +385,13 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
       sql`
         SELECT
           thread_id AS "threadId",
+          turn_id AS "turnId",
           pending_message_id AS "messageId",
           source_proposed_plan_thread_id AS "sourceProposedPlanThreadId",
           source_proposed_plan_id AS "sourceProposedPlanId",
           requested_at AS "requestedAt"
         FROM projection_turns
-        WHERE turn_id IS NULL
-          AND state = 'pending'
+        WHERE state = 'pending'
           AND pending_message_id IS NOT NULL
           AND checkpoint_turn_count IS NULL
         ORDER BY thread_id ASC, requested_at DESC
@@ -596,6 +597,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
               continue;
             }
             pendingTurnStartByThread.set(row.threadId, {
+              turnId: row.turnId,
               messageId: row.messageId,
               requestedAt: row.requestedAt,
               sourceProposedPlanThreadId: row.sourceProposedPlanThreadId,

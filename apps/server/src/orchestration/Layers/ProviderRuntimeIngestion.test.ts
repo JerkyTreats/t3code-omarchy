@@ -535,6 +535,173 @@ describe("ProviderRuntimeIngestion", () => {
     );
   });
 
+  it("binds reused provider turn ids onto the active canonical turn", async () => {
+    const harness = await createHarness();
+    const oldTurnId = asTurnId("11");
+    const canonicalTurnId = asTurnId("orch-turn:msg-reuse-provider-turn-id");
+    const startedAt = new Date().toISOString();
+
+    harness.emit({
+      type: "turn.started",
+      eventId: asEventId("evt-old-turn-started"),
+      provider: "codex",
+      createdAt: startedAt,
+      threadId: asThreadId("thread-1"),
+      turnId: oldTurnId,
+    });
+
+    await waitForThread(
+      harness.engine,
+      (thread) =>
+        thread.session?.status === "running" && thread.session?.activeTurnId === oldTurnId,
+    );
+
+    harness.emit({
+      type: "turn.completed",
+      eventId: asEventId("evt-old-turn-completed"),
+      provider: "codex",
+      createdAt: new Date().toISOString(),
+      threadId: asThreadId("thread-1"),
+      turnId: oldTurnId,
+      status: "completed",
+    });
+
+    await waitForThread(
+      harness.engine,
+      (thread) =>
+        thread.session?.status === "ready" &&
+        thread.session?.activeTurnId === null &&
+        thread.latestTurn?.turnId === oldTurnId,
+    );
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.makeUnsafe("cmd-turn-start-reuse-provider-turn-id"),
+        threadId: asThreadId("thread-1"),
+        message: {
+          messageId: asMessageId("msg-reuse-provider-turn-id"),
+          role: "user",
+          text: "proceed",
+          attachments: [],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: new Date().toISOString(),
+      }),
+    );
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.session.set",
+        commandId: CommandId.makeUnsafe("cmd-session-set-canonical-pending"),
+        threadId: asThreadId("thread-1"),
+        session: {
+          threadId: asThreadId("thread-1"),
+          status: "starting",
+          providerName: "codex",
+          runtimeMode: "approval-required",
+          activeTurnId: canonicalTurnId,
+          updatedAt: new Date().toISOString(),
+          lastError: null,
+        },
+        createdAt: new Date().toISOString(),
+      }),
+    );
+
+    harness.setProviderSession({
+      provider: "codex",
+      status: "running",
+      runtimeMode: "approval-required",
+      threadId: asThreadId("thread-1"),
+      activeTurnId: oldTurnId,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    harness.emit({
+      type: "turn.started",
+      eventId: asEventId("evt-reused-provider-turn-started"),
+      provider: "codex",
+      createdAt: new Date().toISOString(),
+      threadId: asThreadId("thread-1"),
+      turnId: oldTurnId,
+    });
+
+    harness.emit({
+      type: "turn.plan.updated",
+      eventId: asEventId("evt-reused-provider-plan"),
+      provider: "codex",
+      createdAt: new Date().toISOString(),
+      threadId: asThreadId("thread-1"),
+      turnId: oldTurnId,
+      payload: {
+        plan: [{ step: "Keep plan on canonical turn", status: "completed" }],
+      },
+    });
+
+    harness.emit({
+      type: "content.delta",
+      eventId: asEventId("evt-reused-provider-delta"),
+      provider: "codex",
+      createdAt: new Date().toISOString(),
+      threadId: asThreadId("thread-1"),
+      turnId: oldTurnId,
+      itemId: asItemId("assistant-item-reused-provider-turn"),
+      payload: {
+        streamKind: "assistant_text",
+        delta: "Fresh output bound to canonical turn.",
+      },
+    });
+
+    harness.emit({
+      type: "item.completed",
+      eventId: asEventId("evt-reused-provider-item-completed"),
+      provider: "codex",
+      createdAt: new Date().toISOString(),
+      threadId: asThreadId("thread-1"),
+      turnId: oldTurnId,
+      itemId: asItemId("assistant-item-reused-provider-turn"),
+      payload: {
+        itemType: "assistant_message",
+        detail: "Fresh output bound to canonical turn.",
+      },
+    });
+
+    harness.emit({
+      type: "turn.completed",
+      eventId: asEventId("evt-reused-provider-turn-completed"),
+      provider: "codex",
+      createdAt: new Date().toISOString(),
+      threadId: asThreadId("thread-1"),
+      turnId: oldTurnId,
+      status: "completed",
+    });
+
+    const thread = await waitForThread(
+      harness.engine,
+      (entry) =>
+        entry.session?.status === "ready" &&
+        entry.session?.activeTurnId === null &&
+        entry.latestTurn?.turnId === canonicalTurnId,
+    );
+
+    const latestPlanActivity = [...thread.activities]
+      .toReversed()
+      .find((activity) => activity.kind === "turn.plan.updated");
+    expect(latestPlanActivity?.turnId).toBe(canonicalTurnId);
+
+    const latestAssistantMessage = [...thread.messages]
+      .toReversed()
+      .find((message) => message.role === "assistant" && message.text.includes("Fresh output"));
+    expect(latestAssistantMessage?.turnId).toBe(canonicalTurnId);
+
+    const historicalPlanActivity = thread.activities.find(
+      (activity) => activity.kind === "turn.plan.updated" && activity.turnId === oldTurnId,
+    );
+    expect(historicalPlanActivity).toBeUndefined();
+  });
+
   it("maps canonical content delta/item completed into finalized assistant messages", async () => {
     const harness = await createHarness();
     const now = new Date().toISOString();

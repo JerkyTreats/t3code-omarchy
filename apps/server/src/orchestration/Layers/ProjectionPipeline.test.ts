@@ -1827,6 +1827,364 @@ it.effect("restores pending turn-start metadata across projection pipeline resta
   ),
 );
 
+it.effect("keeps assistant message finalization from completing an active turn", () =>
+  runWithProjectionPipelineLayer(
+    process.cwd(),
+    Effect.gen(function* () {
+      const projectionPipeline = yield* OrchestrationProjectionPipeline;
+      const eventStore = yield* OrchestrationEventStore;
+      const sql = yield* SqlClient.SqlClient;
+
+      const projectId = ProjectId.makeUnsafe("project-turn-lifecycle");
+      const threadId = ThreadId.makeUnsafe("thread-turn-lifecycle");
+      const turnId = TurnId.makeUnsafe("orch-turn:turn-lifecycle");
+      const pendingMessageId = MessageId.makeUnsafe("message-turn-lifecycle");
+      const assistantMessageId = MessageId.makeUnsafe("assistant-turn-lifecycle");
+      const createdAt = "2026-02-26T15:00:00.000Z";
+      const runningAt = "2026-02-26T15:00:01.000Z";
+      const assistantAt = "2026-02-26T15:00:02.000Z";
+
+      yield* eventStore.append({
+        type: "project.created",
+        eventId: EventId.makeUnsafe("evt-turn-lifecycle-1"),
+        aggregateKind: "project",
+        aggregateId: projectId,
+        occurredAt: createdAt,
+        commandId: CommandId.makeUnsafe("cmd-turn-lifecycle-1"),
+        causationEventId: null,
+        correlationId: CorrelationId.makeUnsafe("cmd-turn-lifecycle-1"),
+        metadata: {},
+        payload: {
+          projectId,
+          title: "Project Turn Lifecycle",
+          workspaceRoot: "/tmp/project-turn-lifecycle",
+          defaultModel: null,
+          scripts: [],
+          createdAt,
+          updatedAt: createdAt,
+        },
+      });
+
+      yield* eventStore.append({
+        type: "thread.created",
+        eventId: EventId.makeUnsafe("evt-turn-lifecycle-2"),
+        aggregateKind: "thread",
+        aggregateId: threadId,
+        occurredAt: createdAt,
+        commandId: CommandId.makeUnsafe("cmd-turn-lifecycle-2"),
+        causationEventId: null,
+        correlationId: CorrelationId.makeUnsafe("cmd-turn-lifecycle-2"),
+        metadata: {},
+        payload: {
+          threadId,
+          projectId,
+          title: "Thread Turn Lifecycle",
+          model: "gpt-5-codex",
+          runtimeMode: "full-access",
+          branch: null,
+          worktreePath: null,
+          createdAt,
+          updatedAt: createdAt,
+        },
+      });
+
+      yield* eventStore.append({
+        type: "thread.turn-start-requested",
+        eventId: EventId.makeUnsafe("evt-turn-lifecycle-3"),
+        aggregateKind: "thread",
+        aggregateId: threadId,
+        occurredAt: createdAt,
+        commandId: CommandId.makeUnsafe("cmd-turn-lifecycle-3"),
+        causationEventId: null,
+        correlationId: CorrelationId.makeUnsafe("cmd-turn-lifecycle-3"),
+        metadata: {},
+        payload: {
+          threadId,
+          messageId: pendingMessageId,
+          turnId,
+          runtimeMode: "full-access",
+          createdAt,
+        },
+      });
+
+      yield* eventStore.append({
+        type: "thread.session-set",
+        eventId: EventId.makeUnsafe("evt-turn-lifecycle-4"),
+        aggregateKind: "thread",
+        aggregateId: threadId,
+        occurredAt: runningAt,
+        commandId: CommandId.makeUnsafe("cmd-turn-lifecycle-4"),
+        causationEventId: null,
+        correlationId: CorrelationId.makeUnsafe("cmd-turn-lifecycle-4"),
+        metadata: {},
+        payload: {
+          threadId,
+          session: {
+            threadId,
+            status: "running",
+            providerName: "codex",
+            runtimeMode: "full-access",
+            activeTurnId: turnId,
+            lastError: null,
+            updatedAt: runningAt,
+          },
+        },
+      });
+
+      yield* eventStore.append({
+        type: "thread.message-sent",
+        eventId: EventId.makeUnsafe("evt-turn-lifecycle-5"),
+        aggregateKind: "thread",
+        aggregateId: threadId,
+        occurredAt: assistantAt,
+        commandId: CommandId.makeUnsafe("cmd-turn-lifecycle-5"),
+        causationEventId: null,
+        correlationId: CorrelationId.makeUnsafe("cmd-turn-lifecycle-5"),
+        metadata: {},
+        payload: {
+          threadId,
+          messageId: assistantMessageId,
+          role: "assistant",
+          text: "hello",
+          turnId,
+          streaming: false,
+          createdAt: assistantAt,
+          updatedAt: assistantAt,
+        },
+      });
+
+      yield* projectionPipeline.bootstrap;
+
+      const turnRows = yield* sql<{
+        readonly turnId: string;
+        readonly state: string;
+        readonly pendingMessageId: string | null;
+        readonly assistantMessageId: string | null;
+        readonly requestedAt: string;
+        readonly startedAt: string | null;
+        readonly completedAt: string | null;
+      }>`
+        SELECT
+          turn_id AS "turnId",
+          state,
+          pending_message_id AS "pendingMessageId",
+          assistant_message_id AS "assistantMessageId",
+          requested_at AS "requestedAt",
+          started_at AS "startedAt",
+          completed_at AS "completedAt"
+        FROM projection_turns
+        WHERE thread_id = ${threadId}
+          AND turn_id = ${turnId}
+      `;
+
+      assert.deepEqual(turnRows, [
+        {
+          turnId: "orch-turn:turn-lifecycle",
+          state: "running",
+          pendingMessageId: "message-turn-lifecycle",
+          assistantMessageId: "assistant-turn-lifecycle",
+          requestedAt: createdAt,
+          startedAt: createdAt,
+          completedAt: null,
+        },
+      ]);
+    }),
+  ),
+);
+
+it.effect("completes the latest turn from terminal session lifecycle updates", () =>
+  runWithProjectionPipelineLayer(
+    process.cwd(),
+    Effect.gen(function* () {
+      const projectionPipeline = yield* OrchestrationProjectionPipeline;
+      const eventStore = yield* OrchestrationEventStore;
+      const sql = yield* SqlClient.SqlClient;
+
+      const projectId = ProjectId.makeUnsafe("project-session-close");
+      const threadId = ThreadId.makeUnsafe("thread-session-close");
+      const turnId = TurnId.makeUnsafe("orch-turn:session-close");
+      const pendingMessageId = MessageId.makeUnsafe("message-session-close");
+      const assistantMessageId = MessageId.makeUnsafe("assistant-session-close");
+      const createdAt = "2026-02-26T16:00:00.000Z";
+      const runningAt = "2026-02-26T16:00:01.000Z";
+      const assistantAt = "2026-02-26T16:00:02.000Z";
+      const completedAt = "2026-02-26T16:00:03.000Z";
+
+      yield* eventStore.append({
+        type: "project.created",
+        eventId: EventId.makeUnsafe("evt-session-close-1"),
+        aggregateKind: "project",
+        aggregateId: projectId,
+        occurredAt: createdAt,
+        commandId: CommandId.makeUnsafe("cmd-session-close-1"),
+        causationEventId: null,
+        correlationId: CorrelationId.makeUnsafe("cmd-session-close-1"),
+        metadata: {},
+        payload: {
+          projectId,
+          title: "Project Session Close",
+          workspaceRoot: "/tmp/project-session-close",
+          defaultModel: null,
+          scripts: [],
+          createdAt,
+          updatedAt: createdAt,
+        },
+      });
+
+      yield* eventStore.append({
+        type: "thread.created",
+        eventId: EventId.makeUnsafe("evt-session-close-2"),
+        aggregateKind: "thread",
+        aggregateId: threadId,
+        occurredAt: createdAt,
+        commandId: CommandId.makeUnsafe("cmd-session-close-2"),
+        causationEventId: null,
+        correlationId: CorrelationId.makeUnsafe("cmd-session-close-2"),
+        metadata: {},
+        payload: {
+          threadId,
+          projectId,
+          title: "Thread Session Close",
+          model: "gpt-5-codex",
+          runtimeMode: "full-access",
+          branch: null,
+          worktreePath: null,
+          createdAt,
+          updatedAt: createdAt,
+        },
+      });
+
+      yield* eventStore.append({
+        type: "thread.turn-start-requested",
+        eventId: EventId.makeUnsafe("evt-session-close-3"),
+        aggregateKind: "thread",
+        aggregateId: threadId,
+        occurredAt: createdAt,
+        commandId: CommandId.makeUnsafe("cmd-session-close-3"),
+        causationEventId: null,
+        correlationId: CorrelationId.makeUnsafe("cmd-session-close-3"),
+        metadata: {},
+        payload: {
+          threadId,
+          messageId: pendingMessageId,
+          turnId,
+          runtimeMode: "full-access",
+          createdAt,
+        },
+      });
+
+      yield* eventStore.append({
+        type: "thread.session-set",
+        eventId: EventId.makeUnsafe("evt-session-close-4"),
+        aggregateKind: "thread",
+        aggregateId: threadId,
+        occurredAt: runningAt,
+        commandId: CommandId.makeUnsafe("cmd-session-close-4"),
+        causationEventId: null,
+        correlationId: CorrelationId.makeUnsafe("cmd-session-close-4"),
+        metadata: {},
+        payload: {
+          threadId,
+          session: {
+            threadId,
+            status: "running",
+            providerName: "codex",
+            runtimeMode: "full-access",
+            activeTurnId: turnId,
+            lastError: null,
+            updatedAt: runningAt,
+          },
+        },
+      });
+
+      yield* eventStore.append({
+        type: "thread.message-sent",
+        eventId: EventId.makeUnsafe("evt-session-close-5"),
+        aggregateKind: "thread",
+        aggregateId: threadId,
+        occurredAt: assistantAt,
+        commandId: CommandId.makeUnsafe("cmd-session-close-5"),
+        causationEventId: null,
+        correlationId: CorrelationId.makeUnsafe("cmd-session-close-5"),
+        metadata: {},
+        payload: {
+          threadId,
+          messageId: assistantMessageId,
+          role: "assistant",
+          text: "hello",
+          turnId,
+          streaming: false,
+          createdAt: assistantAt,
+          updatedAt: assistantAt,
+        },
+      });
+
+      yield* eventStore.append({
+        type: "thread.session-set",
+        eventId: EventId.makeUnsafe("evt-session-close-6"),
+        aggregateKind: "thread",
+        aggregateId: threadId,
+        occurredAt: completedAt,
+        commandId: CommandId.makeUnsafe("cmd-session-close-6"),
+        causationEventId: null,
+        correlationId: CorrelationId.makeUnsafe("cmd-session-close-6"),
+        metadata: {},
+        payload: {
+          threadId,
+          session: {
+            threadId,
+            status: "ready",
+            providerName: "codex",
+            runtimeMode: "full-access",
+            activeTurnId: null,
+            lastError: null,
+            updatedAt: completedAt,
+          },
+        },
+      });
+
+      yield* projectionPipeline.bootstrap;
+
+      const turnRows = yield* sql<{
+        readonly state: string;
+        readonly assistantMessageId: string | null;
+        readonly requestedAt: string;
+        readonly startedAt: string | null;
+        readonly completedAt: string | null;
+      }>`
+        SELECT
+          state,
+          assistant_message_id AS "assistantMessageId",
+          requested_at AS "requestedAt",
+          started_at AS "startedAt",
+          completed_at AS "completedAt"
+        FROM projection_turns
+        WHERE thread_id = ${threadId}
+          AND turn_id = ${turnId}
+      `;
+
+      const threadRows = yield* sql<{
+        readonly latestTurnId: string | null;
+      }>`
+        SELECT latest_turn_id AS "latestTurnId"
+        FROM projection_threads
+        WHERE thread_id = ${threadId}
+      `;
+
+      assert.deepEqual(turnRows, [
+        {
+          state: "completed",
+          assistantMessageId: "assistant-session-close",
+          requestedAt: createdAt,
+          startedAt: createdAt,
+          completedAt,
+        },
+      ]);
+      assert.deepEqual(threadRows, [{ latestTurnId: "orch-turn:session-close" }]);
+    }),
+  ),
+);
+
 const engineLayer = it.layer(
   OrchestrationEngineLive.pipe(
     Layer.provide(OrchestrationProjectionPipelineLive),

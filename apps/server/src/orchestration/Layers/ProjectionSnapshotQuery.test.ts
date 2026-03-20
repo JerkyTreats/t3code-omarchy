@@ -456,6 +456,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
         turnStatus: "pending",
         turnId: null,
         pendingTurn: {
+          turnId: null,
           messageId: asMessageId("message-1"),
           requestedAt: "2026-02-24T00:00:04.000Z",
           sourceProposedPlanThreadId: null,
