@@ -11,6 +11,7 @@ import {
   IsoDateTime,
   MessageId,
   NonNegativeInt,
+  OrchestrationProposedPlanId,
   OrchestrationCheckpointFile,
   OrchestrationCheckpointStatus,
   ThreadId,
@@ -64,7 +65,10 @@ export type ProjectionTurnById = typeof ProjectionTurnById.Type;
 
 export const ProjectionPendingTurnStart = Schema.Struct({
   threadId: ThreadId,
+  turnId: Schema.NullOr(TurnId),
   messageId: MessageId,
+  sourceProposedPlanThreadId: Schema.NullOr(ThreadId),
+  sourceProposedPlanId: Schema.NullOr(OrchestrationProposedPlanId),
   requestedAt: IsoDateTime,
 });
 export type ProjectionPendingTurnStart = typeof ProjectionPendingTurnStart.Type;
@@ -138,6 +142,13 @@ export interface ProjectionTurnRepositoryShape {
    */
   readonly getByTurnId: (
     input: GetProjectionTurnByTurnIdInput,
+  ) => Effect.Effect<Option.Option<ProjectionTurnById>, ProjectionRepositoryError>;
+
+  /**
+   * Returns the newest concrete non-pending turn for a thread, ordered by request time.
+   */
+  readonly getLatestConcreteByThreadId: (
+    input: ListProjectionTurnsByThreadInput,
   ) => Effect.Effect<Option.Option<ProjectionTurnById>, ProjectionRepositoryError>;
 
   /**

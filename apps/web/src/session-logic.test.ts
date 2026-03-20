@@ -1,4 +1,10 @@
-import { EventId, MessageId, TurnId, type OrchestrationThreadActivity } from "@t3tools/contracts";
+import {
+  EventId,
+  MessageId,
+  ThreadId,
+  TurnId,
+  type OrchestrationThreadActivity,
+} from "@t3tools/contracts";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -10,6 +16,7 @@ import {
   deriveTimelineEntries,
   deriveWorkLogEntries,
   findLatestProposedPlan,
+  hasActionableProposedPlan,
   hasToolActivityForTurn,
   isLatestTurnSettled,
 } from "./session-logic";
@@ -258,6 +265,76 @@ describe("deriveActivePlanState", () => {
       steps: [{ step: "Implement Codex user input", status: "inProgress" }],
     });
   });
+
+  it("returns null when there is no latest turn to associate with a plan", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "plan-old",
+        createdAt: "2026-02-23T06:20:46.000Z",
+        kind: "turn.plan.updated",
+        summary: "Plan updated",
+        tone: "info",
+        turnId: "turn-old",
+        payload: {
+          explanation: "Old plan",
+          plan: [{ step: "Capture Tailscale versions and sources", status: "completed" }],
+        },
+      }),
+    ];
+
+    expect(deriveActivePlanState(activities, undefined)).toBeNull();
+  });
+
+  it("prefers the newest plan update even when activities arrive out of order", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "plan-newest",
+        createdAt: "2026-02-23T00:00:03.000Z",
+        sequence: 3,
+        kind: "turn.plan.updated",
+        summary: "Plan updated",
+        tone: "info",
+        turnId: "turn-1",
+        payload: {
+          explanation: "Newest plan",
+          plan: [{ step: "Ship it", status: "inProgress" }],
+        },
+      }),
+      makeActivity({
+        id: "plan-oldest",
+        createdAt: "2026-02-23T00:00:01.000Z",
+        sequence: 1,
+        kind: "turn.plan.updated",
+        summary: "Plan updated",
+        tone: "info",
+        turnId: "turn-1",
+        payload: {
+          explanation: "Oldest plan",
+          plan: [{ step: "Inspect it", status: "pending" }],
+        },
+      }),
+      makeActivity({
+        id: "plan-middle",
+        createdAt: "2026-02-23T00:00:02.000Z",
+        sequence: 2,
+        kind: "turn.plan.updated",
+        summary: "Plan updated",
+        tone: "info",
+        turnId: "turn-1",
+        payload: {
+          explanation: "Middle plan",
+          plan: [{ step: "Build it", status: "completed" }],
+        },
+      }),
+    ];
+
+    expect(deriveActivePlanState(activities, TurnId.makeUnsafe("turn-1"))).toEqual({
+      createdAt: "2026-02-23T00:00:03.000Z",
+      turnId: "turn-1",
+      explanation: "Newest plan",
+      steps: [{ step: "Ship it", status: "inProgress" }],
+    });
+  });
 });
 
 describe("findLatestProposedPlan", () => {
@@ -269,6 +346,8 @@ describe("findLatestProposedPlan", () => {
             id: "plan:thread-1:turn:turn-1",
             turnId: TurnId.makeUnsafe("turn-1"),
             planMarkdown: "# Older",
+            implementedAt: null,
+            implementationThreadId: null,
             createdAt: "2026-02-23T00:00:01.000Z",
             updatedAt: "2026-02-23T00:00:01.000Z",
           },
@@ -276,6 +355,8 @@ describe("findLatestProposedPlan", () => {
             id: "plan:thread-1:turn:turn-1",
             turnId: TurnId.makeUnsafe("turn-1"),
             planMarkdown: "# Latest",
+            implementedAt: null,
+            implementationThreadId: null,
             createdAt: "2026-02-23T00:00:01.000Z",
             updatedAt: "2026-02-23T00:00:02.000Z",
           },
@@ -283,6 +364,8 @@ describe("findLatestProposedPlan", () => {
             id: "plan:thread-1:turn:turn-2",
             turnId: TurnId.makeUnsafe("turn-2"),
             planMarkdown: "# Different turn",
+            implementedAt: null,
+            implementationThreadId: null,
             createdAt: "2026-02-23T00:00:03.000Z",
             updatedAt: "2026-02-23T00:00:03.000Z",
           },
@@ -293,6 +376,8 @@ describe("findLatestProposedPlan", () => {
       id: "plan:thread-1:turn:turn-1",
       turnId: "turn-1",
       planMarkdown: "# Latest",
+      implementedAt: null,
+      implementationThreadId: null,
       createdAt: "2026-02-23T00:00:01.000Z",
       updatedAt: "2026-02-23T00:00:02.000Z",
     });
@@ -305,6 +390,8 @@ describe("findLatestProposedPlan", () => {
           id: "plan:thread-1:turn:turn-1",
           turnId: TurnId.makeUnsafe("turn-1"),
           planMarkdown: "# First",
+          implementedAt: null,
+          implementationThreadId: null,
           createdAt: "2026-02-23T00:00:01.000Z",
           updatedAt: "2026-02-23T00:00:01.000Z",
         },
@@ -312,6 +399,8 @@ describe("findLatestProposedPlan", () => {
           id: "plan:thread-1:turn:turn-2",
           turnId: TurnId.makeUnsafe("turn-2"),
           planMarkdown: "# Latest",
+          implementedAt: null,
+          implementationThreadId: null,
           createdAt: "2026-02-23T00:00:02.000Z",
           updatedAt: "2026-02-23T00:00:03.000Z",
         },
@@ -320,6 +409,36 @@ describe("findLatestProposedPlan", () => {
     );
 
     expect(latestPlan?.planMarkdown).toBe("# Latest");
+  });
+});
+
+describe("hasActionableProposedPlan", () => {
+  it("returns true for an unimplemented proposed plan", () => {
+    expect(
+      hasActionableProposedPlan({
+        id: "plan-1",
+        turnId: TurnId.makeUnsafe("turn-1"),
+        planMarkdown: "# Plan",
+        implementedAt: null,
+        implementationThreadId: null,
+        createdAt: "2026-02-23T00:00:00.000Z",
+        updatedAt: "2026-02-23T00:00:01.000Z",
+      }),
+    ).toBe(true);
+  });
+
+  it("returns false for a proposed plan already implemented elsewhere", () => {
+    expect(
+      hasActionableProposedPlan({
+        id: "plan-1",
+        turnId: TurnId.makeUnsafe("turn-1"),
+        planMarkdown: "# Plan",
+        implementedAt: "2026-02-23T00:00:02.000Z",
+        implementationThreadId: ThreadId.makeUnsafe("thread-implement"),
+        createdAt: "2026-02-23T00:00:00.000Z",
+        updatedAt: "2026-02-23T00:00:02.000Z",
+      }),
+    ).toBe(false);
   });
 });
 
@@ -531,6 +650,8 @@ describe("deriveTimelineEntries", () => {
           id: "plan:thread-1:turn:turn-1",
           turnId: TurnId.makeUnsafe("turn-1"),
           planMarkdown: "# Ship it",
+          implementedAt: null,
+          implementationThreadId: null,
           createdAt: "2026-02-23T00:00:02.000Z",
           updatedAt: "2026-02-23T00:00:02.000Z",
         },
@@ -550,6 +671,8 @@ describe("deriveTimelineEntries", () => {
       kind: "proposed-plan",
       proposedPlan: {
         planMarkdown: "# Ship it",
+        implementedAt: null,
+        implementationThreadId: null,
       },
     });
   });

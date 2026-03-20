@@ -6,12 +6,11 @@ import {
 } from "@t3tools/contracts";
 import { getDefaultReasoningEffort } from "@t3tools/shared/model";
 import { memo } from "react";
-import { EllipsisIcon, ListTodoIcon } from "lucide-react";
+import { EllipsisIcon } from "lucide-react";
 import { Button } from "../ui/button";
 import {
   Menu,
   MenuGroup,
-  MenuItem,
   MenuPopup,
   MenuRadioGroup,
   MenuRadioItem,
@@ -20,9 +19,7 @@ import {
 } from "../ui/menu";
 
 export const CompactComposerControlsMenu = memo(function CompactComposerControlsMenu(props: {
-  activePlan: boolean;
   interactionMode: ProviderInteractionMode;
-  planSidebarOpen: boolean;
   runtimeMode: RuntimeMode;
   selectedEffort: CodexReasoningEffort | null;
   selectedProvider: ProviderKind;
@@ -31,7 +28,6 @@ export const CompactComposerControlsMenu = memo(function CompactComposerControls
   onEffortSelect: (effort: CodexReasoningEffort) => void;
   onCodexFastModeChange: (enabled: boolean) => void;
   onToggleInteractionMode: () => void;
-  onTogglePlanSidebar: () => void;
   onToggleRuntimeMode: () => void;
 }) {
   const defaultReasoningEffort = getDefaultReasoningEffort("codex");
@@ -121,15 +117,6 @@ export const CompactComposerControlsMenu = memo(function CompactComposerControls
             <MenuRadioItem value="full-access">Full access</MenuRadioItem>
           </MenuRadioGroup>
         </MenuGroup>
-        {props.activePlan ? (
-          <>
-            <MenuDivider />
-            <MenuItem onClick={props.onTogglePlanSidebar}>
-              <ListTodoIcon className="size-4 shrink-0" />
-              {props.planSidebarOpen ? "Hide plan sidebar" : "Show plan sidebar"}
-            </MenuItem>
-          </>
-        ) : null}
       </MenuPopup>
     </Menu>
   );

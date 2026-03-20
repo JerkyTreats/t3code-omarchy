@@ -706,6 +706,7 @@ export const makeGitManager = Effect.gen(function* () {
     /** When true, also produce a semantic feature branch name. */
     includeBranch?: boolean;
     filePaths?: readonly string[];
+    model?: string;
   }) =>
     Effect.gen(function* () {
       const context = yield* gitCore.prepareCommitContext(input.cwd, input.filePaths);
@@ -732,6 +733,7 @@ export const makeGitManager = Effect.gen(function* () {
           stagedSummary: limitContext(context.stagedSummary, 8_000),
           stagedPatch: limitContext(context.stagedPatch, 50_000),
           ...(input.includeBranch ? { includeBranch: true } : {}),
+          ...(input.model ? { model: input.model } : {}),
         })
         .pipe(Effect.map((result) => sanitizeCommitMessage(result)));
 
@@ -749,20 +751,18 @@ export const makeGitManager = Effect.gen(function* () {
     commitMessage?: string,
     preResolvedSuggestion?: CommitAndBranchSuggestion,
     filePaths?: readonly string[],
+    model?: string,
   ) =>
     Effect.gen(function* () {
       const suggestion =
         preResolvedSuggestion ??
-        (yield* resolveCommitAndBranchSuggestion(
-          withOptionalFilePaths(
-            {
-              cwd,
-              branch,
-              ...(commitMessage ? { commitMessage } : {}),
-            },
-            filePaths,
-          ),
-        ));
+        (yield* resolveCommitAndBranchSuggestion({
+          cwd,
+          branch,
+          ...(commitMessage ? { commitMessage } : {}),
+          ...(filePaths ? { filePaths } : {}),
+          ...(model ? { model } : {}),
+        }));
       if (!suggestion) {
         return { status: "skipped_no_changes" as const };
       }
@@ -781,6 +781,7 @@ export const makeGitManager = Effect.gen(function* () {
     commitMessage?: string;
     preResolvedCommitSuggestion?: CommitAndBranchSuggestion;
     filePaths?: readonly string[];
+    model?: string;
     wantsPush: boolean;
   }) =>
     Effect.gen(function* () {
@@ -790,6 +791,7 @@ export const makeGitManager = Effect.gen(function* () {
         input.commitMessage,
         input.preResolvedCommitSuggestion,
         input.filePaths,
+        input.model,
       );
 
       const push = input.wantsPush
@@ -803,6 +805,7 @@ export const makeGitManager = Effect.gen(function* () {
     cwd: string,
     fallbackBranch: string | null,
     issueLink: GitHubIssueLink | null,
+    model?: string,
   ) =>
     Effect.gen(function* () {
       const details = yield* gitCore.statusDetails(cwd);
@@ -858,6 +861,7 @@ export const makeGitManager = Effect.gen(function* () {
         commitSummary: limitContext(rangeContext.commitSummary, 20_000),
         diffSummary: limitContext(rangeContext.diffSummary, 20_000),
         diffPatch: limitContext(rangeContext.diffPatch, 60_000),
+        ...(model ? { model } : {}),
       });
       const body = appendIssueClosingFooter(generated.body, issueLink);
 
@@ -1106,19 +1110,17 @@ export const makeGitManager = Effect.gen(function* () {
     branch: string | null,
     commitMessage?: string,
     filePaths?: readonly string[],
+    model?: string,
   ) =>
     Effect.gen(function* () {
-      const suggestion = yield* resolveCommitAndBranchSuggestion(
-        withOptionalFilePaths(
-          {
-            cwd,
-            branch,
-            ...(commitMessage ? { commitMessage } : {}),
-            includeBranch: true,
-          },
-          filePaths,
-        ),
-      );
+      const suggestion = yield* resolveCommitAndBranchSuggestion({
+        cwd,
+        branch,
+        ...(commitMessage ? { commitMessage } : {}),
+        ...(filePaths ? { filePaths } : {}),
+        includeBranch: true,
+        ...(model ? { model } : {}),
+      });
       if (!suggestion) {
         return yield* gitManagerError(
           "runFeatureBranchStep",
@@ -1147,6 +1149,7 @@ export const makeGitManager = Effect.gen(function* () {
       featureBranch?: boolean;
       commitMessage?: string;
       filePaths?: readonly string[];
+      model?: string;
     },
   ) =>
     Effect.gen(function* () {
@@ -1163,6 +1166,7 @@ export const makeGitManager = Effect.gen(function* () {
         initialBranch,
         input.commitMessage,
         input.filePaths,
+        input.model,
       );
       return {
         branchStep: result.branchStep,
@@ -1178,6 +1182,7 @@ export const makeGitManager = Effect.gen(function* () {
     targetBranch: string,
     commitMessage?: string,
     filePaths?: readonly string[],
+    model?: string,
   ) =>
     Effect.gen(function* () {
       const sourceCommitAndPush = yield* runCommitPushStep(
@@ -1186,6 +1191,7 @@ export const makeGitManager = Effect.gen(function* () {
             cwd,
             branch: sourceBranch,
             ...(commitMessage ? { commitMessage } : {}),
+            ...(model ? { model } : {}),
             wantsPush: true,
           },
           filePaths,
@@ -1276,6 +1282,7 @@ export const makeGitManager = Effect.gen(function* () {
           input.targetBranch,
           input.commitMessage,
           input.filePaths,
+          input.textGenerationModel,
         );
 
         return {
@@ -1295,6 +1302,7 @@ export const makeGitManager = Effect.gen(function* () {
           {
             ...(input.featureBranch ? { featureBranch: input.featureBranch } : {}),
             ...(input.commitMessage ? { commitMessage: input.commitMessage } : {}),
+            ...(input.textGenerationModel ? { model: input.textGenerationModel } : {}),
           },
           input.filePaths,
         ),
@@ -1313,6 +1321,7 @@ export const makeGitManager = Effect.gen(function* () {
                   preResolvedCommitSuggestion: preparedCommitExecution.preResolvedCommitSuggestion,
                 }
               : {}),
+            ...(input.textGenerationModel ? { model: input.textGenerationModel } : {}),
             wantsPush,
           },
           input.filePaths,
@@ -1324,6 +1333,7 @@ export const makeGitManager = Effect.gen(function* () {
             input.cwd,
             preparedCommitExecution.currentBranch,
             input.issueLink ?? null,
+            input.textGenerationModel,
           )
         : { status: "skipped_not_requested" as const };
 

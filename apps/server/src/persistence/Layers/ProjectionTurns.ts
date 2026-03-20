@@ -92,7 +92,6 @@ const makeProjectionTurnRepository = Effect.gen(function* () {
       sql`
         DELETE FROM projection_turns
         WHERE thread_id = ${threadId}
-          AND turn_id IS NULL
           AND state = 'pending'
           AND checkpoint_turn_count IS NULL
       `,
@@ -106,6 +105,8 @@ const makeProjectionTurnRepository = Effect.gen(function* () {
           thread_id,
           turn_id,
           pending_message_id,
+          source_proposed_plan_thread_id,
+          source_proposed_plan_id,
           assistant_message_id,
           state,
           requested_at,
@@ -118,8 +119,10 @@ const makeProjectionTurnRepository = Effect.gen(function* () {
         )
         VALUES (
           ${row.threadId},
-          NULL,
+          ${row.turnId},
           ${row.messageId},
+          ${row.sourceProposedPlanThreadId},
+          ${row.sourceProposedPlanId},
           NULL,
           'pending',
           ${row.requestedAt},
@@ -140,11 +143,13 @@ const makeProjectionTurnRepository = Effect.gen(function* () {
       sql`
         SELECT
           thread_id AS "threadId",
+          turn_id AS "turnId",
           pending_message_id AS "messageId",
+          source_proposed_plan_thread_id AS "sourceProposedPlanThreadId",
+          source_proposed_plan_id AS "sourceProposedPlanId",
           requested_at AS "requestedAt"
         FROM projection_turns
         WHERE thread_id = ${threadId}
-          AND turn_id IS NULL
           AND state = 'pending'
           AND pending_message_id IS NOT NULL
           AND checkpoint_turn_count IS NULL
@@ -205,6 +210,33 @@ const makeProjectionTurnRepository = Effect.gen(function* () {
         FROM projection_turns
         WHERE thread_id = ${threadId}
           AND turn_id = ${turnId}
+        LIMIT 1
+      `,
+  });
+
+  const getLatestConcreteProjectionTurnByThread = SqlSchema.findOneOption({
+    Request: ListProjectionTurnsByThreadInput,
+    Result: ProjectionTurnByIdDbRowSchema,
+    execute: ({ threadId }) =>
+      sql`
+        SELECT
+          thread_id AS "threadId",
+          turn_id AS "turnId",
+          pending_message_id AS "pendingMessageId",
+          assistant_message_id AS "assistantMessageId",
+          state,
+          requested_at AS "requestedAt",
+          started_at AS "startedAt",
+          completed_at AS "completedAt",
+          checkpoint_turn_count AS "checkpointTurnCount",
+          checkpoint_ref AS "checkpointRef",
+          checkpoint_status AS "checkpointStatus",
+          checkpoint_files_json AS "checkpointFiles"
+        FROM projection_turns
+        WHERE thread_id = ${threadId}
+          AND turn_id IS NOT NULL
+          AND state <> 'pending'
+        ORDER BY requested_at DESC, turn_id DESC
         LIMIT 1
       `,
   });
@@ -304,6 +336,24 @@ const makeProjectionTurnRepository = Effect.gen(function* () {
       ),
     );
 
+  const getLatestConcreteByThreadId: ProjectionTurnRepositoryShape["getLatestConcreteByThreadId"] =
+    (input) =>
+      getLatestConcreteProjectionTurnByThread(input).pipe(
+        Effect.mapError(
+          toPersistenceSqlOrDecodeError(
+            "ProjectionTurnRepository.getLatestConcreteByThreadId:query",
+            "ProjectionTurnRepository.getLatestConcreteByThreadId:decodeRow",
+          ),
+        ),
+        Effect.flatMap((rowOption) =>
+          Option.match(rowOption, {
+            onNone: () => Effect.succeed(Option.none()),
+            onSome: (row) =>
+              Effect.succeed(Option.some(row as Schema.Schema.Type<typeof ProjectionTurnById>)),
+          }),
+        ),
+      );
+
   const clearCheckpointTurnConflict: ProjectionTurnRepositoryShape["clearCheckpointTurnConflict"] =
     (input) =>
       clearCheckpointTurnConflictRow(input).pipe(
@@ -324,6 +374,7 @@ const makeProjectionTurnRepository = Effect.gen(function* () {
     deletePendingTurnStartByThreadId,
     listByThreadId,
     getByTurnId,
+    getLatestConcreteByThreadId,
     clearCheckpointTurnConflict,
     deleteByThreadId,
   } satisfies ProjectionTurnRepositoryShape;
