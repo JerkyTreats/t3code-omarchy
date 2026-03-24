@@ -11,7 +11,13 @@ import {
 } from "@t3tools/shared/git";
 
 import { GitManagerError } from "../Errors.ts";
-import { isProtectedRemoteName } from "../gitPolicy.ts";
+import {
+  buildBlockedPullDetail,
+  buildBlockedPushDetail,
+  isProtectedRemoteName,
+  resolvePublishRemoteName,
+  selectPrimaryRemoteName,
+} from "../gitPolicy.ts";
 import {
   DEFAULT_GITHUB_HOSTNAME,
   parseGitHubRepoSelector,
@@ -307,6 +313,13 @@ function appendUnique(values: string[], next: string | null | undefined): void {
   values.push(trimmed);
 }
 
+function parseRemoteNames(stdout: string): ReadonlyArray<string> {
+  return stdout
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+}
+
 function toStatusPr(pr: PullRequestInfo): {
   number: number;
   title: string;
@@ -494,6 +507,119 @@ export const makeGitManager = Effect.gen(function* () {
 
   const readConfigValueNullable = (cwd: string, key: string) =>
     gitCore.readConfigValue(cwd, key).pipe(Effect.catch(() => Effect.succeed(null)));
+
+  const resolveCurrentUpstream = (cwd: string) =>
+    gitCore
+      .execute({
+        operation: "GitManager.resolveCurrentUpstream",
+        cwd,
+        args: ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"],
+        allowNonZeroExit: true,
+      })
+      .pipe(
+        Effect.map((result) => {
+          if (result.code !== 0) {
+            return null;
+          }
+
+          const upstreamRef = result.stdout.trim();
+          if (upstreamRef.length === 0 || upstreamRef === "@{upstream}") {
+            return null;
+          }
+
+          const separatorIndex = upstreamRef.indexOf("/");
+          if (separatorIndex <= 0) {
+            return null;
+          }
+
+          const remoteName = upstreamRef.slice(0, separatorIndex);
+          const upstreamBranch = upstreamRef.slice(separatorIndex + 1);
+          if (remoteName.length === 0 || upstreamBranch.length === 0) {
+            return null;
+          }
+
+          return {
+            upstreamRef,
+            remoteName,
+            upstreamBranch,
+          };
+        }),
+      );
+
+  const resolvePrimaryRemoteName = (cwd: string) =>
+    gitCore
+      .execute({
+        operation: "GitManager.resolvePrimaryRemoteName",
+        cwd,
+        args: ["remote"],
+        allowNonZeroExit: true,
+      })
+      .pipe(
+        Effect.map((result) =>
+          result.code === 0 ? selectPrimaryRemoteName(parseRemoteNames(result.stdout)) : null,
+        ),
+      );
+
+  const resolvePublishRemoteNameForBranch = (cwd: string, branch: string) =>
+    Effect.gen(function* () {
+      const branchPushRemote = yield* readConfigValueNullable(cwd, `branch.${branch}.pushRemote`);
+      const pushDefaultRemote = yield* readConfigValueNullable(cwd, "remote.pushDefault");
+      const primaryRemoteName = yield* resolvePrimaryRemoteName(cwd).pipe(
+        Effect.catch(() => Effect.succeed(null)),
+      );
+
+      return resolvePublishRemoteName({
+        branchPushRemote,
+        pushDefaultRemote,
+        primaryRemoteName,
+      });
+    });
+
+  const ensurePullAllowed = (cwd: string) =>
+    Effect.gen(function* () {
+      const currentUpstream = yield* resolveCurrentUpstream(cwd).pipe(
+        Effect.catch(() => Effect.succeed(null)),
+      );
+      if (currentUpstream && isProtectedRemoteName(currentUpstream.remoteName)) {
+        return yield* gitManagerError("pull", buildBlockedPullDetail());
+      }
+    });
+
+  const ensurePushAllowed = (cwd: string, fallbackBranch: string | null) =>
+    Effect.gen(function* () {
+      const details = yield* gitCore.statusDetails(cwd);
+      const branch = details.branch ?? fallbackBranch;
+      if (!branch) {
+        return;
+      }
+
+      if (details.hasUpstream) {
+        const currentUpstream = yield* resolveCurrentUpstream(cwd).pipe(
+          Effect.catch(() => Effect.succeed(null)),
+        );
+        if (currentUpstream && isProtectedRemoteName(currentUpstream.remoteName)) {
+          return yield* gitManagerError("push", buildBlockedPushDetail());
+        }
+        return;
+      }
+
+      const publishRemoteName = yield* resolvePublishRemoteNameForBranch(cwd, branch);
+      if (publishRemoteName && isProtectedRemoteName(publishRemoteName)) {
+        return yield* gitManagerError("push", buildBlockedPushDetail());
+      }
+    });
+
+  const pushCurrentBranch = (cwd: string, fallbackBranch: string | null) =>
+    Effect.gen(function* () {
+      yield* ensurePushAllowed(cwd, fallbackBranch);
+      return yield* gitCore.pushCurrentBranch(cwd, fallbackBranch);
+    });
+
+  const pullCurrentBranch = (cwd: string) =>
+    Effect.gen(function* () {
+      yield* ensurePullAllowed(cwd);
+      return yield* gitCore.pullCurrentBranch(cwd);
+    });
 
   const resolveRemoteRepositoryContext = (cwd: string, remoteName: string | null) =>
     Effect.gen(function* () {
@@ -790,7 +916,7 @@ export const makeGitManager = Effect.gen(function* () {
       );
 
       const push = input.wantsPush
-        ? yield* gitCore.pushCurrentBranch(input.cwd, input.branch)
+        ? yield* pushCurrentBranch(input.cwd, input.branch)
         : { status: "skipped_not_requested" as const };
 
       return { commit, push };
@@ -930,7 +1056,7 @@ export const makeGitManager = Effect.gen(function* () {
   });
 
   const pull: GitManagerShape["pull"] = Effect.fnUntraced(function* (input) {
-    return yield* gitCore.pullCurrentBranch(input.cwd);
+    return yield* pullCurrentBranch(input.cwd);
   });
 
   const repositoryContext: GitManagerShape["repositoryContext"] = Effect.fnUntraced(
@@ -1207,7 +1333,7 @@ export const makeGitManager = Effect.gen(function* () {
       yield* Effect.scoped(gitCore.checkoutBranch({ cwd, branch: targetBranch }));
 
       // Step 4: Pull latest target (to avoid push conflicts)
-      yield* gitCore.pullCurrentBranch(cwd).pipe(Effect.catch(() => Effect.void));
+      yield* pullCurrentBranch(cwd).pipe(Effect.catch(() => Effect.void));
 
       // Step 5: Merge feature branch into target
       const mergeResult = yield* gitCore.mergeBranches({
@@ -1232,7 +1358,7 @@ export const makeGitManager = Effect.gen(function* () {
       }
 
       // Step 6: Push target to origin
-      const targetPush = yield* gitCore.pushCurrentBranch(cwd, targetBranch);
+      const targetPush = yield* pushCurrentBranch(cwd, targetBranch);
 
       // Step 7: Delete feature branch (local + remote)
       const deleteResult = yield* gitCore.deleteBranch({

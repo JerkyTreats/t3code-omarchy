@@ -58,9 +58,9 @@ Refactor the server Git stack so `GitCore` owns repository primitives and `GitMa
 
 | Progress | Workstream | Scope | Exit criteria |
 | --- | --- | --- | --- |
-| Pending | Slim core | Remove fork policy and browser context shaping from `GitCore` | Core file is primitive-focused |
-| Pending | Rebalance tests | Keep `GitCore` tests primitive-focused and `GitManager` tests workflow-focused | Test ownership mirrors runtime ownership |
-| Pending | Verify checks | Run formatting, lint, and typecheck | Validation gate passes |
+| Done | Slim core | Remove fork policy from `GitCore` and keep browser workflow enforcement in `GitManager` | Core file is primitive-focused |
+| Done | Rebalance tests | Keep `GitCore` tests primitive-focused and `GitManager` tests workflow-focused | Test ownership mirrors runtime ownership |
+| Done | Verify checks | Run formatting, lint, and typecheck | Validation gate passes |
 
 ## Done Criteria
 

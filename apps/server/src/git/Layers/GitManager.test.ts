@@ -633,6 +633,77 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
     }),
   );
 
+  it.effect("pull blocks upstream tracked remotes in the workflow layer", () =>
+    Effect.gen(function* () {
+      const upstreamRemote = yield* createBareRemote();
+      const repoDir = yield* makeTempDir("t3code-git-manager-upstream-pull-");
+      yield* initRepo(repoDir);
+      yield* runGit(repoDir, ["remote", "add", "upstream", upstreamRemote]);
+      yield* runGit(repoDir, ["push", "-u", "upstream", "main"]);
+
+      const { manager } = yield* makeManager();
+      const result = yield* Effect.result(pull(manager, { cwd: repoDir }));
+
+      expect(result._tag).toBe("Failure");
+      if (result._tag === "Failure") {
+        expect(result.failure.message).toContain("upstream remote is blocked");
+      }
+    }),
+  );
+
+  it.effect("commit_push blocks upstream-only publish remotes in the workflow layer", () =>
+    Effect.gen(function* () {
+      const upstreamRemote = yield* createBareRemote();
+      const repoDir = yield* makeTempDir("t3code-git-manager-upstream-push-");
+      const fileSystem = yield* FileSystem.FileSystem;
+      yield* initRepo(repoDir);
+      yield* runGit(repoDir, ["remote", "add", "upstream", upstreamRemote]);
+      yield* runGit(repoDir, ["checkout", "-b", "feature/upstream-only-push"]);
+      yield* fileSystem.writeFileString(path.join(repoDir, "feature.txt"), "hello\n");
+
+      const { manager } = yield* makeManager();
+      const result = yield* Effect.result(
+        runStackedAction(manager, {
+          cwd: repoDir,
+          action: "commit_push",
+          commitMessage: "Push to upstream only remote",
+        }),
+      );
+
+      expect(result._tag).toBe("Failure");
+      if (result._tag === "Failure") {
+        expect(result.failure.message).toContain("upstream remote is blocked");
+      }
+    }),
+  );
+
+  it.effect("commit_push blocks tracked upstream remotes in the workflow layer", () =>
+    Effect.gen(function* () {
+      const upstreamRemote = yield* createBareRemote();
+      const repoDir = yield* makeTempDir("t3code-git-manager-tracked-upstream-push-");
+      const fileSystem = yield* FileSystem.FileSystem;
+      yield* initRepo(repoDir);
+      yield* runGit(repoDir, ["remote", "add", "upstream", upstreamRemote]);
+      yield* runGit(repoDir, ["checkout", "-b", "feature/tracked-upstream-push"]);
+      yield* runGit(repoDir, ["push", "-u", "upstream", "feature/tracked-upstream-push"]);
+      yield* fileSystem.writeFileString(path.join(repoDir, "feature.txt"), "hello\n");
+
+      const { manager } = yield* makeManager();
+      const result = yield* Effect.result(
+        runStackedAction(manager, {
+          cwd: repoDir,
+          action: "commit_push",
+          commitMessage: "Push to tracked upstream remote",
+        }),
+      );
+
+      expect(result._tag).toBe("Failure");
+      if (result._tag === "Failure") {
+        expect(result.failure.message).toContain("upstream remote is blocked");
+      }
+    }),
+  );
+
   it.effect("status includes PR metadata when branch already has an open PR", () =>
     Effect.gen(function* () {
       const repoDir = yield* makeTempDir("t3code-git-manager-");

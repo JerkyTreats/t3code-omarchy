@@ -2,13 +2,7 @@ import { Cache, Data, Duration, Effect, Exit, FileSystem, Layer, Path } from "ef
 import { buildWorktreeDirectoryName, resolveUniqueBranchName } from "@t3tools/shared/git";
 
 import { GitCommandError } from "../Errors.ts";
-import {
-  buildBlockedPullDetail,
-  buildBlockedPushDetail,
-  isProtectedRemoteName,
-  resolvePublishRemoteName,
-  selectPrimaryRemoteName,
-} from "../gitPolicy.ts";
+import { resolvePublishRemoteName, selectPrimaryRemoteName } from "../gitPolicy.ts";
 import { GitService } from "../Services/GitService.ts";
 import { GitCore, type ExecuteGitProgress, type GitCoreShape } from "../Services/GitCore.ts";
 
@@ -415,7 +409,7 @@ const makeGitCore = Effect.gen(function* () {
   const refreshStatusUpstreamIfStale = (cwd: string): Effect.Effect<void, GitCommandError> =>
     Effect.gen(function* () {
       const upstream = yield* resolveCurrentUpstream(cwd);
-      if (!upstream || isProtectedRemoteName(upstream.remoteName)) return;
+      if (!upstream) return;
       yield* Cache.get(
         statusUpstreamRefreshCache,
         new StatusUpstreamRefreshCacheKey({
@@ -430,7 +424,7 @@ const makeGitCore = Effect.gen(function* () {
   const refreshCheckedOutBranchUpstream = (cwd: string): Effect.Effect<void, GitCommandError> =>
     Effect.gen(function* () {
       const upstream = yield* resolveCurrentUpstream(cwd);
-      if (!upstream || isProtectedRemoteName(upstream.remoteName)) return;
+      if (!upstream) return;
       yield* fetchUpstreamRef(cwd, upstream);
     });
 
@@ -920,14 +914,6 @@ const makeGitCore = Effect.gen(function* () {
             "Cannot push because no git remote is configured for this repository.",
           );
         }
-        if (isProtectedRemoteName(publishRemoteName)) {
-          return yield* createGitCommandError(
-            "GitCore.pushCurrentBranch",
-            cwd,
-            ["push", "-u", publishRemoteName, branch],
-            buildBlockedPushDetail(),
-          );
-        }
         yield* runGit("GitCore.pushCurrentBranch.pushWithUpstream", cwd, [
           "push",
           "-u",
@@ -946,14 +932,6 @@ const makeGitCore = Effect.gen(function* () {
         Effect.catch(() => Effect.succeed(null)),
       );
       if (currentUpstream) {
-        if (isProtectedRemoteName(currentUpstream.remoteName)) {
-          return yield* createGitCommandError(
-            "GitCore.pushCurrentBranch",
-            cwd,
-            ["push", currentUpstream.remoteName, `HEAD:${currentUpstream.upstreamBranch}`],
-            buildBlockedPushDetail(),
-          );
-        }
         yield* runGit("GitCore.pushCurrentBranch.pushUpstream", cwd, [
           "push",
           currentUpstream.remoteName,
@@ -994,17 +972,6 @@ const makeGitCore = Effect.gen(function* () {
           cwd,
           ["pull", "--ff-only"],
           "Current branch has no upstream configured. Push with upstream first.",
-        );
-      }
-      const currentUpstream = yield* resolveCurrentUpstream(cwd).pipe(
-        Effect.catch(() => Effect.succeed(null)),
-      );
-      if (currentUpstream && isProtectedRemoteName(currentUpstream.remoteName)) {
-        return yield* createGitCommandError(
-          "GitCore.pullCurrentBranch",
-          cwd,
-          ["pull", "--ff-only"],
-          buildBlockedPullDetail(),
         );
       }
       const beforeSha = yield* runGitStdout(
