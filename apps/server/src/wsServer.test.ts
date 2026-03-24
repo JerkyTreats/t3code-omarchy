@@ -490,10 +490,7 @@ describe("WebSocket Server", () => {
       providerHealth?: ProviderHealthShape;
       open?: OpenShape;
       gitManager?: GitManagerShape;
-      gitCore?: Pick<
-        GitCoreShape,
-        "getRepositoryContext" | "listBranches" | "initRepo" | "pullCurrentBranch"
-      >;
+      gitCore?: Pick<GitCoreShape, "listBranches" | "initRepo">;
       terminalManager?: TerminalManagerShape;
     } = {},
   ): Promise<Http.Server> {
@@ -1643,7 +1640,7 @@ describe("WebSocket Server", () => {
     expect(fs.existsSync(path.join(workspace, "..", "escape.md"))).toBe(false);
   });
 
-  it("routes git core methods over websocket", async () => {
+  it("routes git core and workflow methods over websocket", async () => {
     const listBranches = vi.fn(() =>
       Effect.succeed({
         branches: [],
@@ -1652,17 +1649,17 @@ describe("WebSocket Server", () => {
       }),
     );
     const initRepo = vi.fn(() => Effect.void);
-    const pullCurrentBranch = vi.fn(() =>
+    const pull = vi.fn(() =>
       Effect.fail(
         new GitCommandError({
-          operation: "GitCore.test.pullCurrentBranch",
+          operation: "GitManager.test.pull",
           detail: "No upstream configured",
           command: "git pull",
           cwd: "/repo/path",
         }),
       ),
     );
-    const getRepositoryContext = vi.fn(() =>
+    const repositoryContext = vi.fn(() =>
       Effect.succeed({
         isRepo: true,
         repoRoot: "/repo/path",
@@ -1675,10 +1672,16 @@ describe("WebSocket Server", () => {
     server = await createTestServer({
       cwd: "/test",
       gitCore: {
-        getRepositoryContext,
         listBranches,
         initRepo,
-        pullCurrentBranch,
+      },
+      gitManager: {
+        status: vi.fn(() => Effect.void as any),
+        pull,
+        repositoryContext,
+        resolvePullRequest: vi.fn(() => Effect.void as any),
+        preparePullRequestThread: vi.fn(() => Effect.void as any),
+        runStackedAction: vi.fn(() => Effect.void as any),
       },
     });
     const addr = server.address();
@@ -1699,7 +1702,7 @@ describe("WebSocket Server", () => {
     const pullResponse = await sendRequest(ws, WS_METHODS.gitPull, { cwd: "/repo/path" });
     expect(pullResponse.result).toBeUndefined();
     expect(pullResponse.error?.message).toContain("No upstream configured");
-    expect(pullCurrentBranch).toHaveBeenCalledWith("/repo/path");
+    expect(pull).toHaveBeenCalledWith({ cwd: "/repo/path" });
 
     const repositoryContextResponse = await sendRequest(ws, WS_METHODS.gitRepositoryContext, {
       cwd: "/repo/path",
@@ -1712,7 +1715,7 @@ describe("WebSocket Server", () => {
       commonDir: "/repo/path/.git",
       isWorktree: false,
     });
-    expect(getRepositoryContext).toHaveBeenCalledWith("/repo/path");
+    expect(repositoryContext).toHaveBeenCalledWith({ cwd: "/repo/path" });
   });
 
   it("supports git.status over websocket", async () => {
@@ -1740,6 +1743,8 @@ describe("WebSocket Server", () => {
     const preparePullRequestThread = vi.fn(() => Effect.void as any);
     const gitManager: GitManagerShape = {
       status,
+      pull: vi.fn(() => Effect.void as any),
+      repositoryContext: vi.fn(() => Effect.void as any),
       resolvePullRequest,
       preparePullRequestThread,
       runStackedAction,
@@ -1779,6 +1784,8 @@ describe("WebSocket Server", () => {
 
     const gitManager: GitManagerShape = {
       status: vi.fn(() => Effect.void as any),
+      pull: vi.fn(() => Effect.void as any),
+      repositoryContext: vi.fn(() => Effect.void as any),
       resolvePullRequest: vi.fn(() => Effect.succeed(resolvePullRequestResult)),
       preparePullRequestThread: vi.fn(() => Effect.succeed(preparePullRequestThreadResult)),
       runStackedAction: vi.fn(() => Effect.void as any),
@@ -1827,6 +1834,8 @@ describe("WebSocket Server", () => {
     );
     const gitManager: GitManagerShape = {
       status: vi.fn(() => Effect.void as any),
+      pull: vi.fn(() => Effect.void as any),
+      repositoryContext: vi.fn(() => Effect.void as any),
       resolvePullRequest: vi.fn(() => Effect.void as any),
       preparePullRequestThread: vi.fn(() => Effect.void as any),
       runStackedAction,
@@ -1889,6 +1898,8 @@ describe("WebSocket Server", () => {
     );
     const gitManager: GitManagerShape = {
       status: vi.fn(() => Effect.void as any),
+      pull: vi.fn(() => Effect.void as any),
+      repositoryContext: vi.fn(() => Effect.void as any),
       resolvePullRequest: vi.fn(() => Effect.void as any),
       preparePullRequestThread: vi.fn(() => Effect.void as any),
       runStackedAction,

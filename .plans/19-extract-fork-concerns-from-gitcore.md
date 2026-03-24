@@ -50,9 +50,9 @@ Refactor the server Git stack so `GitCore` owns repository primitives and `GitMa
 
 | Progress | Workstream | Scope | Exit criteria |
 | --- | --- | --- | --- |
-| Pending | Move browser workflows | Add manager methods for pull and repository context, then route websocket calls through the manager | UI actions no longer bypass workflow policy |
-| Pending | Preserve behavior | Keep fork guardrails and existing RPC shapes stable | No user-visible regression |
-| Pending | Verify checks | Run formatting, lint, and typecheck | Validation gate passes |
+| Done | Move browser workflows | Add manager methods for pull and repository context, then route websocket calls through the manager | UI actions no longer bypass workflow policy |
+| Done | Preserve behavior | Keep fork guardrails and existing RPC shapes stable | No user-visible regression |
+| Done | Verify checks | Run formatting, lint, and typecheck | Validation gate passes |
 
 ## Phase 5
 

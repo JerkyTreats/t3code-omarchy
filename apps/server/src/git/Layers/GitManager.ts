@@ -11,6 +11,7 @@ import {
 } from "@t3tools/shared/git";
 
 import { GitManagerError } from "../Errors.ts";
+import { isProtectedRemoteName } from "../gitPolicy.ts";
 import {
   DEFAULT_GITHUB_HOSTNAME,
   parseGitHubRepoSelector,
@@ -58,10 +59,6 @@ interface BranchHeadContext {
   headRepositoryNameWithOwner: string | null;
   headRepositoryOwnerLogin: string | null;
   isCrossRepository: boolean;
-}
-
-function isReservedUpstreamRemoteName(remoteName: string | null): boolean {
-  return remoteName?.trim().toLowerCase() === "upstream";
 }
 
 function parseRepositoryNameFromPullRequestUrl(url: string): string | null {
@@ -500,7 +497,7 @@ export const makeGitManager = Effect.gen(function* () {
 
   const resolveRemoteRepositoryContext = (cwd: string, remoteName: string | null) =>
     Effect.gen(function* () {
-      if (!remoteName || isReservedUpstreamRemoteName(remoteName)) {
+      if (!remoteName || isProtectedRemoteName(remoteName)) {
         return resolveRepositoryContext(null);
       }
 
@@ -520,9 +517,7 @@ export const makeGitManager = Effect.gen(function* () {
         cwd,
         `branch.${details.branch}.remote`,
       );
-      const remoteName = isReservedUpstreamRemoteName(configuredRemoteName)
-        ? null
-        : configuredRemoteName;
+      const remoteName = isProtectedRemoteName(configuredRemoteName) ? null : configuredRemoteName;
       const headBranchFromUpstream = details.upstreamRef
         ? extractBranchFromRef(details.upstreamRef)
         : "";
@@ -933,6 +928,16 @@ export const makeGitManager = Effect.gen(function* () {
       pr,
     };
   });
+
+  const pull: GitManagerShape["pull"] = Effect.fnUntraced(function* (input) {
+    return yield* gitCore.pullCurrentBranch(input.cwd);
+  });
+
+  const repositoryContext: GitManagerShape["repositoryContext"] = Effect.fnUntraced(
+    function* (input) {
+      return yield* gitCore.getRepositoryContext(input.cwd);
+    },
+  );
 
   const resolvePullRequest: GitManagerShape["resolvePullRequest"] = Effect.fnUntraced(
     function* (input) {
@@ -1350,6 +1355,8 @@ export const makeGitManager = Effect.gen(function* () {
 
   return {
     status,
+    pull,
+    repositoryContext,
     resolvePullRequest,
     preparePullRequestThread,
     runStackedAction,

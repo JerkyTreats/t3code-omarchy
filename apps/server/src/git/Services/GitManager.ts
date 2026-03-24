@@ -12,7 +12,11 @@ import {
   GitActionProgressEvent,
   GitPreparePullRequestThreadInput,
   GitPreparePullRequestThreadResult,
+  GitPullInput,
+  GitPullResult,
   GitPullRequestRefInput,
+  GitRepositoryContextInput,
+  GitRepositoryContextResult,
   GitResolvePullRequestResult,
   GitRunStackedActionInput,
   GitRunStackedActionResult,
@@ -45,6 +49,18 @@ export interface GitManagerShape {
   readonly status: (
     input: GitStatusInput,
   ) => Effect.Effect<GitStatusResult, GitManagerServiceError>;
+
+  /**
+   * Pull the current branch using workflow policy.
+   */
+  readonly pull: (input: GitPullInput) => Effect.Effect<GitPullResult, GitManagerServiceError>;
+
+  /**
+   * Read repository context for browser-facing Git workflows.
+   */
+  readonly repositoryContext: (
+    input: GitRepositoryContextInput,
+  ) => Effect.Effect<GitRepositoryContextResult, GitManagerServiceError>;
 
   /**
    * Resolve a pull request by URL/number against the current repository.

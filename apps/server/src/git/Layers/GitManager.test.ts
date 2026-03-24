@@ -543,6 +543,14 @@ function resolvePullRequest(manager: GitManagerShape, input: { cwd: string; refe
   return manager.resolvePullRequest(input);
 }
 
+function pull(manager: GitManagerShape, input: { cwd: string }) {
+  return manager.pull(input);
+}
+
+function repositoryContext(manager: GitManagerShape, input: { cwd: string }) {
+  return manager.repositoryContext(input);
+}
+
 function preparePullRequestThread(
   manager: GitManagerShape,
   input: { cwd: string; reference: string; mode: "local" | "worktree" },
@@ -582,6 +590,49 @@ function makeManager(input?: {
 const GitManagerTestLayer = Layer.provideMerge(GitServiceLive, NodeServices.layer);
 
 it.layer(GitManagerTestLayer)("GitManager", (it) => {
+  it.effect("pull delegates to git core", () =>
+    Effect.gen(function* () {
+      const remoteDir = yield* createBareRemote();
+      const sourceDir = yield* makeTempDir("t3code-git-manager-pull-");
+      const cloneDir = yield* makeTempDir("t3code-git-manager-pull-clone-");
+      yield* initRepo(sourceDir);
+      yield* runGit(sourceDir, ["remote", "add", "origin", remoteDir]);
+      yield* runGit(sourceDir, ["push", "-u", "origin", "main"]);
+
+      yield* runGit(cloneDir, ["clone", remoteDir, "."]);
+      yield* runGit(cloneDir, ["config", "user.email", "test@example.com"]);
+      yield* runGit(cloneDir, ["config", "user.name", "Test User"]);
+      yield* runGit(cloneDir, ["checkout", "main"]);
+      yield* runGit(cloneDir, ["commit", "--allow-empty", "-m", "Remote update"]);
+      yield* runGit(cloneDir, ["push", "origin", "main"]);
+
+      const { manager } = yield* makeManager();
+      const result = yield* pull(manager, { cwd: sourceDir });
+
+      expect(result.status).toBe("pulled");
+      expect(result.branch).toBe("main");
+      expect(result.upstreamBranch).toBe("origin/main");
+    }),
+  );
+
+  it.effect("repositoryContext delegates to git core", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("t3code-git-manager-repo-context-");
+      const worktreeDir = yield* makeTempDir("t3code-git-manager-repo-context-worktree-");
+      yield* initRepo(repoDir);
+      yield* runGit(repoDir, ["worktree", "add", "-b", "feature/context", worktreeDir]);
+
+      const { manager } = yield* makeManager();
+      const result = yield* repositoryContext(manager, { cwd: worktreeDir });
+
+      expect(result.isRepo).toBe(true);
+      expect(result.repoRoot).toBe(worktreeDir);
+      expect(result.isWorktree).toBe(true);
+      expect(result.gitDir).not.toBeNull();
+      expect(result.commonDir).not.toBeNull();
+    }),
+  );
+
   it.effect("status includes PR metadata when branch already has an open PR", () =>
     Effect.gen(function* () {
       const repoDir = yield* makeTempDir("t3code-git-manager-");
