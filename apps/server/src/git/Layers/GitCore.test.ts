@@ -1952,6 +1952,44 @@ it.layer(TestLayer)("git integration", (it) => {
       }),
     );
 
+    it.effect("reports repository context for non-repositories", () =>
+      Effect.gen(function* () {
+        const tmp = yield* makeTmpDir();
+        const core = yield* GitCore;
+
+        expect(yield* core.getRepositoryContext(tmp)).toEqual({
+          isRepo: false,
+          repoRoot: null,
+          gitDir: null,
+          commonDir: null,
+          isWorktree: false,
+        });
+      }),
+    );
+
+    it.effect("reports linked worktree repository context", () =>
+      Effect.gen(function* () {
+        const repoDir = yield* makeTmpDir();
+        const worktreeDir = yield* makeTmpDir();
+        yield* initRepoWithCommit(repoDir);
+        yield* git(repoDir, ["worktree", "add", "-b", "feature/worktree-context", worktreeDir]);
+
+        const core = yield* GitCore;
+        const repositoryContext = yield* core.getRepositoryContext(worktreeDir);
+
+        expect(repositoryContext.isRepo).toBe(true);
+        expect(repositoryContext.repoRoot).toBe(worktreeDir);
+        expect(repositoryContext.gitDir).not.toBeNull();
+        expect(repositoryContext.commonDir).not.toBeNull();
+        expect(repositoryContext.isWorktree).toBe(true);
+
+        const primaryRepositoryContext = yield* core.getRepositoryContext(repoDir);
+        expect(primaryRepositoryContext.isRepo).toBe(true);
+        expect(primaryRepositoryContext.repoRoot).toBe(repoDir);
+        expect(primaryRepositoryContext.isWorktree).toBe(false);
+      }),
+    );
+
     it.effect("lists branches when recency lookup fails", () =>
       Effect.gen(function* () {
         const tmp = yield* makeTmpDir();

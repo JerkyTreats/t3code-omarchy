@@ -490,7 +490,10 @@ describe("WebSocket Server", () => {
       providerHealth?: ProviderHealthShape;
       open?: OpenShape;
       gitManager?: GitManagerShape;
-      gitCore?: Pick<GitCoreShape, "listBranches" | "initRepo" | "pullCurrentBranch">;
+      gitCore?: Pick<
+        GitCoreShape,
+        "getRepositoryContext" | "listBranches" | "initRepo" | "pullCurrentBranch"
+      >;
       terminalManager?: TerminalManagerShape;
     } = {},
   ): Promise<Http.Server> {
@@ -1659,10 +1662,20 @@ describe("WebSocket Server", () => {
         }),
       ),
     );
+    const getRepositoryContext = vi.fn(() =>
+      Effect.succeed({
+        isRepo: true,
+        repoRoot: "/repo/path",
+        gitDir: "/repo/path/.git",
+        commonDir: "/repo/path/.git",
+        isWorktree: false,
+      }),
+    );
 
     server = await createTestServer({
       cwd: "/test",
       gitCore: {
+        getRepositoryContext,
         listBranches,
         initRepo,
         pullCurrentBranch,
@@ -1687,6 +1700,19 @@ describe("WebSocket Server", () => {
     expect(pullResponse.result).toBeUndefined();
     expect(pullResponse.error?.message).toContain("No upstream configured");
     expect(pullCurrentBranch).toHaveBeenCalledWith("/repo/path");
+
+    const repositoryContextResponse = await sendRequest(ws, WS_METHODS.gitRepositoryContext, {
+      cwd: "/repo/path",
+    });
+    expect(repositoryContextResponse.error).toBeUndefined();
+    expect(repositoryContextResponse.result).toEqual({
+      isRepo: true,
+      repoRoot: "/repo/path",
+      gitDir: "/repo/path/.git",
+      commonDir: "/repo/path/.git",
+      isWorktree: false,
+    });
+    expect(getRepositoryContext).toHaveBeenCalledWith("/repo/path");
   });
 
   it("supports git.status over websocket", async () => {
