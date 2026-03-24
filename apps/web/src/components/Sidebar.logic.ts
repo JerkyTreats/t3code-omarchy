@@ -20,6 +20,15 @@ export interface ThreadStatusPill {
   pulse: boolean;
 }
 
+const THREAD_STATUS_PRIORITY: Record<ThreadStatusPill["label"], number> = {
+  "Pending Approval": 5,
+  "Awaiting Input": 4,
+  Working: 3,
+  Connecting: 3,
+  "Plan Ready": 2,
+  Completed: 1,
+};
+
 type ThreadStatusInput = Pick<
   Thread,
   | "interactionMode"
@@ -322,4 +331,24 @@ export function resolveThreadStatusPill(input: {
   }
 
   return null;
+}
+
+export function resolveProjectStatusIndicator(
+  statuses: ReadonlyArray<ThreadStatusPill | null>,
+): ThreadStatusPill | null {
+  let highestPriorityStatus: ThreadStatusPill | null = null;
+
+  for (const status of statuses) {
+    if (status === null) continue;
+    const statusPriority = THREAD_STATUS_PRIORITY[status.label] ?? 0;
+    const currentPriority =
+      highestPriorityStatus === null
+        ? -1
+        : (THREAD_STATUS_PRIORITY[highestPriorityStatus.label] ?? 0);
+    if (highestPriorityStatus === null || statusPriority > currentPriority) {
+      highestPriorityStatus = status;
+    }
+  }
+
+  return highestPriorityStatus;
 }

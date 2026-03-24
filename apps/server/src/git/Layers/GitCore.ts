@@ -3,7 +3,7 @@ import { buildWorktreeDirectoryName, resolveUniqueBranchName } from "@t3tools/sh
 
 import { GitCommandError } from "../Errors.ts";
 import { GitService } from "../Services/GitService.ts";
-import { GitCore, type GitCoreShape } from "../Services/GitCore.ts";
+import { GitCore, type ExecuteGitProgress, type GitCoreShape } from "../Services/GitCore.ts";
 
 const STATUS_UPSTREAM_REFRESH_INTERVAL = Duration.seconds(15);
 const STATUS_UPSTREAM_REFRESH_TIMEOUT = Duration.seconds(5);
@@ -19,8 +19,10 @@ class StatusUpstreamRefreshCacheKey extends Data.Class<{
 
 interface ExecuteGitOptions {
   timeoutMs?: number | undefined;
+  maxOutputBytes?: number | undefined;
   allowNonZeroExit?: boolean | undefined;
   fallbackErrorMessage?: string | undefined;
+  progress?: ExecuteGitProgress | undefined;
 }
 
 function parseBranchAb(value: string): { ahead: number; behind: number } {
@@ -273,6 +275,15 @@ const makeGitCore = Effect.gen(function* () {
     allowNonZeroExit = false,
   ): Effect.Effect<void, GitCommandError> =>
     executeGit(operation, cwd, args, { allowNonZeroExit }).pipe(Effect.asVoid);
+
+  const execute: GitCoreShape["execute"] = (input) =>
+    executeGit(input.operation, input.cwd, input.args, {
+      allowNonZeroExit: input.allowNonZeroExit,
+      timeoutMs: input.timeoutMs,
+      maxOutputBytes: input.maxOutputBytes,
+      fallbackErrorMessage: undefined,
+      progress: input.progress,
+    });
 
   const runGitStdout = (
     operation: string,
@@ -1670,6 +1681,7 @@ const makeGitCore = Effect.gen(function* () {
     });
 
   return {
+    execute,
     status,
     statusDetails,
     prepareCommitContext,

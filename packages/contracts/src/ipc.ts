@@ -2,6 +2,7 @@ import type {
   GitAbortMergeInput,
   GitAbortMergeResult,
   GitCheckoutInput,
+  GitActionProgressEvent,
   GitCreateBranchInput,
   GitPreparePullRequestThreadInput,
   GitPreparePullRequestThreadResult,
@@ -186,6 +187,7 @@ export interface NativeApi {
     pull: (input: GitPullInput) => Promise<GitPullResult>;
     status: (input: GitStatusInput) => Promise<GitStatusResult>;
     runStackedAction: (input: GitRunStackedActionInput) => Promise<GitRunStackedActionResult>;
+    onActionProgress: (callback: (event: GitActionProgressEvent) => void) => () => void;
   };
   github: {
     status: (input: GitHubStatusInput) => Promise<GitHubStatusResult>;

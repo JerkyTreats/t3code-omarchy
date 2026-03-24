@@ -132,6 +132,7 @@ const makeIsolatedGitCore = (gitService: GitServiceShape) =>
       ensureRemote: (input) => core.ensureRemote(input),
       fetchRemoteBranch: (input) => core.fetchRemoteBranch(input),
       setBranchUpstream: (input) => core.setBranchUpstream(input),
+      execute: (input) => core.execute(input),
       removeWorktree: (input) => core.removeWorktree(input),
       renameBranch: (input) => core.renameBranch(input),
       createBranch: (input) => core.createBranch(input),

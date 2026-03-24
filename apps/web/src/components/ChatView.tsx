@@ -665,8 +665,9 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const setComposerDraftInteractionMode = useComposerDraftStore(
     (store) => store.setInteractionMode,
   );
-  const setComposerDraftEffort = useComposerDraftStore((store) => store.setEffort);
-  const setComposerDraftCodexFastMode = useComposerDraftStore((store) => store.setCodexFastMode);
+  const setComposerDraftProviderModelOptions = useComposerDraftStore(
+    (store) => store.setProviderModelOptions,
+  );
   const addComposerDraftImage = useComposerDraftStore((store) => store.addImage);
   const addComposerDraftImages = useComposerDraftStore((store) => store.addImages);
   const removeComposerDraftImage = useComposerDraftStore((store) => store.removeImage);
@@ -893,7 +894,10 @@ export default function ChatView({ threadId }: ChatViewProps) {
     selectedProvider,
     activeThread?.model ?? activeProject?.model ?? getDefaultModel(selectedProvider),
   );
-  const customModelsForSelectedProvider = settings.customCodexModels;
+  const customModelsByProvider = useMemo(
+    () => ({ codex: settings.customCodexModels, claudeAgent: settings.customClaudeModels }),
+    [settings.customClaudeModels, settings.customCodexModels],
+  );
   const selectedModel = useMemo(() => {
     const draftModel = composerDraft.model;
     if (!draftModel) {
@@ -901,25 +905,21 @@ export default function ChatView({ threadId }: ChatViewProps) {
     }
     return resolveAppModelSelection(
       selectedProvider,
-      customModelsForSelectedProvider,
+      customModelsByProvider,
       draftModel,
     ) as ModelSlug;
-  }, [baseThreadModel, composerDraft.model, customModelsForSelectedProvider, selectedProvider]);
-  const reasoningOptions = getReasoningEffortOptions(selectedProvider);
-  const supportsReasoningEffort = reasoningOptions.length > 0;
-  const selectedEffort = composerDraft.effort ?? getDefaultReasoningEffort(selectedProvider);
+  }, [baseThreadModel, composerDraft.model, customModelsByProvider, selectedProvider]);
+  const reasoningOptions = useMemo(
+    () => (selectedProvider === "codex" ? getReasoningEffortOptions("codex") : []),
+    [selectedProvider],
+  );
+  const selectedEffort =
+    selectedProvider === "codex"
+      ? (composerDraft.modelOptions?.codex?.reasoningEffort ?? getDefaultReasoningEffort("codex"))
+      : null;
   const selectedCodexFastModeEnabled =
-    selectedProvider === "codex" ? composerDraft.codexFastMode : false;
-  const selectedModelOptionsForDispatch = useMemo(() => {
-    if (selectedProvider !== "codex") {
-      return undefined;
-    }
-    const codexOptions = {
-      ...(supportsReasoningEffort && selectedEffort ? { reasoningEffort: selectedEffort } : {}),
-      ...(selectedCodexFastModeEnabled ? { fastMode: true } : {}),
-    };
-    return Object.keys(codexOptions).length > 0 ? { codex: codexOptions } : undefined;
-  }, [selectedCodexFastModeEnabled, selectedEffort, selectedProvider, supportsReasoningEffort]);
+    selectedProvider === "codex" ? composerDraft.modelOptions?.codex?.fastMode === true : false;
+  const selectedModelOptionsForDispatch = composerDraft.modelOptions ?? undefined;
   const selectedModelForPicker = selectedModel;
   const modelOptionsByProvider = useMemo(
     () => getCustomModelOptionsByProvider(settings),
@@ -3284,32 +3284,43 @@ export default function ChatView({ threadId }: ChatViewProps) {
       setComposerDraftProvider(activeThread.id, provider);
       setComposerDraftModel(
         activeThread.id,
-        resolveAppModelSelection(provider, settings.customCodexModels, model),
+        resolveAppModelSelection(provider, customModelsByProvider, model),
       );
       scheduleComposerFocus();
     },
     [
       activeThread,
+      customModelsByProvider,
       lockedProvider,
       scheduleComposerFocus,
       setComposerDraftModel,
       setComposerDraftProvider,
-      settings.customCodexModels,
     ],
   );
   const onEffortSelect = useCallback(
     (effort: CodexReasoningEffort) => {
-      setComposerDraftEffort(threadId, effort);
+      setComposerDraftProviderModelOptions(threadId, "codex", {
+        ...(selectedCodexFastModeEnabled ? { fastMode: true } : {}),
+        reasoningEffort: effort,
+      });
       scheduleComposerFocus();
     },
-    [scheduleComposerFocus, setComposerDraftEffort, threadId],
+    [
+      scheduleComposerFocus,
+      selectedCodexFastModeEnabled,
+      setComposerDraftProviderModelOptions,
+      threadId,
+    ],
   );
   const onCodexFastModeChange = useCallback(
     (enabled: boolean) => {
-      setComposerDraftCodexFastMode(threadId, enabled);
+      setComposerDraftProviderModelOptions(threadId, "codex", {
+        ...(selectedEffort ? { reasoningEffort: selectedEffort } : {}),
+        ...(enabled ? { fastMode: true } : {}),
+      });
       scheduleComposerFocus();
     },
-    [scheduleComposerFocus, setComposerDraftCodexFastMode, threadId],
+    [scheduleComposerFocus, selectedEffort, setComposerDraftProviderModelOptions, threadId],
   );
   const onEnvModeChange = useCallback(
     (mode: DraftThreadEnvMode) => {
@@ -5449,7 +5460,7 @@ function isAvailableProviderOption(option: (typeof PROVIDER_OPTIONS)[number]): o
   label: string;
   available: true;
 } {
-  return option.available && option.value !== "claudeCode";
+  return option.available;
 }
 
 const AVAILABLE_PROVIDER_OPTIONS = PROVIDER_OPTIONS.filter(isAvailableProviderOption);
@@ -5461,15 +5472,17 @@ const COMING_SOON_PROVIDER_OPTIONS = [
 
 function getCustomModelOptionsByProvider(settings: {
   customCodexModels: readonly string[];
+  customClaudeModels: readonly string[];
 }): Record<ProviderKind, ReadonlyArray<{ slug: string; name: string }>> {
   return {
     codex: getAppModelOptions("codex", settings.customCodexModels),
+    claudeAgent: getAppModelOptions("claudeAgent", settings.customClaudeModels),
   };
 }
 
 const PROVIDER_ICON_BY_PROVIDER: Record<ProviderPickerKind, Icon> = {
   codex: OpenAI,
-  claudeCode: ClaudeAI,
+  claudeAgent: ClaudeAI,
   cursor: CursorIcon,
 };
 
@@ -5642,7 +5655,7 @@ const ProviderModelPicker = memo(function ProviderModelPicker(props: {
                 aria-hidden="true"
                 className={cn(
                   "size-4 shrink-0 opacity-80",
-                  option.value === "claudeCode" ? "" : "text-muted-foreground/85",
+                  option.value === "claudeAgent" ? "" : "text-muted-foreground/85",
                 )}
               />
               <span>{option.label}</span>

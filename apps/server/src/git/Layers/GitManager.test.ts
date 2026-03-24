@@ -536,7 +536,7 @@ function runStackedAction(
     filePaths?: readonly string[];
   },
 ) {
-  return manager.runStackedAction(input);
+  return manager.runStackedAction({ actionId: crypto.randomUUID(), ...input });
 }
 
 function resolvePullRequest(manager: GitManagerShape, input: { cwd: string; reference: string }) {

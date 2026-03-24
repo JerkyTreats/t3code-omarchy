@@ -205,7 +205,7 @@ export default function Sidebar() {
   const threads = useStore((store) => store.threads);
   const markThreadUnread = useStore((store) => store.markThreadUnread);
   const toggleProject = useStore((store) => store.toggleProject);
-  const clearComposerDraftForThread = useComposerDraftStore((store) => store.clearThreadDraft);
+  const clearComposerDraftForThread = useComposerDraftStore((store) => store.clearDraftThread);
   const getDraftThreadByProjectId = useComposerDraftStore(
     (store) => store.getDraftThreadByProjectId,
   );

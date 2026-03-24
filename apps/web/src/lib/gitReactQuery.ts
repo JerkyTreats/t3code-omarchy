@@ -1,5 +1,6 @@
 import type { GitHubIssueLink, GitStackedAction } from "@t3tools/contracts";
 import { mutationOptions, queryOptions, type QueryClient } from "@tanstack/react-query";
+import { randomUUID } from "./utils";
 import { ensureNativeApi } from "../nativeApi";
 
 const GIT_STATUS_STALE_TIME_MS = 5_000;
@@ -138,6 +139,7 @@ export function gitRunStackedActionMutationOptions(input: {
   return mutationOptions({
     mutationKey: gitMutationKeys.runStackedAction(input.cwd),
     mutationFn: async ({
+      actionId,
       action,
       commitMessage,
       featureBranch,
@@ -145,6 +147,7 @@ export function gitRunStackedActionMutationOptions(input: {
       issueLink,
       filePaths,
     }: {
+      actionId?: string;
       action: GitStackedAction;
       commitMessage?: string;
       featureBranch?: boolean;
@@ -155,6 +158,7 @@ export function gitRunStackedActionMutationOptions(input: {
       const api = ensureNativeApi();
       if (!input.cwd) throw new Error("Git action is unavailable.");
       return api.git.runStackedAction({
+        actionId: actionId ?? randomUUID(),
         cwd: input.cwd,
         action,
         ...(commitMessage ? { commitMessage } : {}),
