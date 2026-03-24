@@ -1,8 +1,10 @@
 /**
  * GitManager - Effect service contract for stacked Git workflows.
  *
- * Orchestrates status inspection and commit/push/PR flows by composing
- * lower-level Git and external tool services.
+ * Owns user-facing Git workflow behavior by composing lower-level Git and
+ * external tool services.
+ * Product-specific policy, guardrails, repository context shaping, progress
+ * events, and stacked flows should concentrate here rather than in GitCore.
  *
  * @module GitManager
  */
@@ -32,6 +34,9 @@ export interface GitRunStackedActionOptions {
 
 /**
  * GitManagerShape - Service API for high-level Git workflow actions.
+ *
+ * This is the preferred browser-facing seam for Git features that need
+ * workflow policy or product semantics.
  */
 export interface GitManagerShape {
   /**

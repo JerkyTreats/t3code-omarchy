@@ -1,8 +1,9 @@
 /**
  * GitCore - Effect service contract for low-level Git operations.
  *
- * Wraps core repository primitives used by higher-level orchestration
- * services and WebSocket routes.
+ * Owns repository primitives only.
+ * Higher-level workflow policy, user-facing guardrails, and product-specific
+ * orchestration should live in GitManager or adjacent workflow modules.
  *
  * @module GitCore
  */
@@ -146,6 +147,9 @@ export interface GitSetBranchUpstreamInput {
 
 /**
  * GitCoreShape - Service API for low-level Git repository interactions.
+ *
+ * Keep this surface primitive-oriented so upstream syncs can land here with
+ * minimal fork conflicts.
  */
 export interface GitCoreShape {
   /**
@@ -154,7 +158,8 @@ export interface GitCoreShape {
   readonly execute: (input: ExecuteGitInput) => Effect.Effect<ExecuteGitResult, GitCommandError>;
 
   /**
-   * Read Git status for a repository.
+   * Read raw Git status for a repository.
+   * Do not add product-specific decoration here.
    */
   readonly status: (input: GitStatusInput) => Effect.Effect<GitStatusResult, GitCommandError>;
 
@@ -207,6 +212,7 @@ export interface GitCoreShape {
 
   /**
    * Resolve repository root and git dir metadata for a cwd.
+   * Do not shape browser-specific repository workflow context here.
    */
   readonly getRepositoryContext: (
     cwd: string,
