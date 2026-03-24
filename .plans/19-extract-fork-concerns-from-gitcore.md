@@ -42,9 +42,9 @@ Refactor the server Git stack so `GitCore` owns repository primitives and `GitMa
 
 | Progress | Workstream | Scope | Exit criteria |
 | --- | --- | --- | --- |
-| Pending | Extract pure policy | Move protected remote and publish target rules into a policy module with no behavior change | `GitCore` no longer implements fork policy inline |
-| Pending | Expand tests | Add policy tests and keep core tests green | Policy logic is isolated and covered |
-| Pending | Verify checks | Run formatting, lint, and typecheck | Validation gate passes |
+| Done | Extract pure policy | Move protected remote and publish target rules into a policy module with no behavior change | `GitCore` no longer implements fork policy inline |
+| Done | Expand tests | Add policy tests and keep core tests green | Policy logic is isolated and covered |
+| Done | Verify checks | Run formatting, lint, and typecheck | Validation gate passes |
 
 ## Phase 4
 
