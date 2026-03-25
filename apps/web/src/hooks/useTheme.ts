@@ -93,12 +93,18 @@ function persistDesktopSystemTheme(theme: DesktopSystemTheme | null): void {
 
 function clearAppliedDesktopTheme(): void {
   const root = document.documentElement;
-  delete root.dataset.systemThemeSource;
-  delete root.dataset.systemThemeMode;
-  delete root.dataset.systemThemeName;
+  const dataset = "dataset" in root ? root.dataset : null;
+  if (dataset) {
+    delete dataset.systemThemeSource;
+    delete dataset.systemThemeMode;
+    delete dataset.systemThemeName;
+  }
 
-  for (const colorKey of appliedDesktopThemeColorKeys) {
-    root.style.removeProperty(`--desktop-system-theme-${colorKey.replace(/_/g, "-")}`);
+  const style = "style" in root ? root.style : null;
+  if (style) {
+    for (const colorKey of appliedDesktopThemeColorKeys) {
+      style.removeProperty(`--desktop-system-theme-${colorKey.replace(/_/g, "-")}`);
+    }
   }
   appliedDesktopThemeColorKeys.clear();
 }
@@ -109,14 +115,20 @@ function applyDesktopSystemTheme(theme: DesktopSystemTheme | null): void {
 
   if (theme === null) return;
 
-  root.dataset.systemThemeSource = theme.source;
-  root.dataset.systemThemeMode = theme.mode;
-  root.dataset.systemThemeName = theme.name;
+  const dataset = "dataset" in root ? root.dataset : null;
+  if (dataset) {
+    dataset.systemThemeSource = theme.source;
+    dataset.systemThemeMode = theme.mode;
+    dataset.systemThemeName = theme.name;
+  }
 
-  for (const [colorKey, colorValue] of Object.entries(theme.colors)) {
-    if (!colorValue) continue;
-    root.style.setProperty(`--desktop-system-theme-${colorKey.replace(/_/g, "-")}`, colorValue);
-    appliedDesktopThemeColorKeys.add(colorKey);
+  const style = "style" in root ? root.style : null;
+  if (style) {
+    for (const [colorKey, colorValue] of Object.entries(theme.colors)) {
+      if (!colorValue) continue;
+      style.setProperty(`--desktop-system-theme-${colorKey.replace(/_/g, "-")}`, colorValue);
+      appliedDesktopThemeColorKeys.add(colorKey);
+    }
   }
 }
 
