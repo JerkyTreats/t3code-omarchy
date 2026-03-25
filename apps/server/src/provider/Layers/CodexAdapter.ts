@@ -411,6 +411,33 @@ function asRuntimeTaskId(taskId: string): RuntimeTaskId {
   return RuntimeTaskId.makeUnsafe(taskId);
 }
 
+function payloadTurnId(payload: Record<string, unknown> | undefined): TurnId | undefined {
+  return toTurnId(
+    asString(payload?.turnId) ??
+      asString(asObject(payload?.turn)?.id) ??
+      asString(codexEventMessage(payload)?.turn_id) ??
+      asString(codexEventMessage(payload)?.turnId),
+  );
+}
+
+function payloadItemId(payload: Record<string, unknown> | undefined): ProviderItemId | undefined {
+  return toProviderItemId(
+    asString(payload?.itemId) ??
+      asString(asObject(payload?.item)?.id) ??
+      asString(codexEventMessage(payload)?.item_id) ??
+      asString(codexEventMessage(payload)?.itemId),
+  );
+}
+
+function payloadRequestId(payload: Record<string, unknown> | undefined): string | undefined {
+  return (
+    asString(payload?.requestId) ??
+    asString(asObject(payload?.request)?.id) ??
+    asString(codexEventMessage(payload)?.request_id) ??
+    asString(codexEventMessage(payload)?.requestId)
+  );
+}
+
 function codexEventMessage(
   payload: Record<string, unknown> | undefined,
 ): Record<string, unknown> | undefined {
@@ -422,10 +449,9 @@ function codexEventBase(
   canonicalThreadId: ThreadId,
 ): Omit<ProviderRuntimeEvent, "type" | "payload"> {
   const payload = asObject(event.payload);
-  const msg = codexEventMessage(payload);
-  const turnId = event.turnId ?? toTurnId(asString(msg?.turn_id) ?? asString(msg?.turnId));
-  const itemId = event.itemId ?? toProviderItemId(asString(msg?.item_id) ?? asString(msg?.itemId));
-  const requestId = asString(msg?.request_id) ?? asString(msg?.requestId);
+  const turnId = event.turnId ?? payloadTurnId(payload);
+  const itemId = event.itemId ?? payloadItemId(payload);
+  const requestId = event.requestId ?? payloadRequestId(payload);
   const base = runtimeEventBase(event, canonicalThreadId);
   const providerRefs = base.providerRefs
     ? {
@@ -453,13 +479,15 @@ function eventRawSource(event: ProviderEvent): NonNullable<ProviderRuntimeEvent[
   return event.kind === "request" ? "codex.app-server.request" : "codex.app-server.notification";
 }
 
-function providerRefsFromEvent(
-  event: ProviderEvent,
-): ProviderRuntimeEvent["providerRefs"] | undefined {
+function providerRefsFromResolvedIds(input: {
+  readonly turnId?: string;
+  readonly itemId?: string;
+  readonly requestId?: string;
+}): ProviderRuntimeEvent["providerRefs"] | undefined {
   const refs: Record<string, string> = {};
-  if (event.turnId) refs.providerTurnId = event.turnId;
-  if (event.itemId) refs.providerItemId = event.itemId;
-  if (event.requestId) refs.providerRequestId = event.requestId;
+  if (input.turnId) refs.providerTurnId = input.turnId;
+  if (input.itemId) refs.providerItemId = input.itemId;
+  if (input.requestId) refs.providerRequestId = input.requestId;
 
   return Object.keys(refs).length > 0 ? (refs as ProviderRuntimeEvent["providerRefs"]) : undefined;
 }
@@ -468,15 +496,23 @@ function runtimeEventBase(
   event: ProviderEvent,
   canonicalThreadId: ThreadId,
 ): Omit<ProviderRuntimeEvent, "type" | "payload"> {
-  const refs = providerRefsFromEvent(event);
+  const payload = asObject(event.payload);
+  const turnId = event.turnId ?? payloadTurnId(payload);
+  const itemId = event.itemId ?? payloadItemId(payload);
+  const requestId = event.requestId ?? payloadRequestId(payload);
+  const refs = providerRefsFromResolvedIds({
+    ...(turnId ? { turnId } : {}),
+    ...(itemId ? { itemId } : {}),
+    ...(requestId ? { requestId } : {}),
+  });
   return {
     eventId: event.id,
     provider: event.provider,
     threadId: canonicalThreadId,
     createdAt: event.createdAt,
-    ...(event.turnId ? { turnId: event.turnId } : {}),
-    ...(event.itemId ? { itemId: asRuntimeItemId(event.itemId) } : {}),
-    ...(event.requestId ? { requestId: asRuntimeRequestId(event.requestId) } : {}),
+    ...(turnId ? { turnId } : {}),
+    ...(itemId ? { itemId: asRuntimeItemId(itemId) } : {}),
+    ...(requestId ? { requestId: asRuntimeRequestId(requestId) } : {}),
     ...(refs ? { providerRefs: refs } : {}),
     raw: {
       source: eventRawSource(event),

@@ -926,8 +926,15 @@ const make = Effect.gen(function* () {
           case "turn.started":
             return !conflictsWithActiveTurn;
           case "turn.completed":
-            if (conflictsWithActiveTurn || missingTurnForActiveTurn) {
+            if (conflictsWithActiveTurn) {
               return false;
+            }
+            if (missingTurnForActiveTurn) {
+              // Some providers emit thread-scoped turn completions without a
+              // turn id. The event is already scoped to a single thread, and
+              // child conversation lifecycle events are suppressed upstream,
+              // so treat this as completion for the currently active turn.
+              return true;
             }
             // Only the active turn may close the lifecycle state.
             if (comparedProviderTurnId !== undefined && eventTurnId !== undefined) {
