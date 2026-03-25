@@ -137,7 +137,7 @@ export function isLatestTurnSettled(
   if (!latestTurn?.startedAt) return false;
   if (!latestTurn.completedAt) return false;
   if (!session) return true;
-  if (session.orchestrationStatus === "running") return false;
+  if (session.orchestrationStatus === "running" && session.activeTurnId) return false;
   return true;
 }
 
@@ -159,12 +159,7 @@ export function isThreadRuntimeWorking(
     return false;
   }
 
-  return (
-    runtime.turnStatus === "pending" ||
-    runtime.turnStatus === "running" ||
-    runtime.sessionStatus === "starting" ||
-    runtime.sessionStatus === "running"
-  );
+  return runtime.turnStatus === "pending" || runtime.turnStatus === "running";
 }
 
 export function isThreadRuntimeConnecting(
