@@ -540,9 +540,11 @@ export default function GitPanel({
           }
         : null;
       const title = buildIssueThreadTitle(issue);
-      const model =
-        activeServerThread?.model ?? activeProject.model ?? DEFAULT_MODEL_BY_PROVIDER.codex;
-      const provider = activeServerThread?.session?.provider;
+      const modelSelection = activeServerThread?.modelSelection ??
+        activeProject.defaultModelSelection ?? {
+          provider: activeServerThread?.session?.provider ?? "codex",
+          model: DEFAULT_MODEL_BY_PROVIDER.codex,
+        };
 
       setResolvingIssueNumber(issue.number);
 
@@ -562,7 +564,7 @@ export default function GitPanel({
           threadId,
           projectId: activeProject.id,
           title,
-          model,
+          modelSelection,
           runtimeMode: issueThreadRuntimeMode,
           interactionMode: issueThreadInteractionMode,
           branch: worktreeResult.worktree.branch,
@@ -582,7 +584,7 @@ export default function GitPanel({
             text: prompt,
             attachments: [],
           },
-          ...(provider ? { provider } : {}),
+          modelSelection,
           runtimeMode: issueThreadRuntimeMode,
           interactionMode: issueThreadInteractionMode,
           createdAt,
@@ -637,7 +639,7 @@ export default function GitPanel({
     },
     [
       activeProject,
-      activeServerThread?.model,
+      activeServerThread?.modelSelection,
       activeServerThread?.session?.provider,
       activeWorkspaceBranch,
       createWorktreeMutation,

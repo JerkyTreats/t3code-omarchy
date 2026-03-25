@@ -21,6 +21,12 @@ export const MAX_CUSTOM_MODEL_LENGTH = 256;
 export const TimestampFormat = Schema.Literals(["locale", "12-hour", "24-hour"]);
 export type TimestampFormat = typeof TimestampFormat.Type;
 export const DEFAULT_TIMESTAMP_FORMAT: TimestampFormat = "locale";
+export const SidebarProjectSortOrder = Schema.Literals(["updated_at", "created_at", "manual"]);
+export type SidebarProjectSortOrder = typeof SidebarProjectSortOrder.Type;
+export const DEFAULT_SIDEBAR_PROJECT_SORT_ORDER: SidebarProjectSortOrder = "updated_at";
+export const SidebarThreadSortOrder = Schema.Literals(["updated_at", "created_at"]);
+export type SidebarThreadSortOrder = typeof SidebarThreadSortOrder.Type;
+export const DEFAULT_SIDEBAR_THREAD_SORT_ORDER: SidebarThreadSortOrder = "updated_at";
 type CustomModelSettingsKey = "customCodexModels" | "customClaudeModels";
 export type ProviderCustomModelConfig = {
   provider: ProviderKind;
@@ -56,7 +62,14 @@ export const AppSettingsSchema = Schema.Struct({
   codexHomePath: Schema.String.check(Schema.isMaxLength(4096)).pipe(withDefaults(() => "")),
   defaultThreadEnvMode: EnvMode.pipe(withDefaults(() => "local" as const satisfies EnvMode)),
   confirmThreadDelete: Schema.Boolean.pipe(withDefaults(() => true)),
+  diffWordWrap: Schema.Boolean.pipe(withDefaults(() => false)),
   enableAssistantStreaming: Schema.Boolean.pipe(withDefaults(() => false)),
+  sidebarProjectSortOrder: SidebarProjectSortOrder.pipe(
+    withDefaults(() => DEFAULT_SIDEBAR_PROJECT_SORT_ORDER),
+  ),
+  sidebarThreadSortOrder: SidebarThreadSortOrder.pipe(
+    withDefaults(() => DEFAULT_SIDEBAR_THREAD_SORT_ORDER),
+  ),
   timestampFormat: TimestampFormat.pipe(withDefaults(() => DEFAULT_TIMESTAMP_FORMAT)),
   customCodexModels: Schema.Array(Schema.String).pipe(withDefaults(() => [])),
   customClaudeModels: Schema.Array(Schema.String).pipe(withDefaults(() => [])),
