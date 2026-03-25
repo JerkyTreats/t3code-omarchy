@@ -50,11 +50,14 @@ describe("git mutation options", () => {
     const options = gitRunStackedActionMutationOptions({ cwd: "/repo/a", queryClient });
     await options.mutationFn?.({ action: "promote", targetBranch: "main" }, {} as never);
 
-    expect(runStackedAction).toHaveBeenCalledWith({
-      cwd: "/repo/a",
-      action: "promote",
-      targetBranch: "main",
-    });
+    expect(runStackedAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actionId: expect.any(String),
+        cwd: "/repo/a",
+        action: "promote",
+        targetBranch: "main",
+      }),
+    );
   });
 
   it("forwards linked issues to the native API", async () => {
@@ -80,17 +83,20 @@ describe("git mutation options", () => {
       {} as never,
     );
 
-    expect(runStackedAction).toHaveBeenCalledWith({
-      cwd: "/repo/a",
-      action: "commit_push_pr",
-      issueLink: {
-        repoNameWithOwner: "pingdotgg/codething-mvp",
-        number: 123,
-        title: "Linked issue",
-        url: "https://github.com/pingdotgg/codething-mvp/issues/123",
-        state: "open",
-      },
-    });
+    expect(runStackedAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actionId: expect.any(String),
+        cwd: "/repo/a",
+        action: "commit_push_pr",
+        issueLink: {
+          repoNameWithOwner: "pingdotgg/codething-mvp",
+          number: 123,
+          title: "Linked issue",
+          url: "https://github.com/pingdotgg/codething-mvp/issues/123",
+          state: "open",
+        },
+      }),
+    );
   });
 
   it("attaches cwd-scoped mutation key for pull", () => {

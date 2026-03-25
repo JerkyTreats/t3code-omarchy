@@ -791,7 +791,7 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
 
       case WS_METHODS.gitPull: {
         const body = stripRequestTag(request.body);
-        return yield* git.pullCurrentBranch(body.cwd);
+        return yield* gitManager.pull(body);
       }
 
       case WS_METHODS.gitRunStackedAction: {
@@ -857,7 +857,7 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
 
       case WS_METHODS.gitRepositoryContext: {
         const body = stripRequestTag(request.body);
-        return yield* git.getRepositoryContext(body.cwd);
+        return yield* gitManager.repositoryContext(body);
       }
 
       case WS_METHODS.githubStatus: {

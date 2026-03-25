@@ -431,6 +431,42 @@ lifecycleLayer("CodexAdapterLive lifecycle", (it) => {
     }),
   );
 
+  it.effect("derives turn completion ids from payload when route metadata is absent", () =>
+    Effect.gen(function* () {
+      const adapter = yield* CodexAdapter;
+      const firstEventFiber = yield* Stream.runHead(adapter.streamEvents).pipe(Effect.forkChild);
+
+      lifecycleManager.emit("event", {
+        id: asEventId("evt-turn-completed-derived-id"),
+        kind: "notification",
+        provider: "codex",
+        threadId: asThreadId("thread-1"),
+        createdAt: new Date().toISOString(),
+        method: "turn/completed",
+        payload: {
+          turn: {
+            id: "turn-derived-1",
+            status: "completed",
+          },
+        },
+      } satisfies ProviderEvent);
+
+      const firstEvent = yield* Fiber.join(firstEventFiber);
+
+      assert.equal(firstEvent._tag, "Some");
+      if (firstEvent._tag !== "Some") {
+        return;
+      }
+      assert.equal(firstEvent.value.type, "turn.completed");
+      if (firstEvent.value.type !== "turn.completed") {
+        return;
+      }
+      assert.equal(firstEvent.value.turnId, "turn-derived-1");
+      assert.equal(firstEvent.value.providerRefs?.providerTurnId, "turn-derived-1");
+      assert.equal(firstEvent.value.payload.state, "completed");
+    }),
+  );
+
   it.effect("maps retryable Codex error notifications to runtime.warning", () =>
     Effect.gen(function* () {
       const adapter = yield* CodexAdapter;

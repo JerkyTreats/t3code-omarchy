@@ -20,6 +20,7 @@ import {
   hasActionableProposedPlan,
   hasToolActivityForTurn,
   isLatestTurnSettled,
+  isThreadRuntimeWorking,
 } from "./session-logic";
 
 function makeActivity(overrides: {
@@ -1091,6 +1092,15 @@ describe("isLatestTurnSettled", () => {
     ).toBe(true);
   });
 
+  it("returns true when the session is running without an active turn", () => {
+    expect(
+      isLatestTurnSettled(latestTurn, {
+        orchestrationStatus: "running",
+        activeTurnId: undefined,
+      }),
+    ).toBe(true);
+  });
+
   it("returns false when turn timestamps are incomplete", () => {
     expect(
       isLatestTurnSettled(
@@ -1101,6 +1111,35 @@ describe("isLatestTurnSettled", () => {
         },
         null,
       ),
+    ).toBe(false);
+  });
+});
+
+describe("isThreadRuntimeWorking", () => {
+  it("returns true for pending turns", () => {
+    expect(
+      isThreadRuntimeWorking({
+        sessionStatus: "ready",
+        turnStatus: "pending",
+      }),
+    ).toBe(true);
+  });
+
+  it("returns true for running turns", () => {
+    expect(
+      isThreadRuntimeWorking({
+        sessionStatus: "running",
+        turnStatus: "running",
+      }),
+    ).toBe(true);
+  });
+
+  it("returns false for completed turns on a live session", () => {
+    expect(
+      isThreadRuntimeWorking({
+        sessionStatus: "running",
+        turnStatus: "completed",
+      }),
     ).toBe(false);
   });
 });

@@ -1571,7 +1571,7 @@ it.layer(TestLayer)("git integration", (it) => {
       }),
     );
 
-    it.effect("rejects push when the only publish remote is upstream", () =>
+    it.effect("pushes when the only publish remote is upstream", () =>
       Effect.gen(function* () {
         const tmp = yield* makeTmpDir();
         const upstreamRemote = yield* makeTmpDir();
@@ -1586,15 +1586,14 @@ it.layer(TestLayer)("git integration", (it) => {
         yield* git(tmp, ["checkout", "-b", "feature/blocked-upstream-push"]);
 
         const core = yield* GitCore;
-        const result = yield* Effect.result(core.pushCurrentBranch(tmp, null));
-        expect(result._tag).toBe("Failure");
-        if (result._tag === "Failure") {
-          expect(result.failure.message).toContain("upstream remote is blocked");
-        }
+        const result = yield* core.pushCurrentBranch(tmp, null);
+        expect(result.status).toBe("pushed");
+        expect(result.branch).toBe("feature/blocked-upstream-push");
+        expect(result.upstreamBranch).toBe("upstream/feature/blocked-upstream-push");
       }),
     );
 
-    it.effect("rejects push when the tracked upstream remote is upstream", () =>
+    it.effect("pushes when the tracked upstream remote is upstream", () =>
       Effect.gen(function* () {
         const tmp = yield* makeTmpDir();
         const upstreamRemote = yield* makeTmpDir();
@@ -1613,11 +1612,10 @@ it.layer(TestLayer)("git integration", (it) => {
         yield* git(tmp, ["commit", "-m", "blocked push"]);
 
         const core = yield* GitCore;
-        const result = yield* Effect.result(core.pushCurrentBranch(tmp, null));
-        expect(result._tag).toBe("Failure");
-        if (result._tag === "Failure") {
-          expect(result.failure.message).toContain("upstream remote is blocked");
-        }
+        const result = yield* core.pushCurrentBranch(tmp, null);
+        expect(result.status).toBe("pushed");
+        expect(result.branch).toBe("feature/tracked-upstream-push");
+        expect(result.upstreamBranch).toBe("upstream/feature/tracked-upstream-push");
       }),
     );
 
@@ -1918,7 +1916,7 @@ it.layer(TestLayer)("git integration", (it) => {
       }),
     );
 
-    it.effect("rejects pull when the tracked remote is upstream", () =>
+    it.effect("pulls when the tracked remote is upstream", () =>
       Effect.gen(function* () {
         const upstreamRemote = yield* makeTmpDir();
         const source = yield* makeTmpDir();
@@ -1932,11 +1930,10 @@ it.layer(TestLayer)("git integration", (it) => {
         yield* git(source, ["push", "-u", "upstream", initialBranch]);
 
         const core = yield* GitCore;
-        const result = yield* Effect.result(core.pullCurrentBranch(source));
-        expect(result._tag).toBe("Failure");
-        if (result._tag === "Failure") {
-          expect(result.failure.message).toContain("upstream remote is blocked");
-        }
+        const result = yield* core.pullCurrentBranch(source);
+        expect(result.status).toBe("skipped_up_to_date");
+        expect(result.branch).toBe(initialBranch);
+        expect(result.upstreamBranch).toBe(`upstream/${initialBranch}`);
       }),
     );
 
@@ -1949,6 +1946,44 @@ it.layer(TestLayer)("git integration", (it) => {
         if (result._tag === "Failure") {
           expect(result.failure.message.toLowerCase()).toContain("no upstream");
         }
+      }),
+    );
+
+    it.effect("reports repository context for non-repositories", () =>
+      Effect.gen(function* () {
+        const tmp = yield* makeTmpDir();
+        const core = yield* GitCore;
+
+        expect(yield* core.getRepositoryContext(tmp)).toEqual({
+          isRepo: false,
+          repoRoot: null,
+          gitDir: null,
+          commonDir: null,
+          isWorktree: false,
+        });
+      }),
+    );
+
+    it.effect("reports linked worktree repository context", () =>
+      Effect.gen(function* () {
+        const repoDir = yield* makeTmpDir();
+        const worktreeDir = yield* makeTmpDir();
+        yield* initRepoWithCommit(repoDir);
+        yield* git(repoDir, ["worktree", "add", "-b", "feature/worktree-context", worktreeDir]);
+
+        const core = yield* GitCore;
+        const repositoryContext = yield* core.getRepositoryContext(worktreeDir);
+
+        expect(repositoryContext.isRepo).toBe(true);
+        expect(repositoryContext.repoRoot).toBe(worktreeDir);
+        expect(repositoryContext.gitDir).not.toBeNull();
+        expect(repositoryContext.commonDir).not.toBeNull();
+        expect(repositoryContext.isWorktree).toBe(true);
+
+        const primaryRepositoryContext = yield* core.getRepositoryContext(repoDir);
+        expect(primaryRepositoryContext.isRepo).toBe(true);
+        expect(primaryRepositoryContext.repoRoot).toBe(repoDir);
+        expect(primaryRepositoryContext.isWorktree).toBe(false);
       }),
     );
 

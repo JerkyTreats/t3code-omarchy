@@ -1,8 +1,10 @@
 /**
  * GitManager - Effect service contract for stacked Git workflows.
  *
- * Orchestrates status inspection and commit/push/PR flows by composing
- * lower-level Git and external tool services.
+ * Owns user-facing Git workflow behavior by composing lower-level Git and
+ * external tool services.
+ * Product-specific policy, guardrails, repository context shaping, progress
+ * events, and stacked flows should concentrate here rather than in GitCore.
  *
  * @module GitManager
  */
@@ -10,7 +12,11 @@ import {
   GitActionProgressEvent,
   GitPreparePullRequestThreadInput,
   GitPreparePullRequestThreadResult,
+  GitPullInput,
+  GitPullResult,
   GitPullRequestRefInput,
+  GitRepositoryContextInput,
+  GitRepositoryContextResult,
   GitResolvePullRequestResult,
   GitRunStackedActionInput,
   GitRunStackedActionResult,
@@ -32,6 +38,9 @@ export interface GitRunStackedActionOptions {
 
 /**
  * GitManagerShape - Service API for high-level Git workflow actions.
+ *
+ * This is the preferred browser-facing seam for Git features that need
+ * workflow policy or product semantics.
  */
 export interface GitManagerShape {
   /**
@@ -40,6 +49,18 @@ export interface GitManagerShape {
   readonly status: (
     input: GitStatusInput,
   ) => Effect.Effect<GitStatusResult, GitManagerServiceError>;
+
+  /**
+   * Pull the current branch using workflow policy.
+   */
+  readonly pull: (input: GitPullInput) => Effect.Effect<GitPullResult, GitManagerServiceError>;
+
+  /**
+   * Read repository context for browser-facing Git workflows.
+   */
+  readonly repositoryContext: (
+    input: GitRepositoryContextInput,
+  ) => Effect.Effect<GitRepositoryContextResult, GitManagerServiceError>;
 
   /**
    * Resolve a pull request by URL/number against the current repository.

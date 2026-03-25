@@ -197,6 +197,33 @@ describe("resolveThreadStatusPill", () => {
     ).toMatchObject({ label: "Working", pulse: true });
   });
 
+  it("does not keep a completed turn in working when no active turn remains", () => {
+    expect(
+      resolveThreadStatusPill({
+        thread: {
+          ...baseThread,
+          latestTurn: makeLatestTurn(),
+          lastVisitedAt: "2026-03-09T10:04:00.000Z",
+          runtime: {
+            sessionStatus: "running",
+            turnStatus: "completed",
+            turnId: "turn-1" as never,
+            pendingTurn: null,
+            updatedAt: "2026-03-09T10:05:00.000Z",
+          },
+          session: {
+            ...baseThread.session,
+            status: "running",
+            orchestrationStatus: "running",
+            activeTurnId: undefined,
+          },
+        },
+        hasPendingApprovals: false,
+        hasPendingUserInput: false,
+      }),
+    ).toMatchObject({ label: "Completed", pulse: false });
+  });
+
   it("does not reuse a stale historical plan when the latest turn is missing", () => {
     expect(
       resolveThreadStatusPill({
