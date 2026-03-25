@@ -104,7 +104,7 @@ describe("runMigrations", () => {
         )
       `;
 
-      yield* runMigrations;
+      yield* runMigrations();
 
       const proposedPlanColumns = yield* sql`PRAGMA table_info(projection_thread_proposed_plans)`
         .values;

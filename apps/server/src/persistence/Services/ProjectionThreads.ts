@@ -9,6 +9,7 @@
 import {
   GitHubIssueLink,
   IsoDateTime,
+  ModelSelection,
   ProjectId,
   ProviderInteractionMode,
   RuntimeMode,
@@ -24,7 +25,7 @@ export const ProjectionThread = Schema.Struct({
   threadId: ThreadId,
   projectId: ProjectId,
   title: Schema.String,
-  model: Schema.String,
+  modelSelection: ModelSelection,
   runtimeMode: RuntimeMode,
   interactionMode: ProviderInteractionMode,
   branch: Schema.NullOr(Schema.String),

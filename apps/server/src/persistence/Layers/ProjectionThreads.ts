@@ -1,4 +1,4 @@
-import { GitHubIssueLink } from "@t3tools/contracts";
+import { GitHubIssueLink, ModelSelection } from "@t3tools/contracts";
 import { Effect, Layer, Schema, Struct } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
@@ -13,13 +13,16 @@ import {
   type ProjectionThreadRepositoryShape,
 } from "../Services/ProjectionThreads.ts";
 
+const ProjectionThreadDbRow = ProjectionThread.mapFields(
+  Struct.assign({
+    modelSelection: Schema.fromJsonString(ModelSelection),
+    issueLink: Schema.NullOr(Schema.fromJsonString(GitHubIssueLink)),
+  }),
+);
+type ProjectionThreadDbRow = typeof ProjectionThreadDbRow.Type;
+
 const makeProjectionThreadRepository = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
-  const ProjectionThreadDbRow = ProjectionThread.mapFields(
-    Struct.assign({
-      issueLink: Schema.NullOr(Schema.fromJsonString(GitHubIssueLink)),
-    }),
-  );
 
   const upsertProjectionThreadRow = SqlSchema.void({
     Request: ProjectionThread,
@@ -29,7 +32,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           thread_id,
           project_id,
           title,
-          model,
+          model_selection_json,
           runtime_mode,
           interaction_mode,
           branch,
@@ -44,7 +47,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           ${row.threadId},
           ${row.projectId},
           ${row.title},
-          ${row.model},
+          ${JSON.stringify(row.modelSelection)},
           ${row.runtimeMode},
           ${row.interactionMode},
           ${row.branch},
@@ -59,7 +62,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
         DO UPDATE SET
           project_id = excluded.project_id,
           title = excluded.title,
-          model = excluded.model,
+          model_selection_json = excluded.model_selection_json,
           runtime_mode = excluded.runtime_mode,
           interaction_mode = excluded.interaction_mode,
           branch = excluded.branch,
@@ -81,7 +84,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           thread_id AS "threadId",
           project_id AS "projectId",
           title,
-          model,
+          model_selection_json AS "modelSelection",
           runtime_mode AS "runtimeMode",
           interaction_mode AS "interactionMode",
           branch,
@@ -105,7 +108,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           thread_id AS "threadId",
           project_id AS "projectId",
           title,
-          model,
+          model_selection_json AS "modelSelection",
           runtime_mode AS "runtimeMode",
           interaction_mode AS "interactionMode",
           branch,

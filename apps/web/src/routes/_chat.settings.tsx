@@ -134,11 +134,11 @@ function SettingsRouteView() {
     settings.customCodexModels,
     settings.textGenerationModel,
   );
+  const currentGitTextGenerationModel =
+    settings.textGenerationModel ?? DEFAULT_GIT_TEXT_GENERATION_MODEL;
   const selectedGitTextGenerationModelLabel =
-    gitTextGenerationModelOptions.find(
-      (option) =>
-        option.slug === (settings.textGenerationModel ?? DEFAULT_GIT_TEXT_GENERATION_MODEL),
-    )?.name ?? settings.textGenerationModel;
+    gitTextGenerationModelOptions.find((option) => option.slug === currentGitTextGenerationModel)
+      ?.name ?? currentGitTextGenerationModel;
 
   const openKeybindingsFile = useCallback(() => {
     if (!keybindingsConfigPath) return;
@@ -325,21 +325,76 @@ function SettingsRouteView() {
                   </Select>
                 </div>
 
-                {settings.timestampFormat !== defaults.timestampFormat ? (
-                  <div className="flex justify-end">
-                    <Button
-                      size="xs"
-                      variant="outline"
-                      onClick={() =>
+                <div className="rounded-lg border border-border bg-background px-3 py-3">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-medium text-foreground">Diff line wrapping</p>
+                      <p className="text-xs text-muted-foreground">
+                        Set the default wrap state when the diff panel opens. The in-panel wrap
+                        toggle only affects the current diff session.
+                      </p>
+                    </div>
+                    <Switch
+                      checked={settings.diffWordWrap}
+                      onCheckedChange={(checked) =>
                         updateSettings({
-                          timestampFormat: defaults.timestampFormat,
+                          diffWordWrap: Boolean(checked),
                         })
                       }
-                    >
-                      Restore default
-                    </Button>
+                      aria-label="Wrap diff lines by default"
+                    />
                   </div>
-                ) : null}
+                  {settings.diffWordWrap !== defaults.diffWordWrap ? (
+                    <div className="mt-3 flex justify-end">
+                      <Button
+                        size="xs"
+                        variant="outline"
+                        onClick={() =>
+                          updateSettings({
+                            diffWordWrap: defaults.diffWordWrap,
+                          })
+                        }
+                      >
+                        Restore default
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="rounded-lg border border-border bg-background px-3 py-3">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-medium text-foreground">Assistant output</p>
+                      <p className="text-xs text-muted-foreground">
+                        Show token-by-token output while a response is in progress.
+                      </p>
+                    </div>
+                    <Switch
+                      checked={settings.enableAssistantStreaming}
+                      onCheckedChange={(checked) =>
+                        updateSettings({
+                          enableAssistantStreaming: Boolean(checked),
+                        })
+                      }
+                      aria-label="Enable assistant output streaming"
+                    />
+                  </div>
+                  {settings.enableAssistantStreaming !== defaults.enableAssistantStreaming ? (
+                    <div className="mt-3 flex justify-end">
+                      <Button
+                        size="xs"
+                        variant="outline"
+                        onClick={() =>
+                          updateSettings({
+                            enableAssistantStreaming: defaults.enableAssistantStreaming,
+                          })
+                        }
+                      >
+                        Restore default
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
               </div>
             </section>
 
