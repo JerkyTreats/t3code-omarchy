@@ -107,6 +107,7 @@ import {
 import { Button } from "./ui/button";
 import { Separator } from "./ui/separator";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "./ui/menu";
+import { Toggle } from "./ui/toggle";
 import { cn, randomUUID } from "~/lib/utils";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import { toastManager } from "./ui/toast";
@@ -139,6 +140,11 @@ import {
   useEffectiveComposerModelState,
   useComposerThreadDraft,
 } from "../composerDraftStore";
+import {
+  buildComposerRichDraftEdit,
+  serializeComposerPromptForSubmission,
+  type ComposerRichDraftFormat,
+} from "../composerRichDraft";
 import {
   appendTerminalContextsToPrompt,
   formatTerminalContextLabel,
@@ -286,6 +292,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
       }),
     [composerImages.length, composerTerminalContexts, prompt],
   );
+  const richDraftMode = composerDraft.richDraftMode;
   const nonPersistedComposerImageIds = composerDraft.nonPersistedImageIds;
   const setComposerDraftPrompt = useComposerDraftStore((store) => store.setPrompt);
   const setComposerDraftModelSelection = useComposerDraftStore((store) => store.setModelSelection);
@@ -293,6 +300,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const setComposerDraftInteractionMode = useComposerDraftStore(
     (store) => store.setInteractionMode,
   );
+  const setComposerDraftRichDraftMode = useComposerDraftStore((store) => store.setRichDraftMode);
   const addComposerDraftImage = useComposerDraftStore((store) => store.addImage);
   const addComposerDraftImages = useComposerDraftStore((store) => store.addImages);
   const removeComposerDraftImage = useComposerDraftStore((store) => store.removeImage);
@@ -2439,7 +2447,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
       onAdvanceActivePendingUserInput();
       return;
     }
-    const promptForSend = promptRef.current;
+    const promptForSend = serializeComposerPromptForSubmission(promptRef.current);
     const {
       trimmedPrompt: trimmed,
       sendableTerminalContexts: sendableComposerTerminalContexts,
@@ -3228,6 +3236,13 @@ export default function ChatView({ threadId }: ChatViewProps) {
     prompt,
     onPromptChange: setPromptFromTraits,
   });
+  const onRichDraftModeChange = useCallback(
+    (enabled: boolean) => {
+      setComposerDraftRichDraftMode(threadId, enabled);
+      scheduleComposerFocus();
+    },
+    [scheduleComposerFocus, setComposerDraftRichDraftMode, threadId],
+  );
   const onEnvModeChange = useCallback(
     (mode: DraftThreadEnvMode) => {
       if (isLocalDraftThread) {
@@ -3243,7 +3258,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
       rangeStart: number,
       rangeEnd: number,
       replacement: string,
-      options?: { expectedText?: string },
+      options?: { expectedText?: string; nextExpandedCursor?: number },
     ): boolean => {
       const currentText = promptRef.current;
       const safeStart = Math.max(0, Math.min(currentText.length, rangeStart));
@@ -3255,7 +3270,11 @@ export default function ChatView({ threadId }: ChatViewProps) {
         return false;
       }
       const next = replaceTextRange(promptRef.current, rangeStart, rangeEnd, replacement);
-      const nextCursor = collapseExpandedComposerCursor(next.text, next.cursor);
+      const nextExpandedCursor = Math.max(
+        0,
+        Math.min(next.text.length, Math.floor(options?.nextExpandedCursor ?? next.cursor)),
+      );
+      const nextCollapsedCursor = collapseExpandedComposerCursor(next.text, nextExpandedCursor);
       promptRef.current = next.text;
       const activePendingQuestion = activePendingProgress?.activeQuestion;
       if (activePendingQuestion && activePendingUserInput) {
@@ -3272,12 +3291,10 @@ export default function ChatView({ threadId }: ChatViewProps) {
       } else {
         setPrompt(next.text);
       }
-      setComposerCursor(nextCursor);
-      setComposerTrigger(
-        detectComposerTrigger(next.text, expandCollapsedComposerCursor(next.text, nextCursor)),
-      );
+      setComposerCursor(nextCollapsedCursor);
+      setComposerTrigger(detectComposerTrigger(next.text, nextExpandedCursor));
       window.requestAnimationFrame(() => {
-        composerEditorRef.current?.focusAt(nextCursor);
+        composerEditorRef.current?.focusAt(nextCollapsedCursor);
       });
       return true;
     },
@@ -3288,6 +3305,8 @@ export default function ChatView({ threadId }: ChatViewProps) {
     value: string;
     cursor: number;
     expandedCursor: number;
+    selectionStart: number;
+    selectionEnd: number;
     terminalContextIds: string[];
   } => {
     const editorSnapshot = composerEditorRef.current?.readSnapshot();
@@ -3298,9 +3317,27 @@ export default function ChatView({ threadId }: ChatViewProps) {
       value: promptRef.current,
       cursor: composerCursor,
       expandedCursor: expandCollapsedComposerCursor(promptRef.current, composerCursor),
+      selectionStart: expandCollapsedComposerCursor(promptRef.current, composerCursor),
+      selectionEnd: expandCollapsedComposerCursor(promptRef.current, composerCursor),
       terminalContextIds: composerTerminalContexts.map((context) => context.id),
     };
   }, [composerCursor, composerTerminalContexts]);
+
+  const onApplyRichDraftFormat = useCallback(
+    (format: ComposerRichDraftFormat) => {
+      const snapshot = readComposerSnapshot();
+      const edit = buildComposerRichDraftEdit({
+        text: snapshot.value,
+        selectionStart: snapshot.selectionStart,
+        selectionEnd: snapshot.selectionEnd,
+        format,
+      });
+      applyPromptReplacement(edit.rangeStart, edit.rangeEnd, edit.replacement, {
+        nextExpandedCursor: edit.nextExpandedCursor,
+      });
+    },
+    [applyPromptReplacement, readComposerSnapshot],
+  );
 
   const resolveActiveComposerTrigger = useCallback((): {
     snapshot: { value: string; cursor: number; expandedCursor: number };
@@ -3483,7 +3520,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
       }
     }
 
-    if (key === "Enter" && !event.shiftKey) {
+    if (key === "Enter" && !event.shiftKey && !richDraftMode) {
       void onSend();
       return true;
     }
@@ -3829,6 +3866,72 @@ export default function ChatView({ threadId }: ChatViewProps) {
                     />
                   </div>
 
+                  {richDraftMode && !activePendingApproval ? (
+                    <div className="flex flex-wrap items-center gap-1 border-t border-border/50 px-2.5 py-2 sm:px-3">
+                      <span className="mr-1 text-[11px] font-medium tracking-[0.18em] text-muted-foreground/55 uppercase">
+                        Draft
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="rounded-full px-3 font-semibold text-foreground/85 hover:bg-muted/45"
+                        onClick={() => onApplyRichDraftFormat("bold")}
+                        disabled={isConnecting || isComposerApprovalState}
+                        aria-label="Apply bold formatting"
+                      >
+                        B
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="rounded-full px-3 text-[15px] font-serif italic text-foreground/85 hover:bg-muted/45"
+                        onClick={() => onApplyRichDraftFormat("italic")}
+                        disabled={isConnecting || isComposerApprovalState}
+                        aria-label="Apply italic formatting"
+                      >
+                        i
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="rounded-full px-3 text-foreground/80 hover:bg-muted/45"
+                        onClick={() => onApplyRichDraftFormat("bullet-list")}
+                        disabled={isConnecting || isComposerApprovalState}
+                        aria-label="Apply list formatting"
+                      >
+                        • List
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="rounded-full px-3 text-foreground/80 hover:bg-muted/45"
+                        onClick={() => onApplyRichDraftFormat("link")}
+                        disabled={isConnecting || isComposerApprovalState}
+                        aria-label="Insert link formatting"
+                      >
+                        Link
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="rounded-full px-3 font-mono text-[13px] text-foreground/80 hover:bg-muted/45"
+                        onClick={() => onApplyRichDraftFormat("code")}
+                        disabled={isConnecting || isComposerApprovalState}
+                        aria-label="Apply code formatting"
+                      >
+                        {"</>"}
+                      </Button>
+                      <span className="ml-auto text-xs text-muted-foreground/55">
+                        Enter adds a new line
+                      </span>
+                    </div>
+                  ) : null}
+
                   {/* Bottom toolbar */}
                   {activePendingApproval ? (
                     <div className="flex items-center justify-end gap-2 px-2.5 pb-2.5 sm:px-3 sm:pb-3">
@@ -4011,6 +4114,37 @@ export default function ChatView({ threadId }: ChatViewProps) {
                         {activeContextWindow ? (
                           <ContextWindowMeter usage={activeContextWindow} />
                         ) : null}
+                        <Tooltip>
+                          <TooltipTrigger
+                            render={
+                              <Toggle
+                                pressed={richDraftMode}
+                                onPressedChange={onRichDraftModeChange}
+                                aria-label={
+                                  richDraftMode
+                                    ? "Disable rich draft mode"
+                                    : "Enable rich draft mode"
+                                }
+                                variant="outline"
+                                size="xs"
+                                className="rounded-full border-border/60 bg-background/80 px-2.5 text-muted-foreground/80 shadow-xs/5 hover:bg-background hover:text-foreground data-pressed:border-primary/35 data-pressed:bg-primary/10 data-pressed:text-foreground"
+                                disabled={isComposerApprovalState}
+                              >
+                                <span
+                                  aria-hidden="true"
+                                  className="font-serif text-[16px] leading-none italic"
+                                >
+                                  a
+                                </span>
+                              </Toggle>
+                            }
+                          />
+                          <TooltipPopup side="top">
+                            {richDraftMode
+                              ? "Rich draft on — Enter adds a new line"
+                              : "Rich draft off — Enter sends"}
+                          </TooltipPopup>
+                        </Tooltip>
                         {isPreparingWorktree ? (
                           <span className="text-muted-foreground/70 text-xs">
                             Preparing worktree...
