@@ -16,10 +16,16 @@ import {
   parseDiffRouteSearch,
   stripDiffSearchParams,
 } from "../diffRouteSearch";
+import {
+  type GitPanelRouteSearch,
+  parseGitPanelRouteSearch,
+  stripGitPanelSearchParams,
+} from "../gitPanelRouteSearch";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { useStore } from "../store";
 import { Sheet, SheetPopup } from "../components/ui/sheet";
 import { Sidebar, SidebarInset, SidebarProvider, SidebarRail } from "~/components/ui/sidebar";
+import { GitPanelRouteAdapter } from "../components/git-panel/GitPanelRouteAdapter";
 
 const DiffPanel = lazy(() => import("../components/DiffPanel"));
 const DIFF_INLINE_LAYOUT_MEDIA_QUERY = "(max-width: 1180px)";
@@ -173,10 +179,12 @@ function ChatThreadRouteView() {
   );
   const routeThreadExists = threadExists || draftThreadExists;
   const diffOpen = search.diff === "1";
+  const gitOpen = search.github === "1";
   const shouldUseDiffSheet = useMediaQuery(DIFF_INLINE_LAYOUT_MEDIA_QUERY);
   // TanStack Router keeps active route components mounted across param-only navigations
   // unless remountDeps are configured, so this stays warm across thread switches.
   const [hasOpenedDiff, setHasOpenedDiff] = useState(diffOpen);
+  const [hasOpenedGit, setHasOpenedGit] = useState(gitOpen);
   const closeDiff = useCallback(() => {
     void navigate({
       to: "/$threadId",
@@ -189,8 +197,25 @@ function ChatThreadRouteView() {
       to: "/$threadId",
       params: { threadId },
       search: (previous) => {
-        const rest = stripDiffSearchParams(previous);
-        return { ...rest, diff: "1" };
+        const rest = stripGitPanelSearchParams(stripDiffSearchParams(previous));
+        return { ...rest, diff: "1", github: undefined };
+      },
+    });
+  }, [navigate, threadId]);
+  const closeGit = useCallback(() => {
+    void navigate({
+      to: "/$threadId",
+      params: { threadId },
+      search: (previous) => ({ ...stripGitPanelSearchParams(previous), github: undefined }),
+    });
+  }, [navigate, threadId]);
+  const openGit = useCallback(() => {
+    void navigate({
+      to: "/$threadId",
+      params: { threadId },
+      search: (previous) => {
+        const rest = stripGitPanelSearchParams(stripDiffSearchParams(previous));
+        return { ...rest, github: "1" };
       },
     });
   }, [navigate, threadId]);
@@ -200,6 +225,11 @@ function ChatThreadRouteView() {
       setHasOpenedDiff(true);
     }
   }, [diffOpen]);
+  useEffect(() => {
+    if (gitOpen) {
+      setHasOpenedGit(true);
+    }
+  }, [gitOpen]);
 
   useEffect(() => {
     if (!threadsHydrated) {
@@ -217,8 +247,10 @@ function ChatThreadRouteView() {
   }
 
   const shouldRenderDiffContent = diffOpen || hasOpenedDiff;
+  const shouldRenderGitContent = gitOpen || hasOpenedGit;
+  const shouldShowGitPanel = gitOpen || (!diffOpen && hasOpenedGit);
 
-  if (!shouldUseDiffSheet) {
+  if (!shouldShowGitPanel && !shouldUseDiffSheet) {
     return (
       <>
         <SidebarInset className="h-dvh  min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground">
@@ -239,17 +271,30 @@ function ChatThreadRouteView() {
       <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground">
         <ChatView key={threadId} threadId={threadId} />
       </SidebarInset>
-      <DiffPanelSheet diffOpen={diffOpen} onCloseDiff={closeDiff}>
-        {shouldRenderDiffContent ? <LazyDiffPanel mode="sheet" /> : null}
-      </DiffPanelSheet>
+      {shouldShowGitPanel ? (
+        <GitPanelRouteAdapter
+          threadId={threadId}
+          gitOpen={gitOpen}
+          onCloseGit={closeGit}
+          onOpenGit={openGit}
+          renderGitContent={shouldRenderGitContent}
+        />
+      ) : (
+        <DiffPanelSheet diffOpen={diffOpen} onCloseDiff={closeDiff}>
+          {shouldRenderDiffContent ? <LazyDiffPanel mode="sheet" /> : null}
+        </DiffPanelSheet>
+      )}
     </>
   );
 }
 
 export const Route = createFileRoute("/_chat/$threadId")({
-  validateSearch: (search) => parseDiffRouteSearch(search),
+  validateSearch: (search) => ({
+    ...parseDiffRouteSearch(search),
+    ...parseGitPanelRouteSearch(search),
+  }),
   search: {
-    middlewares: [retainSearchParams<DiffRouteSearch>(["diff"])],
+    middlewares: [retainSearchParams<DiffRouteSearch & GitPanelRouteSearch>(["diff", "github"])],
   },
   component: ChatThreadRouteView,
 });

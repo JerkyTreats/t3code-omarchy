@@ -16,8 +16,10 @@ export const CompactComposerControlsMenu = memo(function CompactComposerControls
   activePlan: boolean;
   interactionMode: ProviderInteractionMode;
   planSidebarOpen: boolean;
+  richDraftMode: boolean;
   runtimeMode: RuntimeMode;
   traitsMenuContent?: ReactNode;
+  onToggleRichDraftMode: () => void;
   onToggleInteractionMode: () => void;
   onTogglePlanSidebar: () => void;
   onToggleRuntimeMode: () => void;
@@ -66,6 +68,10 @@ export const CompactComposerControlsMenu = memo(function CompactComposerControls
           <MenuRadioItem value="approval-required">Supervised</MenuRadioItem>
           <MenuRadioItem value="full-access">Full access</MenuRadioItem>
         </MenuRadioGroup>
+        <MenuDivider />
+        <MenuItem onClick={props.onToggleRichDraftMode}>
+          {props.richDraftMode ? "Disable rich draft" : "Enable rich draft"}
+        </MenuItem>
         {props.activePlan ? (
           <>
             <MenuDivider />
