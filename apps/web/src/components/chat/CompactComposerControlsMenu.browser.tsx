@@ -33,6 +33,7 @@ async function mountMenu(props?: { modelSelection?: ModelSelection; prompt?: str
     activeProvider: provider,
     runtimeMode: null,
     interactionMode: null,
+    richDraftMode: false,
   };
   useComposerDraftStore.setState({
     draftsByThreadId,
@@ -48,6 +49,7 @@ async function mountMenu(props?: { modelSelection?: ModelSelection; prompt?: str
       activePlan={false}
       interactionMode="default"
       planSidebarOpen={false}
+      richDraftMode={false}
       runtimeMode="approval-required"
       traitsMenuContent={
         <TraitsMenuContent
@@ -59,6 +61,7 @@ async function mountMenu(props?: { modelSelection?: ModelSelection; prompt?: str
           onPromptChange={onPromptChange}
         />
       }
+      onToggleRichDraftMode={vi.fn()}
       onToggleInteractionMode={vi.fn()}
       onTogglePlanSidebar={vi.fn()}
       onToggleRuntimeMode={vi.fn()}

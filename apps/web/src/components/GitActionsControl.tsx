@@ -19,7 +19,7 @@ export default function GitActionsControl({ gitCwd, open, onToggle }: GitActions
           <Toggle
             className="shrink-0"
             pressed={pressed}
-            onPressedChange={() => onToggle?.()}
+            onClick={() => onToggle?.()}
             aria-label="Toggle GitHub panel"
             variant="outline"
             size="xs"

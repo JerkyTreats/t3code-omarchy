@@ -1,6 +1,7 @@
 import { type ChildProcessWithoutNullStreams, spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
+import fs from "node:fs";
 import readline from "node:readline";
 
 import {
@@ -528,7 +529,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
     let context: CodexSessionContext | undefined;
 
     try {
-      const resolvedCwd = input.cwd ?? process.cwd();
+      const resolvedCwd = resolveSessionStartCwd(input.cwd);
 
       const session: ProviderSession = {
         provider: "codex",
@@ -542,11 +543,10 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
       };
 
       const codexOptions = readCodexProviderOptions(input);
-      const codexBinaryPath = codexOptions.binaryPath ?? "codex";
       const codexHomePath = codexOptions.homePath;
-      this.assertSupportedCodexCliVersion({
-        binaryPath: codexBinaryPath,
+      const codexBinaryPath = this.resolveSupportedCodexCliBinaryPath({
         cwd: resolvedCwd,
+        ...(codexOptions.binaryPath ? { preferredBinaryPath: codexOptions.binaryPath } : {}),
         ...(codexHomePath ? { homePath: codexHomePath } : {}),
       });
       const child = spawn(codexBinaryPath, ["app-server"], {
@@ -1367,6 +1367,14 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
     assertSupportedCodexCliVersion(input);
   }
 
+  private resolveSupportedCodexCliBinaryPath(input: {
+    readonly preferredBinaryPath?: string;
+    readonly cwd: string;
+    readonly homePath?: string;
+  }): string {
+    return resolveSupportedCodexCliBinaryPath(input);
+  }
+
   private updateSession(context: CodexSessionContext, updates: Partial<ProviderSession>): void {
     context.session = {
       ...context.session,
@@ -1591,17 +1599,45 @@ function normalizeProviderThreadId(value: string | undefined): string | undefine
   return brandIfNonEmpty(value, (normalized) => normalized);
 }
 
+function resolveSessionStartCwd(inputCwd: string | undefined): string {
+  const fallbackCwd = process.cwd();
+  if (!inputCwd) {
+    return fallbackCwd;
+  }
+
+  try {
+    if (fs.statSync(inputCwd).isDirectory()) {
+      return inputCwd;
+    }
+  } catch {
+    return fallbackCwd;
+  }
+
+  return fallbackCwd;
+}
+
 function readCodexProviderOptions(input: CodexAppServerStartSessionInput): {
   readonly binaryPath?: string;
   readonly homePath?: string;
 } {
   const options = input.providerOptions?.codex;
   if (!options) {
-    return {};
+    return {
+      ...(process.env.CODEX_BINARY_PATH ? { binaryPath: process.env.CODEX_BINARY_PATH } : {}),
+      ...(process.env.CODEX_HOME_PATH ? { homePath: process.env.CODEX_HOME_PATH } : {}),
+    };
   }
   return {
-    ...(options.binaryPath ? { binaryPath: options.binaryPath } : {}),
-    ...(options.homePath ? { homePath: options.homePath } : {}),
+    ...(options.binaryPath
+      ? { binaryPath: options.binaryPath }
+      : process.env.CODEX_BINARY_PATH
+        ? { binaryPath: process.env.CODEX_BINARY_PATH }
+        : {}),
+    ...(options.homePath
+      ? { homePath: options.homePath }
+      : process.env.CODEX_HOME_PATH
+        ? { homePath: process.env.CODEX_HOME_PATH }
+        : {}),
   };
 }
 
@@ -1648,6 +1684,39 @@ function assertSupportedCodexCliVersion(input: {
   if (parsedVersion && !isCodexCliVersionSupported(parsedVersion)) {
     throw new Error(formatCodexCliUpgradeMessage(parsedVersion));
   }
+}
+
+function resolveSupportedCodexCliBinaryPath(input: {
+  readonly preferredBinaryPath?: string;
+  readonly cwd: string;
+  readonly homePath?: string;
+}): string {
+  const candidates = [input.preferredBinaryPath, process.env.CODEX_BINARY_PATH, "codex"].filter(
+    (value, index, values): value is string => {
+      if (!value || value.trim().length === 0) {
+        return false;
+      }
+      return values.indexOf(value) === index;
+    },
+  );
+
+  let firstError: Error | undefined;
+  for (const candidate of candidates) {
+    try {
+      assertSupportedCodexCliVersion({
+        binaryPath: candidate,
+        cwd: input.cwd,
+        ...(input.homePath ? { homePath: input.homePath } : {}),
+      });
+      return candidate;
+    } catch (error) {
+      if (!firstError) {
+        firstError = error instanceof Error ? error : new Error(String(error));
+      }
+    }
+  }
+
+  throw firstError ?? new Error("Codex CLI is not installed or not executable.");
 }
 
 function readResumeCursorThreadId(resumeCursor: unknown): string | undefined {

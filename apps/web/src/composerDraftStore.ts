@@ -86,6 +86,7 @@ const PersistedComposerThreadDraftState = Schema.Struct({
   activeProvider: Schema.optionalKey(Schema.NullOr(ProviderKind)),
   runtimeMode: Schema.optionalKey(RuntimeMode),
   interactionMode: Schema.optionalKey(ProviderInteractionMode),
+  richDraftMode: Schema.optionalKey(Schema.Boolean),
 });
 type PersistedComposerThreadDraftState = typeof PersistedComposerThreadDraftState.Type;
 
@@ -166,6 +167,7 @@ export interface ComposerThreadDraftState {
   activeProvider: ProviderKind | null;
   runtimeMode: RuntimeMode | null;
   interactionMode: ProviderInteractionMode | null;
+  richDraftMode: boolean;
 }
 
 export interface DraftThreadState {
@@ -242,6 +244,7 @@ interface ComposerDraftStoreState {
     threadId: ThreadId,
     interactionMode: ProviderInteractionMode | null | undefined,
   ) => void;
+  setRichDraftMode: (threadId: ThreadId, enabled: boolean | null | undefined) => void;
   addImage: (threadId: ThreadId, image: ComposerImageAttachment) => void;
   addImages: (threadId: ThreadId, images: ComposerImageAttachment[]) => void;
   removeImage: (threadId: ThreadId, imageId: string) => void;
@@ -321,6 +324,7 @@ const EMPTY_THREAD_DRAFT = Object.freeze<ComposerThreadDraftState>({
   activeProvider: null,
   runtimeMode: null,
   interactionMode: null,
+  richDraftMode: false,
 });
 
 function createEmptyThreadDraft(): ComposerThreadDraftState {
@@ -334,6 +338,7 @@ function createEmptyThreadDraft(): ComposerThreadDraftState {
     activeProvider: null,
     runtimeMode: null,
     interactionMode: null,
+    richDraftMode: false,
   };
 }
 
@@ -403,7 +408,8 @@ function shouldRemoveDraft(draft: ComposerThreadDraftState): boolean {
     Object.keys(draft.modelSelectionByProvider).length === 0 &&
     draft.activeProvider === null &&
     draft.runtimeMode === null &&
-    draft.interactionMode === null
+    draft.interactionMode === null &&
+    draft.richDraftMode === false
   );
 }
 
@@ -867,6 +873,7 @@ function normalizePersistedDraftsByThreadId(
       draftCandidate.interactionMode === "plan" || draftCandidate.interactionMode === "default"
         ? draftCandidate.interactionMode
         : null;
+    const richDraftMode = draftCandidate.richDraftMode === true;
     const prompt = ensureInlineTerminalContextPlaceholders(
       promptCandidate,
       terminalContexts.length,
@@ -925,7 +932,8 @@ function normalizePersistedDraftsByThreadId(
       terminalContexts.length === 0 &&
       !hasModelData &&
       !runtimeMode &&
-      !interactionMode
+      !interactionMode &&
+      !richDraftMode
     ) {
       continue;
     }
@@ -936,6 +944,7 @@ function normalizePersistedDraftsByThreadId(
       ...(hasModelData ? { modelSelectionByProvider, activeProvider } : {}),
       ...(runtimeMode ? { runtimeMode } : {}),
       ...(interactionMode ? { interactionMode } : {}),
+      ...(richDraftMode ? { richDraftMode } : {}),
     };
   }
 
@@ -1004,7 +1013,8 @@ function partializeComposerDraftStoreState(
       draft.terminalContexts.length === 0 &&
       !hasModelData &&
       draft.runtimeMode === null &&
-      draft.interactionMode === null
+      draft.interactionMode === null &&
+      draft.richDraftMode === false
     ) {
       continue;
     }
@@ -1032,6 +1042,7 @@ function partializeComposerDraftStoreState(
         : {}),
       ...(draft.runtimeMode ? { runtimeMode: draft.runtimeMode } : {}),
       ...(draft.interactionMode ? { interactionMode: draft.interactionMode } : {}),
+      ...(draft.richDraftMode ? { richDraftMode: true } : {}),
     };
     persistedDraftsByThreadId[threadId as ThreadId] = persistedDraft;
   }
@@ -1247,6 +1258,7 @@ function toHydratedThreadDraft(
     activeProvider,
     runtimeMode: persistedDraft.runtimeMode ?? null,
     interactionMode: persistedDraft.interactionMode ?? null,
+    richDraftMode: persistedDraft.richDraftMode === true,
   };
 }
 
@@ -1835,6 +1847,33 @@ export const useComposerDraftStore = create<ComposerDraftStoreState>()(
           const nextDraft: ComposerThreadDraftState = {
             ...base,
             interactionMode: nextInteractionMode,
+          };
+          const nextDraftsByThreadId = { ...state.draftsByThreadId };
+          if (shouldRemoveDraft(nextDraft)) {
+            delete nextDraftsByThreadId[threadId];
+          } else {
+            nextDraftsByThreadId[threadId] = nextDraft;
+          }
+          return { draftsByThreadId: nextDraftsByThreadId };
+        });
+      },
+      setRichDraftMode: (threadId, enabled) => {
+        if (threadId.length === 0) {
+          return;
+        }
+        const nextRichDraftMode = enabled === true;
+        set((state) => {
+          const existing = state.draftsByThreadId[threadId];
+          if (!existing && nextRichDraftMode === false) {
+            return state;
+          }
+          const base = existing ?? createEmptyThreadDraft();
+          if (base.richDraftMode === nextRichDraftMode) {
+            return state;
+          }
+          const nextDraft: ComposerThreadDraftState = {
+            ...base,
+            richDraftMode: nextRichDraftMode,
           };
           const nextDraftsByThreadId = { ...state.draftsByThreadId };
           if (shouldRemoveDraft(nextDraft)) {

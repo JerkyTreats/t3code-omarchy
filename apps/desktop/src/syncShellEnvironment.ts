@@ -1,5 +1,9 @@
 import { readEnvironmentFromLoginShell, ShellEnvironmentReader } from "@t3tools/shared/shell";
 
+function shouldSyncShellEnvironment(platform: NodeJS.Platform): boolean {
+  return platform !== "win32";
+}
+
 export function syncShellEnvironment(
   env: NodeJS.ProcessEnv = process.env,
   options: {
@@ -7,7 +11,7 @@ export function syncShellEnvironment(
     readEnvironment?: ShellEnvironmentReader;
   } = {},
 ): void {
-  if ((options.platform ?? process.platform) !== "darwin") return;
+  if (!shouldSyncShellEnvironment(options.platform ?? process.platform)) return;
 
   try {
     const shell = env.SHELL ?? "/bin/zsh";

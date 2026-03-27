@@ -15,6 +15,7 @@ import {
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readEnvironmentFromLoginShell } from "@t3tools/shared/shell";
 
 const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
 const APP_DISPLAY_NAME = isDevelopment ? "T3 Code Omarchy (Dev)" : "T3 Code Omarchy (Alpha)";
@@ -23,6 +24,58 @@ const LAUNCHER_VERSION = 1;
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 export const desktopDir = resolve(__dirname, "..");
+
+function resolveCommandPath(env, command) {
+  if (process.platform === "win32") {
+    return undefined;
+  }
+
+  try {
+    const shell = env.SHELL ?? "/bin/zsh";
+    const result = spawnSync(shell, ["-ilc", `command -v ${command}`], {
+      encoding: "utf8",
+      env,
+      timeout: 5000,
+    });
+    if (result.status !== 0) {
+      return undefined;
+    }
+    const resolved = result.stdout.trim();
+    return resolved.length > 0 ? resolved : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function syncLaunchEnvironment(env) {
+  if (process.platform === "win32") {
+    return env;
+  }
+
+  try {
+    const shell = env.SHELL ?? "/bin/zsh";
+    const shellEnvironment = readEnvironmentFromLoginShell(shell, ["PATH", "SSH_AUTH_SOCK"]);
+
+    if (shellEnvironment.PATH) {
+      env.PATH = shellEnvironment.PATH;
+    }
+
+    if (!env.SSH_AUTH_SOCK && shellEnvironment.SSH_AUTH_SOCK) {
+      env.SSH_AUTH_SOCK = shellEnvironment.SSH_AUTH_SOCK;
+    }
+  } catch {
+    // Keep inherited environment if shell lookup fails.
+  }
+
+  if (!env.CODEX_BINARY_PATH) {
+    const resolvedCodexPath = resolveCommandPath(env, "codex");
+    if (resolvedCodexPath) {
+      env.CODEX_BINARY_PATH = resolvedCodexPath;
+    }
+  }
+
+  return env;
+}
 
 function setPlistString(plistPath, key, value) {
   const replaceResult = spawnSync("plutil", ["-replace", key, "-string", value, plistPath], {

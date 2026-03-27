@@ -987,13 +987,23 @@ describe("composerDraftStore runtime and interaction settings", () => {
     );
   });
 
+  it("stores rich draft mode in the composer draft", () => {
+    const store = useComposerDraftStore.getState();
+
+    store.setRichDraftMode(threadId, true);
+
+    expect(useComposerDraftStore.getState().draftsByThreadId[threadId]?.richDraftMode).toBe(true);
+  });
+
   it("removes empty settings-only drafts when overrides are cleared", () => {
     const store = useComposerDraftStore.getState();
 
     store.setRuntimeMode(threadId, "approval-required");
     store.setInteractionMode(threadId, "plan");
+    store.setRichDraftMode(threadId, true);
     store.setRuntimeMode(threadId, null);
     store.setInteractionMode(threadId, null);
+    store.setRichDraftMode(threadId, false);
 
     expect(useComposerDraftStore.getState().draftsByThreadId[threadId]).toBeUndefined();
   });
