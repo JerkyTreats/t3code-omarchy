@@ -409,6 +409,44 @@ describe("startSession", () => {
       manager.stopAll();
     }
   });
+
+  it("falls back to process cwd when the requested cwd no longer exists", async () => {
+    const manager = new CodexAppServerManager();
+    const processCwd = vi.spyOn(process, "cwd").mockReturnValue("/repo/current");
+    const resolveBinaryPath = vi
+      .spyOn(
+        manager as unknown as {
+          resolveSupportedCodexCliBinaryPath: (input: {
+            preferredBinaryPath?: string;
+            cwd: string;
+            homePath?: string;
+          }) => string;
+        },
+        "resolveSupportedCodexCliBinaryPath",
+      )
+      .mockImplementation(() => {
+        throw new Error("stop before spawn");
+      });
+
+    try {
+      await expect(
+        manager.startSession({
+          threadId: asThreadId("thread-1"),
+          provider: "codex",
+          runtimeMode: "full-access",
+          cwd: "/repo/deleted-worktree",
+        }),
+      ).rejects.toThrow("stop before spawn");
+
+      expect(resolveBinaryPath).toHaveBeenCalledWith({
+        cwd: "/repo/current",
+      });
+    } finally {
+      resolveBinaryPath.mockRestore();
+      processCwd.mockRestore();
+      manager.stopAll();
+    }
+  });
 });
 
 describe("sendTurn", () => {
