@@ -388,6 +388,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
   );
   const messagesScrollRef = useRef<HTMLDivElement>(null);
   const [messagesScrollElement, setMessagesScrollElement] = useState<HTMLDivElement | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const shouldAutoScrollRef = useRef(true);
   const lastKnownScrollTopRef = useRef(0);
   const isPointerScrollActiveRef = useRef(false);
@@ -1695,6 +1696,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const scrollMessagesToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
     const scrollContainer = messagesScrollRef.current;
     if (!scrollContainer) return;
+    messagesEndRef.current?.scrollIntoView({ behavior, block: "end" });
     scrollContainer.scrollTo({ top: scrollContainer.scrollHeight, behavior });
     lastKnownScrollTopRef.current = scrollContainer.scrollTop;
     shouldAutoScrollRef.current = true;
@@ -3696,6 +3698,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
                 timestampFormat={timestampFormat}
                 workspaceRoot={activeProject?.cwd ?? undefined}
               />
+              <div ref={messagesEndRef} aria-hidden="true" />
             </div>
 
             {/* scroll to bottom pill — shown when user has scrolled away from the bottom */}
