@@ -1,5 +1,5 @@
 import { type ProviderInteractionMode } from "@t3tools/contracts";
-import { BotIcon, ChevronDownIcon } from "lucide-react";
+import { ChevronDownIcon } from "lucide-react";
 
 import { ContextWindowMeter } from "./ContextWindowMeter";
 import { Button } from "../ui/button";
@@ -16,7 +16,6 @@ interface ComposerFooterControlsProps {
     questionIndex: number;
   } | null;
   activePendingResolvedAnswers: boolean;
-  canShowChatToggle: boolean;
   composerHasSendableContent: boolean;
   interactionMode: ProviderInteractionMode;
   isConnecting: boolean;
@@ -36,26 +35,6 @@ interface ComposerFooterControlsProps {
 export function ComposerFooterControls(props: ComposerFooterControlsProps) {
   return (
     <>
-      {props.canShowChatToggle ? (
-        <Button
-          variant="ghost"
-          className="shrink-0 whitespace-nowrap px-2 text-muted-foreground/70 hover:text-foreground/80"
-          size="sm"
-          type="button"
-          onClick={props.onToggleInteractionMode}
-          title={
-            props.interactionMode === "plan"
-              ? "Plan mode — click to return to normal chat mode"
-              : "Default mode — click to enter plan mode"
-          }
-        >
-          <BotIcon />
-          <span className="sr-only lg:not-sr-only">
-            {props.interactionMode === "plan" ? "Plan" : "Chat"}
-          </span>
-        </Button>
-      ) : null}
-
       <div
         data-chat-composer-actions="right"
         className="flex shrink-0 items-center gap-2 pr-1 pb-0.5 sm:pr-1.5"
@@ -113,7 +92,6 @@ export function ComposerFooterControls(props: ComposerFooterControlsProps) {
           />
         ) : (
           <SendControls
-            canShowRichDraftToggle={props.canShowChatToggle}
             composerHasSendableContent={props.composerHasSendableContent}
             isConnecting={props.isConnecting}
             isPreparingWorktree={props.isPreparingWorktree}
@@ -184,7 +162,6 @@ function PlanFollowUpSubmit(props: {
 }
 
 function SendControls(props: {
-  canShowRichDraftToggle: boolean;
   composerHasSendableContent: boolean;
   isConnecting: boolean;
   isPreparingWorktree: boolean;
@@ -194,33 +171,31 @@ function SendControls(props: {
 }) {
   return (
     <div className="flex items-center gap-1.5">
-      {props.canShowRichDraftToggle ? (
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Toggle
-                pressed={props.richDraftMode}
-                onPressedChange={props.onToggleRichDraftMode}
-                aria-label={
-                  props.richDraftMode ? "Disable rich draft mode" : "Enable rich draft mode"
-                }
-                variant="outline"
-                size="xs"
-                className="rounded-full border-border/60 bg-background/80 px-2.5 text-muted-foreground/80 shadow-xs/5 hover:bg-background hover:text-foreground data-pressed:border-primary/35 data-pressed:bg-primary/10 data-pressed:text-foreground"
-              >
-                <span aria-hidden="true" className="font-serif text-[16px] leading-none italic">
-                  a
-                </span>
-              </Toggle>
-            }
-          />
-          <TooltipPopup side="top">
-            {props.richDraftMode
-              ? "Rich draft on — Enter adds a new line"
-              : "Rich draft off — Enter sends"}
-          </TooltipPopup>
-        </Tooltip>
-      ) : null}
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Toggle
+              pressed={props.richDraftMode}
+              onPressedChange={props.onToggleRichDraftMode}
+              aria-label={
+                props.richDraftMode ? "Disable rich draft mode" : "Enable rich draft mode"
+              }
+              variant="outline"
+              size="xs"
+              className="rounded-full border-border/60 bg-background/80 px-2.5 text-muted-foreground/80 shadow-xs/5 hover:bg-background hover:text-foreground data-pressed:border-primary/35 data-pressed:bg-primary/10 data-pressed:text-foreground"
+            >
+              <span aria-hidden="true" className="font-serif text-[16px] leading-none italic">
+                a
+              </span>
+            </Toggle>
+          }
+        />
+        <TooltipPopup side="top">
+          {props.richDraftMode
+            ? "Rich draft on — Enter adds a new line"
+            : "Rich draft off — Enter sends"}
+        </TooltipPopup>
+      </Tooltip>
       <button
         type="submit"
         className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/90 text-primary-foreground transition-all duration-150 hover:bg-primary hover:scale-105 disabled:opacity-30 disabled:hover:scale-100 sm:h-8 sm:w-8"

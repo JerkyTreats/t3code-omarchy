@@ -94,6 +94,7 @@ import { resolveShortcutCommand, shortcutLabelForCommand } from "../keybindings"
 import PlanSidebar from "./PlanSidebar";
 import ThreadTerminalDrawer from "./ThreadTerminalDrawer";
 import {
+  BotIcon,
   ChevronDownIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -4000,7 +4001,28 @@ export default function ChatView({ threadId }: ChatViewProps) {
                             onToggleRuntimeMode={toggleRuntimeMode}
                           />
                         ) : (
-                          <>{providerTraitsPicker ? <>{providerTraitsPicker}</> : null}</>
+                          <>
+                            {providerTraitsPicker ? <>{providerTraitsPicker}</> : null}
+                            {!isComposerApprovalState ? (
+                              <Button
+                                variant="ghost"
+                                className="shrink-0 whitespace-nowrap px-2 text-muted-foreground/70 hover:text-foreground/80"
+                                size="sm"
+                                type="button"
+                                onClick={toggleInteractionMode}
+                                title={
+                                  interactionMode === "plan"
+                                    ? "Plan mode — click to return to normal chat mode"
+                                    : "Default mode — click to enter plan mode"
+                                }
+                              >
+                                <BotIcon />
+                                <span className="sr-only lg:not-sr-only">
+                                  {interactionMode === "plan" ? "Plan" : "Chat"}
+                                </span>
+                              </Button>
+                            ) : null}
+                          </>
                         )}
                       </div>
 
@@ -4009,7 +4031,6 @@ export default function ChatView({ threadId }: ChatViewProps) {
                         activePendingIsResponding={activePendingIsResponding}
                         activePendingProgress={activePendingProgress}
                         activePendingResolvedAnswers={Boolean(activePendingResolvedAnswers)}
-                        canShowChatToggle={!isComposerApprovalState && !isComposerFooterCompact}
                         composerHasSendableContent={composerSendState.hasSendableContent}
                         interactionMode={interactionMode}
                         isConnecting={isConnecting}
