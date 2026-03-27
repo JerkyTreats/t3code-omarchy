@@ -395,6 +395,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const lastTouchClientYRef = useRef<number | null>(null);
   const pendingUserScrollUpIntentRef = useRef(false);
   const pendingAutoScrollFrameRef = useRef<number | null>(null);
+  const pendingScrollToBottomTimeoutRef = useRef<number | null>(null);
   const pendingInteractionAnchorRef = useRef<{
     element: HTMLElement;
     top: number;
@@ -1696,10 +1697,31 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const scrollMessagesToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
     const scrollContainer = messagesScrollRef.current;
     if (!scrollContainer) return;
+    const pendingTimeout = pendingScrollToBottomTimeoutRef.current;
+    if (pendingTimeout !== null) {
+      pendingScrollToBottomTimeoutRef.current = null;
+      window.clearTimeout(pendingTimeout);
+    }
     messagesEndRef.current?.scrollIntoView({ behavior, block: "end" });
     scrollContainer.scrollTo({ top: scrollContainer.scrollHeight, behavior });
-    lastKnownScrollTopRef.current = scrollContainer.scrollTop;
     shouldAutoScrollRef.current = true;
+    pendingScrollToBottomTimeoutRef.current = window.setTimeout(
+      () => {
+        pendingScrollToBottomTimeoutRef.current = null;
+        const activeScrollContainer = messagesScrollRef.current;
+        if (!activeScrollContainer) return;
+        if (!isScrollContainerNearBottom(activeScrollContainer, 8)) {
+          messagesEndRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
+          activeScrollContainer.scrollTo({
+            top: activeScrollContainer.scrollHeight,
+            behavior: "auto",
+          });
+        }
+        lastKnownScrollTopRef.current = activeScrollContainer.scrollTop;
+        setShowScrollToBottom(!isScrollContainerNearBottom(activeScrollContainer, 8));
+      },
+      behavior === "smooth" ? 320 : 0,
+    );
   }, []);
   const cancelPendingStickToBottom = useCallback(() => {
     const pendingFrame = pendingAutoScrollFrameRef.current;
@@ -1826,6 +1848,11 @@ export default function ChatView({ threadId }: ChatViewProps) {
     return () => {
       cancelPendingStickToBottom();
       cancelPendingInteractionAnchorAdjustment();
+      const pendingTimeout = pendingScrollToBottomTimeoutRef.current;
+      if (pendingTimeout !== null) {
+        pendingScrollToBottomTimeoutRef.current = null;
+        window.clearTimeout(pendingTimeout);
+      }
     };
   }, [cancelPendingInteractionAnchorAdjustment, cancelPendingStickToBottom]);
   useLayoutEffect(() => {
