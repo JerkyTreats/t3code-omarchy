@@ -126,6 +126,7 @@ import {
   resolveAppModelSelection,
   useAppSettings,
 } from "../appSettings";
+import { getProviderModels, resolveSelectableProvider } from "../providerModels";
 import { isTerminalFocused } from "../lib/terminalFocus";
 import {
   type ComposerImageAttachment,
@@ -630,25 +631,36 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const lockedProvider: ProviderKind | null = hasThreadStarted
     ? (sessionProvider ?? threadProvider ?? selectedProviderByThreadId ?? null)
     : null;
-  const selectedProvider: ProviderKind =
-    lockedProvider ?? selectedProviderByThreadId ?? threadProvider ?? "codex";
+  const providerStatusesForComposer =
+    useQuery(serverConfigQueryOptions()).data?.providers ?? EMPTY_PROVIDER_STATUSES;
+  const unlockedSelectedProvider = resolveSelectableProvider(
+    providerStatusesForComposer,
+    selectedProviderByThreadId ?? threadProvider ?? "codex",
+  );
+  const selectedProvider: ProviderKind = lockedProvider ?? unlockedSelectedProvider;
   const customModelsByProvider = useMemo(() => getCustomModelsByProvider(settings), [settings]);
   const { modelOptions: composerModelOptions, selectedModel } = useEffectiveComposerModelState({
     threadId,
+    providers: providerStatusesForComposer,
     selectedProvider,
     threadModelSelection: activeThread?.modelSelection,
     projectModelSelection: activeProject?.defaultModelSelection,
-    customModelsByProvider,
+    settings,
   });
+  const selectedProviderModels = useMemo(
+    () => getProviderModels(providerStatusesForComposer, selectedProvider),
+    [providerStatusesForComposer, selectedProvider],
+  );
   const composerProviderState = useMemo(
     () =>
       getComposerProviderState({
         provider: selectedProvider,
         model: selectedModel,
+        models: selectedProviderModels,
         prompt,
         modelOptions: composerModelOptions,
       }),
-    [composerModelOptions, prompt, selectedModel, selectedProvider],
+    [composerModelOptions, prompt, selectedModel, selectedProvider, selectedProviderModels],
   );
   const selectedPromptEffort = composerProviderState.promptEffort;
   const selectedModelOptionsForDispatch = composerProviderState.modelOptionsForDispatch;
@@ -2765,7 +2777,6 @@ export default function ChatView({ threadId }: ChatViewProps) {
         },
         modelSelection: selectedModelSelection,
         ...(providerOptionsForDispatch ? { providerOptions: providerOptionsForDispatch } : {}),
-        assistantDeliveryMode: settings.enableAssistantStreaming ? "streaming" : "buffered",
         runtimeMode,
         interactionMode,
         createdAt: messageCreatedAt,
@@ -3047,7 +3058,6 @@ export default function ChatView({ threadId }: ChatViewProps) {
           },
           modelSelection: selectedModelSelection,
           ...(providerOptionsForDispatch ? { providerOptions: providerOptionsForDispatch } : {}),
-          assistantDeliveryMode: settings.enableAssistantStreaming ? "streaming" : "buffered",
           runtimeMode,
           interactionMode: nextInteractionMode,
           ...(nextInteractionMode === "default" && activeProposedPlan
@@ -3097,7 +3107,6 @@ export default function ChatView({ threadId }: ChatViewProps) {
       selectedProvider,
       setComposerDraftInteractionMode,
       setThreadError,
-      settings.enableAssistantStreaming,
       selectedModel,
     ],
   );
@@ -3164,7 +3173,6 @@ export default function ChatView({ threadId }: ChatViewProps) {
           },
           modelSelection: selectedModelSelection,
           ...(providerOptionsForDispatch ? { providerOptions: providerOptionsForDispatch } : {}),
-          assistantDeliveryMode: settings.enableAssistantStreaming ? "streaming" : "buffered",
           runtimeMode,
           interactionMode: "default",
           createdAt,
@@ -3217,7 +3225,6 @@ export default function ChatView({ threadId }: ChatViewProps) {
     selectedModelSelection,
     providerOptionsForDispatch,
     selectedProvider,
-    settings.enableAssistantStreaming,
     syncServerReadModel,
     selectedModel,
   ]);
