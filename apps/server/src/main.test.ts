@@ -154,6 +154,22 @@ it.layer(testLayer)("server CLI command", (it) => {
     }),
   );
 
+  it.effect("supports legacy T3CODE_STATE_DIR when T3CODE_HOME is absent", () =>
+    Effect.gen(function* () {
+      yield* runCli([], {
+        T3CODE_MODE: "desktop",
+        T3CODE_STATE_DIR: "/tmp/t3-legacy-home/userdata",
+        T3CODE_NO_BROWSER: "true",
+      });
+
+      assert.equal(start.mock.calls.length, 1);
+      assert.equal(resolvedConfig?.baseDir, "/tmp/t3-legacy-home");
+      assert.equal(resolvedConfig?.stateDir, "/tmp/t3-legacy-home/userdata");
+      assert.equal(resolvedConfig?.dbPath, "/tmp/t3-legacy-home/userdata/state.sqlite");
+      assert.equal(resolvedConfig?.worktreesDir, "/tmp/t3-legacy-home/worktrees");
+    }),
+  );
+
   const openBootstrapFd = Effect.fn(function* (payload: Record<string, unknown>) {
     const fs = yield* FileSystem.FileSystem;
     const filePath = yield* fs.makeTempFileScoped({ prefix: "t3-bootstrap-", suffix: ".ndjson" });
@@ -244,6 +260,26 @@ it.layer(testLayer)("server CLI command", (it) => {
       assert.equal(resolvedConfig?.authToken, "cli-token");
       assert.equal(resolvedConfig?.autoBootstrapProjectFromCwd, true);
       assert.equal(resolvedConfig?.logWebSocketEvents, true);
+    }),
+  );
+
+  it.effect("prefers legacy T3CODE_STATE_DIR over bootstrap t3Home defaults", () =>
+    Effect.gen(function* () {
+      const fd = yield* openBootstrapFd({
+        mode: "desktop",
+        t3Home: "/tmp/t3-bootstrap-home",
+        noBrowser: true,
+      });
+
+      yield* runCli([], {
+        T3CODE_BOOTSTRAP_FD: String(fd),
+        T3CODE_STATE_DIR: "/tmp/t3-legacy-home/userdata",
+        T3CODE_NO_BROWSER: "true",
+      });
+
+      assert.equal(start.mock.calls.length, 1);
+      assert.equal(resolvedConfig?.baseDir, "/tmp/t3-legacy-home");
+      assert.equal(resolvedConfig?.stateDir, "/tmp/t3-legacy-home/userdata");
     }),
   );
 

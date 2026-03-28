@@ -73,6 +73,32 @@ export const deriveServerPaths = Effect.fn(function* (
   };
 });
 
+export const deriveServerPathsFromStateDir = Effect.fn(function* (
+  stateDir: ServerDerivedPaths["stateDir"],
+): Effect.fn.Return<ServerDerivedPaths & { readonly baseDir: string }, never, Path.Path> {
+  const { dirname, join, resolve } = yield* Path.Path;
+  const resolvedStateDir = resolve(stateDir);
+  const baseDir = dirname(resolvedStateDir);
+  const logsDir = join(resolvedStateDir, "logs");
+  const providerLogsDir = join(logsDir, "provider");
+
+  return {
+    baseDir,
+    stateDir: resolvedStateDir,
+    dbPath: join(resolvedStateDir, "state.sqlite"),
+    keybindingsConfigPath: join(resolvedStateDir, "keybindings.json"),
+    settingsPath: join(resolvedStateDir, "settings.json"),
+    worktreesDir: join(baseDir, "worktrees"),
+    attachmentsDir: join(resolvedStateDir, "attachments"),
+    logsDir,
+    serverLogPath: join(logsDir, "server.log"),
+    providerLogsDir,
+    providerEventLogPath: join(providerLogsDir, "events.log"),
+    terminalLogsDir: join(logsDir, "terminals"),
+    anonymousIdPath: join(resolvedStateDir, "anonymous-id"),
+  };
+});
+
 /**
  * ServerConfig - Service tag for server runtime configuration.
  */

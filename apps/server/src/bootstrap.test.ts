@@ -93,4 +93,30 @@ it.layer(NodeServices.layer)("readBootstrapEnvelope", (it) => {
       assertNone(payload);
     }).pipe(Effect.provide(TestClock.layer())),
   );
+
+  it.effect("reads a bootstrap envelope from an anonymous pipe fd", () =>
+    Effect.gen(function* () {
+      const writer = yield* Effect.acquireRelease(
+        Effect.sync(() =>
+          spawn("sh", ["-c", 'printf \'{"mode":"desktop"}\\n\' >&3'], {
+            stdio: ["ignore", "ignore", "ignore", "pipe"],
+          }),
+        ),
+        (child) =>
+          Effect.sync(() => {
+            child.kill("SIGKILL");
+          }),
+      );
+
+      const fd = (writer.stdio[3] as { _handle?: { fd?: number } } | undefined)?._handle?.fd;
+      if (typeof fd !== "number") {
+        throw new Error("Failed to resolve anonymous pipe fd");
+      }
+
+      const payload = yield* readBootstrapEnvelope(TestEnvelopeSchema, fd, { timeoutMs: 1000 });
+      assertSome(payload, {
+        mode: "desktop",
+      });
+    }),
+  );
 });

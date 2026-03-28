@@ -12,12 +12,13 @@ import { NetService } from "@t3tools/shared/Net";
 import {
   DEFAULT_PORT,
   deriveServerPaths,
+  deriveServerPathsFromStateDir,
   resolveStaticDir,
   ServerConfig,
   type RuntimeMode,
   type ServerConfigShape,
 } from "./config";
-import { fixPath, resolveBaseDir } from "./os-jank";
+import { fixPath, resolveBaseDir, resolveStateDir } from "./os-jank";
 import { Open } from "./open";
 import * as SqlitePersistence from "./persistence/Layers/Sqlite";
 import { makeServerProviderLayer, makeServerRuntimeServicesLayer } from "./serverLayers";
@@ -29,6 +30,7 @@ import { AnalyticsServiceLayerLive } from "./telemetry/Layers/AnalyticsService";
 import { AnalyticsService } from "./telemetry/Services/AnalyticsService";
 import { readBootstrapEnvelope } from "./bootstrap";
 import { ServerSettingsLive } from "./serverSettings";
+import { selectStorageConfig } from "./storageConfig";
 
 export class StartupError extends Data.TaggedError("StartupError")<{
   readonly message: string;
@@ -114,6 +116,10 @@ const CliEnvConfig = Config.all({
   port: Config.port("T3CODE_PORT").pipe(Config.option, Config.map(Option.getOrUndefined)),
   host: Config.string("T3CODE_HOST").pipe(Config.option, Config.map(Option.getOrUndefined)),
   t3Home: Config.string("T3CODE_HOME").pipe(Config.option, Config.map(Option.getOrUndefined)),
+  stateDir: Config.string("T3CODE_STATE_DIR").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
   devUrl: Config.url("VITE_DEV_SERVER_URL").pipe(Config.option, Config.map(Option.getOrUndefined)),
   noBrowser: Config.boolean("T3CODE_NO_BROWSER").pipe(
     Config.option,
@@ -206,18 +212,33 @@ const ServerConfigLive = (input: CliInput) =>
         ),
         () => undefined,
       );
-      const baseDir = yield* resolveBaseDir(
-        Option.getOrUndefined(
-          resolveOptionPrecedence(
-            input.t3Home,
-            Option.fromUndefinedOr(env.t3Home),
-            Option.flatMap(bootstrapEnvelope, (bootstrap) =>
-              Option.fromUndefinedOr(bootstrap.t3Home),
-            ),
+      const storageSelection = selectStorageConfig({
+        cliHomeDir: Option.getOrUndefined(input.t3Home),
+        envHomeDir: env.t3Home,
+        legacyStateDir: env.stateDir,
+        bootstrapHomeDir: Option.getOrUndefined(
+          Option.flatMap(bootstrapEnvelope, (bootstrap) =>
+            Option.fromUndefinedOr(bootstrap.t3Home),
           ),
         ),
-      );
-      const derivedPaths = yield* deriveServerPaths(baseDir, devUrl);
+      });
+      const { baseDir, derivedPaths } =
+        storageSelection?.kind === "legacyStateDir"
+          ? yield* Effect.gen(function* () {
+              const resolvedStateDir = yield* resolveStateDir(storageSelection.value);
+              const legacyDerivedPaths = yield* deriveServerPathsFromStateDir(resolvedStateDir);
+              return {
+                baseDir: legacyDerivedPaths.baseDir,
+                derivedPaths: legacyDerivedPaths,
+              };
+            })
+          : yield* Effect.gen(function* () {
+              const resolvedBaseDir = yield* resolveBaseDir(storageSelection?.value);
+              return {
+                baseDir: resolvedBaseDir,
+                derivedPaths: yield* deriveServerPaths(resolvedBaseDir, devUrl),
+              };
+            });
       const noBrowser = resolveBooleanFlag(
         input.noBrowser,
         Option.getOrElse(

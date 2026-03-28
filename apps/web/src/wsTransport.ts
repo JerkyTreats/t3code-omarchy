@@ -28,7 +28,8 @@ interface RequestOptions {
 type TransportState = "connecting" | "open" | "reconnecting" | "closed" | "disposed";
 
 const REQUEST_TIMEOUT_MS = 60_000;
-const RECONNECT_DELAYS_MS = [500, 1_000, 2_000, 4_000, 8_000];
+const DEFAULT_RECONNECT_DELAYS_MS = [500, 1_000, 2_000, 4_000, 8_000];
+const DESKTOP_RECONNECT_DELAYS_MS = [50, 100, 250, 500, 1_000, 2_000, 4_000];
 const decodeWsResponse = decodeUnknownJsonResult(WsResponseSchema);
 const isWebSocketResponseEnvelope = Schema.is(WebSocketResponse);
 
@@ -50,6 +51,13 @@ function asError(value: unknown, fallback: string): Error {
   return new Error(fallback);
 }
 
+function resolveReconnectDelaysMs(): ReadonlyArray<number> {
+  if (typeof window !== "undefined" && window.desktopBridge) {
+    return DESKTOP_RECONNECT_DELAYS_MS;
+  }
+  return DEFAULT_RECONNECT_DELAYS_MS;
+}
+
 export class WsTransport {
   private ws: WebSocket | null = null;
   private nextId = 1;
@@ -62,10 +70,12 @@ export class WsTransport {
   private disposed = false;
   private state: TransportState = "connecting";
   private readonly url: string;
+  private readonly reconnectDelaysMs: ReadonlyArray<number>;
 
   constructor(url?: string) {
     const bridgeUrl = window.desktopBridge?.getWsUrl();
     const envUrl = import.meta.env.VITE_WS_URL as string | undefined;
+    this.reconnectDelaysMs = resolveReconnectDelaysMs();
     this.url =
       url ??
       (bridgeUrl && bridgeUrl.length > 0
@@ -297,8 +307,8 @@ export class WsTransport {
     }
 
     const delay =
-      RECONNECT_DELAYS_MS[Math.min(this.reconnectAttempt, RECONNECT_DELAYS_MS.length - 1)] ??
-      RECONNECT_DELAYS_MS[0]!;
+      this.reconnectDelaysMs[Math.min(this.reconnectAttempt, this.reconnectDelaysMs.length - 1)] ??
+      this.reconnectDelaysMs[0]!;
 
     this.reconnectAttempt += 1;
     this.reconnectTimer = setTimeout(() => {

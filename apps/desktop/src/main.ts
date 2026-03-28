@@ -47,6 +47,7 @@ import {
 import { isArm64HostRunningIntelBuild, resolveDesktopRuntimeInfo } from "./runtimeArch";
 import { captureDesktopScreenshot } from "./screenshotCapture";
 import { readDesktopSystemTheme, watchDesktopSystemTheme } from "./omarchyTheme";
+import { isIgnorableChildProcessStreamError } from "./childProcessErrors";
 
 syncShellEnvironment();
 
@@ -195,6 +196,35 @@ function writeDesktopStreamChunk(
   }
 }
 
+function logBackendStreamError(streamName: string, error: unknown): void {
+  const message = formatErrorMessage(error);
+  const code =
+    typeof error === "object" && error !== null && "code" in error && typeof error.code === "string"
+      ? error.code
+      : "unknown";
+
+  writeDesktopLogHeader(
+    `backend stream error stream=${streamName} code=${code} message=${message}`,
+  );
+
+  if (!isIgnorableChildProcessStreamError(error)) {
+    console.error(`[desktop] backend ${streamName} stream error`, error);
+  }
+}
+
+function attachBackendStreamErrorHandler(
+  streamName: string,
+  stream: NodeJS.ReadableStream | NodeJS.WritableStream | null | undefined,
+): void {
+  if (!stream || typeof stream.on !== "function") {
+    return;
+  }
+
+  stream.on("error", (error) => {
+    logBackendStreamError(streamName, error);
+  });
+}
+
 function installStdIoCapture(): void {
   if (!app.isPackaged || desktopLogSink === null || restoreStdIoCapture !== null) {
     return;
@@ -256,6 +286,9 @@ function initializePackagedLogging(): void {
 }
 
 function captureBackendOutput(child: ChildProcess.ChildProcess): void {
+  attachBackendStreamErrorHandler("stdout", child.stdout);
+  attachBackendStreamErrorHandler("stderr", child.stderr);
+
   if (!app.isPackaged || backendLogSink === null) return;
   const writeChunk = (chunk: unknown): void => {
     if (!backendLogSink) return;
@@ -1000,16 +1033,23 @@ function startBackend(): void {
   });
   const bootstrapStream = child.stdio[3];
   if (bootstrapStream && "write" in bootstrapStream) {
-    bootstrapStream.write(
-      `${JSON.stringify({
-        mode: "desktop",
-        noBrowser: true,
-        port: backendPort,
-        t3Home: BASE_DIR,
-        authToken: backendAuthToken,
-      })}\n`,
-    );
-    bootstrapStream.end();
+    attachBackendStreamErrorHandler("bootstrap", bootstrapStream);
+    try {
+      bootstrapStream.write(
+        `${JSON.stringify({
+          mode: "desktop",
+          noBrowser: true,
+          port: backendPort,
+          t3Home: BASE_DIR,
+          authToken: backendAuthToken,
+        })}\n`,
+      );
+      bootstrapStream.end();
+    } catch (error) {
+      child.kill("SIGTERM");
+      scheduleBackendRestart(`failed to send bootstrap payload: ${formatErrorMessage(error)}`);
+      return;
+    }
   } else {
     child.kill("SIGTERM");
     scheduleBackendRestart("missing desktop bootstrap pipe");

@@ -81,6 +81,7 @@ beforeEach(() => {
 
 afterEach(() => {
   globalThis.WebSocket = originalWebSocket;
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -251,6 +252,39 @@ describe("WsTransport", () => {
     socket.close();
 
     await expect(requestPromise).rejects.toThrow("WebSocket connection closed.");
+    transport.dispose();
+  });
+
+  it("retries desktop startup connections aggressively", () => {
+    vi.useFakeTimers();
+    const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
+    const testWindow = globalThis.window;
+    Object.defineProperty(testWindow, "desktopBridge", {
+      configurable: true,
+      value: {
+        getWsUrl: () => "ws://localhost:3020",
+      } satisfies Pick<NonNullable<Window["desktopBridge"]>, "getWsUrl">,
+    });
+
+    const transport = new WsTransport();
+    const socket = getSocket();
+    socket.close();
+
+    expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 50);
+    transport.dispose();
+  });
+
+  it("keeps the existing reconnect backoff for browser transport", () => {
+    vi.useFakeTimers();
+    const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
+    const testWindow = globalThis.window;
+    Reflect.deleteProperty(testWindow, "desktopBridge");
+
+    const transport = new WsTransport("ws://localhost:3020");
+    const socket = getSocket();
+    socket.close();
+
+    expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 500);
     transport.dispose();
   });
 });
