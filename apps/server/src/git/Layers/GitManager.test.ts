@@ -16,6 +16,7 @@ import {
   GitHubCli,
 } from "../Services/GitHubCli.ts";
 import { type TextGenerationShape, TextGeneration } from "../Services/TextGeneration.ts";
+import { ForkGitDomainLive } from "./ForkGitDomain.ts";
 import { GitCoreLive } from "./GitCore.ts";
 import { GitServiceLive } from "./GitService.ts";
 import { GitCore } from "../Services/GitCore.ts";
@@ -523,12 +524,14 @@ function makeManager(input?: {
     Layer.provideMerge(ServerConfigLayer),
   );
 
-  const managerLayer = Layer.mergeAll(
-    Layer.succeed(GitHubCli, gitHubCli),
-    Layer.succeed(TextGeneration, textGeneration),
-    gitCoreLayer,
-    serverSettingsLayer,
-  ).pipe(Layer.provideMerge(NodeServices.layer));
+  const forkGitDomainLayer = ForkGitDomainLive.pipe(
+    Layer.provideMerge(Layer.succeed(GitHubCli, gitHubCli)),
+    Layer.provideMerge(Layer.succeed(TextGeneration, textGeneration)),
+    Layer.provideMerge(gitCoreLayer),
+    Layer.provideMerge(serverSettingsLayer),
+  );
+
+  const managerLayer = forkGitDomainLayer.pipe(Layer.provideMerge(NodeServices.layer));
 
   return makeGitManager.pipe(
     Effect.provide(managerLayer),

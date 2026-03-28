@@ -26,3 +26,10 @@ This repository prioritizes clarity, performance, and reliability over broad bac
 - Prefer additive transitions when the old and new paths can coexist cheaply.
 - Prefer direct replacement when a compatibility layer would add material complexity or failure risk.
 - When removing an old path, document the migration impact in the commit and any related release notes.
+
+## Fork Seam Bias
+
+- When this fork intentionally diverges from upstream in a shared domain, prefer an explicit fork seam over scattered call site customization.
+- A fork seam should isolate fork owned behavior from upstream facing runtime details so compatibility work stays local.
+- Stable fork domain contracts are preferred for browser, desktop, and workflow features that would otherwise depend on upstream shaped internals.
+- Introduce compatibility shims only as transitional tools. Promote long lived divergence into named adapter or policy layers with clear ownership.
