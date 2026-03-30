@@ -41,9 +41,9 @@ import {
   ClaudeCodeEffort,
 } from "@t3tools/contracts";
 import {
-  hasEffortLevel,
   applyClaudePromptEffortPrefix,
-  getModelCapabilities,
+  resolveApiModelId,
+  resolveEffort,
   trimOrNull,
 } from "@t3tools/shared/model";
 import {
@@ -63,6 +63,8 @@ import {
 
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
 import { ServerConfig } from "../../config.ts";
+import { ServerSettingsService } from "../../serverSettings.ts";
+import { getClaudeModelCapabilities } from "./ClaudeProvider.ts";
 import {
   ProviderAdapterProcessError,
   ProviderAdapterRequestError,
@@ -353,19 +355,6 @@ function asRuntimeRequestId(value: ApprovalRequestId): RuntimeRequestId {
   return RuntimeRequestId.makeUnsafe(value);
 }
 
-function toPermissionMode(value: unknown): PermissionMode | undefined {
-  switch (value) {
-    case "default":
-    case "acceptEdits":
-    case "bypassPermissions":
-    case "plan":
-    case "dontAsk":
-      return value;
-    default:
-      return undefined;
-  }
-}
-
 function readClaudeResumeState(resumeCursor: unknown): ClaudeResumeState | undefined {
   if (!resumeCursor || typeof resumeCursor !== "object") {
     return undefined;
@@ -522,16 +511,15 @@ const CLAUDE_SETTING_SOURCES = [
 function buildPromptText(input: ProviderSendTurnInput): string {
   const rawEffort =
     input.modelSelection?.provider === "claudeAgent" ? input.modelSelection.options?.effort : null;
-  const requestedEffort = trimOrNull(rawEffort);
   const claudeModel =
     input.modelSelection?.provider === "claudeAgent" ? input.modelSelection.model : undefined;
-  const caps = getModelCapabilities("claudeAgent", claudeModel);
+  const caps = getClaudeModelCapabilities(claudeModel);
+
+  // For prompt injection, we check if the raw effort is a prompt-injected level (e.g. "ultrathink").
+  // resolveEffort strips prompt-injected values (returning the default instead), so we check the raw value directly.
+  const trimmedEffort = trimOrNull(rawEffort);
   const promptEffort =
-    requestedEffort === "ultrathink" && caps.reasoningEffortLevels.length > 0
-      ? "ultrathink"
-      : requestedEffort && hasEffortLevel(caps, requestedEffort)
-        ? requestedEffort
-        : null;
+    trimmedEffort && caps.promptInjectedEffortLevels.includes(trimmedEffort) ? trimmedEffort : null;
   return applyClaudePromptEffortPrefix(input.input?.trim() ?? "", promptEffort);
 }
 
@@ -943,6 +931,7 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
 
     const sessions = new Map<ThreadId, ClaudeSessionContext>();
     const runtimeEventQueue = yield* Queue.unbounded<ProviderRuntimeEvent>();
+    const serverSettingsService = yield* ServerSettingsService;
 
     const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
     const nextEventId = Effect.map(Random.nextUUIDv4, (id) => EventId.makeUnsafe(id));
@@ -2727,13 +2716,25 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
             }),
           );
 
-        const providerOptions = input.providerOptions?.claudeAgent;
+        const claudeSettings = yield* serverSettingsService.getSettings.pipe(
+          Effect.map((settings) => settings.providers.claudeAgent),
+          Effect.mapError(
+            (error) =>
+              new ProviderAdapterProcessError({
+                provider: PROVIDER,
+                threadId: input.threadId,
+                detail: error.message,
+                cause: error,
+              }),
+          ),
+        );
+        const claudeBinaryPath = claudeSettings.binaryPath;
         const modelSelection =
           input.modelSelection?.provider === "claudeAgent" ? input.modelSelection : undefined;
-        const requestedEffort = trimOrNull(modelSelection?.options?.effort ?? null);
-        const caps = getModelCapabilities("claudeAgent", modelSelection?.model);
-        const effort =
-          requestedEffort && hasEffortLevel(caps, requestedEffort) ? requestedEffort : null;
+        const caps = getClaudeModelCapabilities(modelSelection?.model);
+        const apiModelId = modelSelection ? resolveApiModelId(modelSelection) : undefined;
+        const effort = (resolveEffort(caps, modelSelection?.options?.effort) ??
+          null) as ClaudeCodeEffort | null;
         const fastMode = modelSelection?.options?.fastMode === true && caps.supportsFastMode;
         const thinking =
           typeof modelSelection?.options?.thinking === "boolean" && caps.supportsThinkingToggle
@@ -2741,8 +2742,7 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
             : undefined;
         const effectiveEffort = getEffectiveClaudeCodeEffort(effort);
         const permissionMode =
-          toPermissionMode(providerOptions?.permissionMode) ??
-          (input.runtimeMode === "full-access" ? "bypassPermissions" : undefined);
+          input.runtimeMode === "full-access" ? "bypassPermissions" : undefined;
         const settings = {
           ...(typeof thinking === "boolean" ? { alwaysThinkingEnabled: thinking } : {}),
           ...(fastMode ? { fastMode: true } : {}),
@@ -2750,16 +2750,13 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
 
         const queryOptions: ClaudeQueryOptions = {
           ...(input.cwd ? { cwd: input.cwd } : {}),
-          ...(modelSelection?.model ? { model: modelSelection.model } : {}),
-          pathToClaudeCodeExecutable: providerOptions?.binaryPath ?? "claude",
+          ...(apiModelId ? { model: apiModelId } : {}),
+          pathToClaudeCodeExecutable: claudeBinaryPath,
           settingSources: [...CLAUDE_SETTING_SOURCES],
           ...(effectiveEffort ? { effort: effectiveEffort } : {}),
           ...(permissionMode ? { permissionMode } : {}),
           ...(permissionMode === "bypassPermissions"
             ? { allowDangerouslySkipPermissions: true }
-            : {}),
-          ...(providerOptions?.maxThinkingTokens !== undefined
-            ? { maxThinkingTokens: providerOptions.maxThinkingTokens }
             : {}),
           ...(Object.keys(settings).length > 0 ? { settings } : {}),
           ...(existingResumeSessionId ? { resume: existingResumeSessionId } : {}),
@@ -2847,13 +2844,10 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
           threadId,
           payload: {
             config: {
-              ...(modelSelection?.model ? { model: modelSelection.model } : {}),
+              ...(apiModelId ? { model: apiModelId } : {}),
               ...(input.cwd ? { cwd: input.cwd } : {}),
               ...(effectiveEffort ? { effort: effectiveEffort } : {}),
               ...(permissionMode ? { permissionMode } : {}),
-              ...(providerOptions?.maxThinkingTokens !== undefined
-                ? { maxThinkingTokens: providerOptions.maxThinkingTokens }
-                : {}),
               ...(fastMode ? { fastMode: true } : {}),
             },
           },
@@ -2903,8 +2897,9 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
         }
 
         if (modelSelection?.model) {
+          const apiModelId = resolveApiModelId(modelSelection);
           yield* Effect.tryPromise({
-            try: () => context.query.setModel(modelSelection.model),
+            try: () => context.query.setModel(apiModelId),
             catch: (cause) => toRequestError(input.threadId, "turn/setModel", cause),
           });
         }

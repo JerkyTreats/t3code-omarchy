@@ -130,7 +130,7 @@ export const ProposedPlanCard = memo(function ProposedPlanCard({
               ) : (
                 <ChevronRightIcon aria-hidden="true" className="size-3.5" />
               )}
-              {expanded ? "Collapse" : "Expand"}
+              {expanded ? "Collapse plan" : "Expand plan"}
             </Button>
           ) : null}
           <Menu>

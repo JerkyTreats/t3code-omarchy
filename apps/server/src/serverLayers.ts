@@ -24,15 +24,17 @@ import { makeProviderServiceLive } from "./provider/Layers/ProviderService";
 import { ProviderSessionDirectoryLive } from "./provider/Layers/ProviderSessionDirectory";
 import { ProviderService } from "./provider/Services/ProviderService";
 import { makeEventNdjsonLogger } from "./provider/Layers/EventNdjsonLogger";
+import { ServerSettingsService } from "./serverSettings";
 
 import { TerminalManagerLive } from "./terminal/Layers/Manager";
 import { KeybindingsLive } from "./keybindings";
+import { ForkGitDomainLive } from "./git/Layers/ForkGitDomain";
 import { GitManagerLive } from "./git/Layers/GitManager";
 import { GitCoreLive } from "./git/Layers/GitCore";
 import { GitServiceLive } from "./git/Layers/GitService";
 import { GitHubCliLive } from "./git/Layers/GitHubCli";
 import { GitHubManagerLive } from "./git/Layers/GitHubManager";
-import { CodexTextGenerationLive } from "./git/Layers/CodexTextGeneration";
+import { RoutingTextGenerationLive } from "./git/Layers/RoutingTextGeneration";
 import { PtyAdapter } from "./terminal/Services/PTY";
 import { AnalyticsService } from "./telemetry/Services/AnalyticsService";
 
@@ -56,7 +58,11 @@ const makeRuntimePtyAdapterLayer = () =>
 export function makeServerProviderLayer(): Layer.Layer<
   ProviderService,
   ProviderUnsupportedError,
-  SqlClient.SqlClient | ServerConfig | FileSystem.FileSystem | AnalyticsService
+  | SqlClient.SqlClient
+  | ServerConfig
+  | ServerSettingsService
+  | FileSystem.FileSystem
+  | AnalyticsService
 > {
   return Effect.gen(function* () {
     const { providerEventLogPath } = yield* ServerConfig;
@@ -87,7 +93,7 @@ export function makeServerProviderLayer(): Layer.Layer<
 }
 
 export function makeServerRuntimeServicesLayer() {
-  const textGenerationLayer = CodexTextGenerationLive;
+  const textGenerationLayer = RoutingTextGenerationLive;
   const gitCoreLayer = GitCoreLive.pipe(Layer.provide(GitServiceLive));
   const checkpointStoreLayer = CheckpointStoreLive.pipe(Layer.provide(gitCoreLayer));
 
@@ -128,11 +134,12 @@ export function makeServerRuntimeServicesLayer() {
 
   const terminalLayer = TerminalManagerLive.pipe(Layer.provide(makeRuntimePtyAdapterLayer()));
 
-  const gitManagerLayer = GitManagerLive.pipe(
+  const forkGitDomainLayer = ForkGitDomainLive.pipe(
     Layer.provideMerge(gitCoreLayer),
     Layer.provideMerge(GitHubCliLive),
     Layer.provideMerge(textGenerationLayer),
   );
+  const gitManagerLayer = GitManagerLive.pipe(Layer.provideMerge(forkGitDomainLayer));
   const gitHubManagerLayer = GitHubManagerLive.pipe(
     Layer.provideMerge(gitCoreLayer),
     Layer.provideMerge(GitHubCliLive),

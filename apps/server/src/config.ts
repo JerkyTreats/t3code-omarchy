@@ -19,6 +19,7 @@ export interface ServerDerivedPaths {
   readonly stateDir: string;
   readonly dbPath: string;
   readonly keybindingsConfigPath: string;
+  readonly settingsPath: string;
   readonly worktreesDir: string;
   readonly attachmentsDir: string;
   readonly logsDir: string;
@@ -60,6 +61,7 @@ export const deriveServerPaths = Effect.fn(function* (
     stateDir,
     dbPath,
     keybindingsConfigPath: join(stateDir, "keybindings.json"),
+    settingsPath: join(stateDir, "settings.json"),
     worktreesDir: join(baseDir, "worktrees"),
     attachmentsDir,
     logsDir,
@@ -68,6 +70,32 @@ export const deriveServerPaths = Effect.fn(function* (
     providerEventLogPath: join(providerLogsDir, "events.log"),
     terminalLogsDir: join(logsDir, "terminals"),
     anonymousIdPath: join(stateDir, "anonymous-id"),
+  };
+});
+
+export const deriveServerPathsFromStateDir = Effect.fn(function* (
+  stateDir: ServerDerivedPaths["stateDir"],
+): Effect.fn.Return<ServerDerivedPaths & { readonly baseDir: string }, never, Path.Path> {
+  const { dirname, join, resolve } = yield* Path.Path;
+  const resolvedStateDir = resolve(stateDir);
+  const baseDir = dirname(resolvedStateDir);
+  const logsDir = join(resolvedStateDir, "logs");
+  const providerLogsDir = join(logsDir, "provider");
+
+  return {
+    baseDir,
+    stateDir: resolvedStateDir,
+    dbPath: join(resolvedStateDir, "state.sqlite"),
+    keybindingsConfigPath: join(resolvedStateDir, "keybindings.json"),
+    settingsPath: join(resolvedStateDir, "settings.json"),
+    worktreesDir: join(baseDir, "worktrees"),
+    attachmentsDir: join(resolvedStateDir, "attachments"),
+    logsDir,
+    serverLogPath: join(logsDir, "server.log"),
+    providerLogsDir,
+    providerEventLogPath: join(providerLogsDir, "events.log"),
+    terminalLogsDir: join(logsDir, "terminals"),
+    anonymousIdPath: join(resolvedStateDir, "anonymous-id"),
   };
 });
 

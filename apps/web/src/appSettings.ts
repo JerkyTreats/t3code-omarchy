@@ -1,290 +1,165 @@
-import { useCallback } from "react";
-import { Option, Schema } from "effect";
+import { useMemo } from "react";
+import { DEFAULT_MODEL_BY_PROVIDER, type ProviderKind } from "@t3tools/contracts";
 import {
-  TrimmedNonEmptyString,
-  type ProviderKind,
-  type ProviderStartOptions,
-} from "@t3tools/contracts";
-import {
-  getDefaultModel,
-  getModelOptions,
-  normalizeModelSlug,
-  resolveSelectableModel,
-} from "@t3tools/shared/model";
-import { useLocalStorage } from "./hooks/useLocalStorage";
-import { EnvMode } from "./components/BranchToolbar.logic";
+  DEFAULT_UNIFIED_SETTINGS,
+  type UnifiedSettings,
+  type ServerSettingsPatch,
+} from "@t3tools/contracts/settings";
+import { normalizeModelSlug } from "@t3tools/shared/model";
+import { useSettings, useUpdateSettings } from "./hooks/useSettings";
 
-const APP_SETTINGS_STORAGE_KEY = "t3code:app-settings:v1";
-const MAX_CUSTOM_MODEL_COUNT = 32;
-export const MAX_CUSTOM_MODEL_LENGTH = 256;
-
-export const TimestampFormat = Schema.Literals(["locale", "12-hour", "24-hour"]);
-export type TimestampFormat = typeof TimestampFormat.Type;
-export const DEFAULT_TIMESTAMP_FORMAT: TimestampFormat = "locale";
-export const SidebarProjectSortOrder = Schema.Literals(["updated_at", "created_at", "manual"]);
-export type SidebarProjectSortOrder = typeof SidebarProjectSortOrder.Type;
-export const DEFAULT_SIDEBAR_PROJECT_SORT_ORDER: SidebarProjectSortOrder = "updated_at";
-export const SidebarThreadSortOrder = Schema.Literals(["updated_at", "created_at"]);
-export type SidebarThreadSortOrder = typeof SidebarThreadSortOrder.Type;
-export const DEFAULT_SIDEBAR_THREAD_SORT_ORDER: SidebarThreadSortOrder = "updated_at";
-type CustomModelSettingsKey = "customCodexModels" | "customClaudeModels";
-export type ProviderCustomModelConfig = {
-  provider: ProviderKind;
-  settingsKey: CustomModelSettingsKey;
-  defaultSettingsKey: CustomModelSettingsKey;
-  title: string;
-  description: string;
-  placeholder: string;
-  example: string;
+type LegacyAppSettings = UnifiedSettings & {
+  customCodexModels: string[];
+  customClaudeModels: string[];
+  codexBinaryPath: string;
+  codexHomePath: string;
+  claudeBinaryPath: string;
+  textGenerationModel: string | null;
 };
 
-const BUILT_IN_MODEL_SLUGS_BY_PROVIDER: Record<ProviderKind, ReadonlySet<string>> = {
-  codex: new Set(getModelOptions("codex").map((option) => option.slug)),
-  claudeAgent: new Set(getModelOptions("claudeAgent").map((option) => option.slug)),
-};
-
-const withDefaults =
-  <
-    S extends Schema.Top & Schema.WithoutConstructorDefault,
-    D extends S["~type.make.in"] & S["Encoded"],
-  >(
-    fallback: () => D,
-  ) =>
-  (schema: S) =>
-    schema.pipe(
-      Schema.withConstructorDefault(() => Option.some(fallback())),
-      Schema.withDecodingDefault(() => fallback()),
-    );
-
-export const AppSettingsSchema = Schema.Struct({
-  claudeBinaryPath: Schema.String.check(Schema.isMaxLength(4096)).pipe(withDefaults(() => "")),
-  codexBinaryPath: Schema.String.check(Schema.isMaxLength(4096)).pipe(withDefaults(() => "")),
-  codexHomePath: Schema.String.check(Schema.isMaxLength(4096)).pipe(withDefaults(() => "")),
-  defaultThreadEnvMode: EnvMode.pipe(withDefaults(() => "local" as const satisfies EnvMode)),
-  confirmThreadDelete: Schema.Boolean.pipe(withDefaults(() => true)),
-  diffWordWrap: Schema.Boolean.pipe(withDefaults(() => false)),
-  enableAssistantStreaming: Schema.Boolean.pipe(withDefaults(() => false)),
-  sidebarProjectSortOrder: SidebarProjectSortOrder.pipe(
-    withDefaults(() => DEFAULT_SIDEBAR_PROJECT_SORT_ORDER),
-  ),
-  sidebarThreadSortOrder: SidebarThreadSortOrder.pipe(
-    withDefaults(() => DEFAULT_SIDEBAR_THREAD_SORT_ORDER),
-  ),
-  timestampFormat: TimestampFormat.pipe(withDefaults(() => DEFAULT_TIMESTAMP_FORMAT)),
-  customCodexModels: Schema.Array(Schema.String).pipe(withDefaults(() => [])),
-  customClaudeModels: Schema.Array(Schema.String).pipe(withDefaults(() => [])),
-  textGenerationModel: Schema.optional(TrimmedNonEmptyString),
-});
-export type AppSettings = typeof AppSettingsSchema.Type;
-export interface AppModelOption {
-  slug: string;
-  name: string;
-  isCustom: boolean;
-}
-
-const DEFAULT_APP_SETTINGS = AppSettingsSchema.makeUnsafe({});
-const PROVIDER_CUSTOM_MODEL_CONFIG: Record<ProviderKind, ProviderCustomModelConfig> = {
-  codex: {
-    provider: "codex",
-    settingsKey: "customCodexModels",
-    defaultSettingsKey: "customCodexModels",
-    title: "Codex",
-    description: "Save additional Codex model slugs for the picker and `/model` command.",
-    placeholder: "your-codex-model-slug",
-    example: "gpt-6.7-codex-ultra-preview",
-  },
-  claudeAgent: {
-    provider: "claudeAgent",
-    settingsKey: "customClaudeModels",
-    defaultSettingsKey: "customClaudeModels",
-    title: "Claude",
-    description: "Save additional Claude model slugs for the picker and `/model` command.",
-    placeholder: "your-claude-model-slug",
-    example: "claude-sonnet-5-0",
-  },
-};
-export const MODEL_PROVIDER_SETTINGS = Object.values(PROVIDER_CUSTOM_MODEL_CONFIG);
-
-export function normalizeCustomModelSlugs(
-  models: Iterable<string | null | undefined>,
-  provider: ProviderKind = "codex",
-): string[] {
-  const normalizedModels: string[] = [];
-  const seen = new Set<string>();
-  const builtInModelSlugs = BUILT_IN_MODEL_SLUGS_BY_PROVIDER[provider];
-
-  for (const candidate of models) {
-    const normalized = normalizeModelSlug(candidate, provider);
-    if (
-      !normalized ||
-      normalized.length > MAX_CUSTOM_MODEL_LENGTH ||
-      builtInModelSlugs.has(normalized) ||
-      seen.has(normalized)
-    ) {
-      continue;
-    }
-
-    seen.add(normalized);
-    normalizedModels.push(normalized);
-    if (normalizedModels.length >= MAX_CUSTOM_MODEL_COUNT) {
-      break;
-    }
-  }
-
-  return normalizedModels;
-}
-
-function normalizeAppSettings(settings: AppSettings): AppSettings {
+function toLegacySettings(settings: UnifiedSettings): LegacyAppSettings {
   return {
     ...settings,
-    customCodexModels: normalizeCustomModelSlugs(settings.customCodexModels, "codex"),
-    customClaudeModels: normalizeCustomModelSlugs(settings.customClaudeModels, "claudeAgent"),
+    customCodexModels: [...settings.providers.codex.customModels],
+    customClaudeModels: [...settings.providers.claudeAgent.customModels],
+    codexBinaryPath: settings.providers.codex.binaryPath,
+    codexHomePath: settings.providers.codex.homePath,
+    claudeBinaryPath: settings.providers.claudeAgent.binaryPath,
+    textGenerationModel: settings.textGenerationModelSelection.model,
   };
 }
 
-export function getCustomModelsForProvider(
-  settings: Pick<AppSettings, CustomModelSettingsKey>,
-  provider: ProviderKind,
-): readonly string[] {
-  return settings[PROVIDER_CUSTOM_MODEL_CONFIG[provider].settingsKey];
-}
+export function useAppSettings() {
+  const settings = useSettings();
+  const { updateSettings, resetSettings } = useUpdateSettings();
 
-export function getDefaultCustomModelsForProvider(
-  defaults: Pick<AppSettings, CustomModelSettingsKey>,
-  provider: ProviderKind,
-): readonly string[] {
-  return defaults[PROVIDER_CUSTOM_MODEL_CONFIG[provider].defaultSettingsKey];
-}
-
-export function patchCustomModels(
-  provider: ProviderKind,
-  models: string[],
-): Partial<Pick<AppSettings, CustomModelSettingsKey>> {
   return {
-    [PROVIDER_CUSTOM_MODEL_CONFIG[provider].settingsKey]: models,
+    settings: useMemo(() => toLegacySettings(settings), [settings]),
+    defaults: toLegacySettings(DEFAULT_UNIFIED_SETTINGS),
+    updateSettings: (patch: Partial<LegacyAppSettings>) => {
+      const nextPatch: Record<string, unknown> = {};
+
+      if ("enableAssistantStreaming" in patch) {
+        nextPatch.enableAssistantStreaming = patch.enableAssistantStreaming;
+      }
+      if ("defaultThreadEnvMode" in patch) {
+        nextPatch.defaultThreadEnvMode = patch.defaultThreadEnvMode;
+      }
+      if ("confirmThreadDelete" in patch) {
+        nextPatch.confirmThreadDelete = patch.confirmThreadDelete;
+      }
+      if ("diffWordWrap" in patch) {
+        nextPatch.diffWordWrap = patch.diffWordWrap;
+      }
+      if ("sidebarProjectSortOrder" in patch) {
+        nextPatch.sidebarProjectSortOrder = patch.sidebarProjectSortOrder;
+      }
+      if ("sidebarThreadSortOrder" in patch) {
+        nextPatch.sidebarThreadSortOrder = patch.sidebarThreadSortOrder;
+      }
+      if ("timestampFormat" in patch) {
+        nextPatch.timestampFormat = patch.timestampFormat;
+      }
+
+      const providerPatch: Record<string, unknown> = {};
+
+      if ("customCodexModels" in patch || "codexBinaryPath" in patch || "codexHomePath" in patch) {
+        providerPatch.codex = {
+          ...(patch.customCodexModels ? { customModels: patch.customCodexModels } : {}),
+          ...(typeof patch.codexBinaryPath === "string"
+            ? { binaryPath: patch.codexBinaryPath }
+            : {}),
+          ...(typeof patch.codexHomePath === "string" ? { homePath: patch.codexHomePath } : {}),
+        };
+      }
+
+      if ("customClaudeModels" in patch || "claudeBinaryPath" in patch) {
+        providerPatch.claudeAgent = {
+          ...(patch.customClaudeModels ? { customModels: patch.customClaudeModels } : {}),
+          ...(typeof patch.claudeBinaryPath === "string"
+            ? { binaryPath: patch.claudeBinaryPath }
+            : {}),
+        };
+      }
+
+      if (typeof patch.textGenerationModel === "string" && patch.textGenerationModel.trim()) {
+        nextPatch.textGenerationModelSelection = {
+          ...settings.textGenerationModelSelection,
+          model: patch.textGenerationModel,
+        };
+      }
+
+      if (Object.keys(providerPatch).length > 0) {
+        nextPatch.providers = providerPatch;
+      }
+
+      updateSettings(nextPatch as Partial<UnifiedSettings> & ServerSettingsPatch);
+    },
+    resetSettings,
   };
 }
 
 export function getCustomModelsByProvider(
-  settings: Pick<AppSettings, CustomModelSettingsKey>,
-): Record<ProviderKind, readonly string[]> {
+  settings: LegacyAppSettings,
+): Record<ProviderKind, string[]> {
   return {
-    codex: getCustomModelsForProvider(settings, "codex"),
-    claudeAgent: getCustomModelsForProvider(settings, "claudeAgent"),
+    codex: settings.customCodexModels,
+    claudeAgent: settings.customClaudeModels,
   };
 }
 
-export function getAppModelOptions(
-  provider: ProviderKind,
-  customModels: readonly string[],
-  selectedModel?: string | null,
-): AppModelOption[] {
-  const options: AppModelOption[] = getModelOptions(provider).map(({ slug, name }) => ({
-    slug,
-    name,
-    isCustom: false,
-  }));
-  const seen = new Set(options.map((option) => option.slug));
-  const trimmedSelectedModel = selectedModel?.trim().toLowerCase();
-
-  for (const slug of normalizeCustomModelSlugs(customModels, provider)) {
-    if (seen.has(slug)) {
-      continue;
-    }
-
-    seen.add(slug);
-    options.push({
-      slug,
-      name: slug,
-      isCustom: true,
+export function getCustomModelOptionsByProvider(
+  settings: LegacyAppSettings,
+): Record<ProviderKind, ReadonlyArray<{ slug: string; name: string }>> {
+  const buildOptions = (provider: ProviderKind, customModels: string[]) => {
+    const defaultModel = DEFAULT_MODEL_BY_PROVIDER[provider];
+    const seen = new Set<string>();
+    const values = [defaultModel, ...customModels].flatMap((value) => {
+      const normalized = normalizeModelSlug(value, provider);
+      if (!normalized || seen.has(normalized)) {
+        return [];
+      }
+      seen.add(normalized);
+      return [{ slug: normalized, name: normalized }];
     });
-  }
+    return values;
+  };
 
-  const normalizedSelectedModel = normalizeModelSlug(selectedModel, provider);
-  const selectedModelMatchesExistingName =
-    typeof trimmedSelectedModel === "string" &&
-    options.some((option) => option.name.toLowerCase() === trimmedSelectedModel);
-  if (
-    normalizedSelectedModel &&
-    !seen.has(normalizedSelectedModel) &&
-    !selectedModelMatchesExistingName
-  ) {
-    options.push({
-      slug: normalizedSelectedModel,
-      name: normalizedSelectedModel,
-      isCustom: true,
-    });
-  }
-
-  return options;
+  return {
+    codex: buildOptions("codex", settings.customCodexModels),
+    claudeAgent: buildOptions("claudeAgent", settings.customClaudeModels),
+  };
 }
 
 export function resolveAppModelSelection(
   provider: ProviderKind,
-  customModels: Record<ProviderKind, readonly string[]>,
+  customModelsByProvider: Record<ProviderKind, ReadonlyArray<string>>,
   selectedModel: string | null | undefined,
 ): string {
-  const customModelsForProvider = customModels[provider];
-  const options = getAppModelOptions(provider, customModelsForProvider, selectedModel);
-  return resolveSelectableModel(provider, selectedModel, options) ?? getDefaultModel(provider);
+  const normalized = normalizeModelSlug(selectedModel, provider);
+  if (!normalized) {
+    return DEFAULT_MODEL_BY_PROVIDER[provider];
+  }
+  const customModels = customModelsByProvider[provider] ?? [];
+  return customModels.includes(normalized) || normalized === DEFAULT_MODEL_BY_PROVIDER[provider]
+    ? normalized
+    : normalized;
 }
 
-export function getCustomModelOptionsByProvider(
-  settings: Pick<AppSettings, CustomModelSettingsKey>,
-): Record<ProviderKind, ReadonlyArray<{ slug: string; name: string }>> {
-  const customModelsByProvider = getCustomModelsByProvider(settings);
-  return {
-    codex: getAppModelOptions("codex", customModelsByProvider.codex),
-    claudeAgent: getAppModelOptions("claudeAgent", customModelsByProvider.claudeAgent),
+export function getProviderStartOptions(settings: LegacyAppSettings) {
+  const codex = {
+    ...(settings.codexBinaryPath.trim().length > 0 ? { binaryPath: settings.codexBinaryPath } : {}),
+    ...(settings.codexHomePath.trim().length > 0 ? { homePath: settings.codexHomePath } : {}),
   };
-}
+  const claudeAgent =
+    settings.claudeBinaryPath.trim().length > 0 ? { binaryPath: settings.claudeBinaryPath } : {};
 
-export function getProviderStartOptions(
-  settings: Pick<AppSettings, "claudeBinaryPath" | "codexBinaryPath" | "codexHomePath">,
-): ProviderStartOptions | undefined {
-  const providerOptions: ProviderStartOptions = {
-    ...(settings.codexBinaryPath || settings.codexHomePath
-      ? {
-          codex: {
-            ...(settings.codexBinaryPath ? { binaryPath: settings.codexBinaryPath } : {}),
-            ...(settings.codexHomePath ? { homePath: settings.codexHomePath } : {}),
-          },
-        }
-      : {}),
-    ...(settings.claudeBinaryPath
-      ? {
-          claudeAgent: {
-            binaryPath: settings.claudeBinaryPath,
-          },
-        }
-      : {}),
-  };
-
-  return Object.keys(providerOptions).length > 0 ? providerOptions : undefined;
-}
-
-export function useAppSettings() {
-  const [settings, setSettings] = useLocalStorage(
-    APP_SETTINGS_STORAGE_KEY,
-    DEFAULT_APP_SETTINGS,
-    AppSettingsSchema,
-  );
-
-  const updateSettings = useCallback(
-    (patch: Partial<AppSettings>) => {
-      setSettings((prev) => normalizeAppSettings({ ...prev, ...patch }));
-    },
-    [setSettings],
-  );
-
-  const resetSettings = useCallback(() => {
-    setSettings(DEFAULT_APP_SETTINGS);
-  }, [setSettings]);
+  if (Object.keys(codex).length === 0 && Object.keys(claudeAgent).length === 0) {
+    return undefined;
+  }
 
   return {
-    settings,
-    updateSettings,
-    resetSettings,
-    defaults: DEFAULT_APP_SETTINGS,
-  } as const;
+    ...(Object.keys(codex).length > 0 ? { codex } : {}),
+    ...(Object.keys(claudeAgent).length > 0 ? { claudeAgent } : {}),
+  };
 }

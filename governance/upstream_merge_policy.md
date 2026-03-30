@@ -60,6 +60,16 @@ Classify each meaningful upstream change into one of these outcomes:
 - Prefer small integration commits or pull requests that clearly describe what was adopted, adapted, and rejected.
 - When a divergence becomes long lived, isolate the fork seam so future upstream sync work stays cheaper and safer.
 
+## Seam Strategy
+
+- Prefer a narrow upstream facing capability layer plus a fork owned adapter or policy layer when the same domain changes frequently in both codebases.
+- Keep upstream shaped contracts, process details, and transport mechanics on the upstream facing side of the seam.
+- Keep fork owned product semantics, workflow policy, UX state shaping, and progress translation on the fork side of the seam.
+- Treat the adapter or policy layer as the definitive place where upstream changes are reconciled into fork behavior.
+- If an upstream merge repeatedly forces edits across web, server, and desktop for the same concern, extract or strengthen the seam before the next sync.
+- Browser facing or desktop facing services should depend on fork domain contracts when practical, not directly on upstream shaped runtime details.
+- Avoid pass through abstractions that only rename methods without encoding ownership or behavior boundaries.
+
 ## Conflict Resolution Rules
 
 - Correctness and reliability win over convenience.
@@ -74,6 +84,7 @@ Classify each meaningful upstream change into one of these outcomes:
 - Use the external watch workflow to surface new upstream changes.
 - For each upstream sync, record the adopted, adapted, and rejected changes in the pull request or commit body.
 - Call out compatibility impact for desktop IPC, WebSocket contracts, persisted browser state, server side state, and user visible workflow.
+- When adapting a shared domain, note where the authoritative fork seam lives so later merges have one clear reconciliation point.
 - Before considering an upstream sync complete, ensure `bun fmt`, `bun lint`, and `bun typecheck` all pass.
 
 ## Non Goals
