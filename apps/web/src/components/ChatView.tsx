@@ -3755,7 +3755,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
             <form
               ref={composerFormRef}
               onSubmit={onSend}
-              className="mx-auto w-full min-w-0 max-w-3xl"
+              className="relative mx-auto w-full min-w-0 max-w-3xl"
               data-chat-composer-form="true"
             >
               <div
@@ -3906,7 +3906,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
                         </div>
                       )}
                     {(!isComposerApprovalState || richDraftMode) && !activePendingApproval ? (
-                      <div className="mb-2 flex items-start justify-between gap-2">
+                      <div className="mb-2 flex items-start justify-between gap-2 pr-20 sm:pr-24">
                         {richDraftMode ? (
                           <ComposerRichDraftToolbar
                             disabled={isConnecting || isComposerApprovalState}

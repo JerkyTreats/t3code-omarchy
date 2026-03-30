@@ -14,10 +14,10 @@ interface ComposerTopActionsProps {
 
 export function ComposerTopActions(props: ComposerTopActionsProps) {
   return (
-    <div className="pointer-events-none absolute top-2 right-3 z-10 flex items-center gap-1.5 sm:right-4">
+    <div className="pointer-events-none absolute top-0 right-3 z-20 flex -translate-y-1/2 items-center gap-1.5 sm:right-4">
       <Button
         variant="outline"
-        className="pointer-events-auto rounded-full border-border/60 bg-background/88 text-muted-foreground/80 shadow-xs/5 backdrop-blur-sm hover:bg-background hover:text-foreground"
+        className="pointer-events-auto rounded-full border-border/85 bg-background/96 text-foreground/88 shadow-sm backdrop-blur-md hover:border-border hover:bg-background hover:text-foreground"
         size="icon-sm"
         type="button"
         onClick={props.onToggleRuntimeMode}
@@ -36,7 +36,7 @@ export function ComposerTopActions(props: ComposerTopActionsProps) {
               <Button
                 variant="outline"
                 size="icon-sm"
-                className="pointer-events-auto rounded-full border-border/60 bg-background/88 text-muted-foreground/80 shadow-xs/5 backdrop-blur-sm hover:bg-background hover:text-foreground"
+                className="pointer-events-auto rounded-full border-border/85 bg-background/96 text-foreground/92 shadow-sm backdrop-blur-md hover:border-border hover:bg-background hover:text-foreground"
                 onClick={props.onCaptureScreenshot}
                 aria-label="Capture screenshot and attach to draft"
               >
