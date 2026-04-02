@@ -96,17 +96,18 @@ export function summarizeGitResult(result: GitRunStackedActionResult): {
   title: string;
   description?: string;
 } {
+  const promote = result.promote;
   // Handle promote action first
-  if (result.promote.status === "promoted") {
-    const targetBranch = result.promote.targetBranch ?? "target";
-    const description = result.promote.branchDeleted
-      ? `${result.promote.sourceBranch ?? "Feature branch"} deleted`
+  if (promote?.status === "promoted") {
+    const targetBranch = promote.targetBranch ?? "target";
+    const description = promote.branchDeleted
+      ? `${promote.sourceBranch ?? "Feature branch"} deleted`
       : undefined;
     return withDescription(`Promoted to ${targetBranch}`, description);
   }
 
-  if (result.promote.status === "conflicts") {
-    const fileCount = result.promote.conflictedFiles?.length ?? 0;
+  if (promote?.status === "conflicts") {
+    const fileCount = promote.conflictedFiles?.length ?? 0;
     return {
       title: "Merge conflicts",
       description: `${fileCount} file${fileCount === 1 ? "" : "s"} need resolution`,

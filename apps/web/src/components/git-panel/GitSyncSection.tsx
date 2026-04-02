@@ -41,12 +41,13 @@ export function GitSyncSection({
   onCreateResolveConflictDraft,
   onAbortActiveMerge,
 }: GitSyncSectionProps) {
+  const mergeStatus = mergeState ?? { inProgress: false, conflictedFiles: [] };
   const mergeDisabledReason = resolveMergeDisabledReason({
     gitStatus,
     activeWorkspaceBranch,
     mergeSourceBranch,
     hasConflicts,
-    mergeInProgress: mergeState.inProgress,
+    mergeInProgress: mergeStatus.inProgress,
     isMerging: isMergeRunning,
   });
 
@@ -101,8 +102,8 @@ export function GitSyncSection({
           <div className="space-y-2 rounded-md border border-destructive/30 bg-destructive/[0.04] p-2">
             <div className="flex items-center justify-between gap-2">
               <span className="text-xs font-medium text-destructive-foreground">
-                {mergeState.conflictedFiles.length} conflicted file
-                {mergeState.conflictedFiles.length === 1 ? "" : "s"}
+                {mergeStatus.conflictedFiles.length} conflicted file
+                {mergeStatus.conflictedFiles.length === 1 ? "" : "s"}
               </span>
               <div className="flex items-center gap-1.5">
                 <Button
@@ -124,7 +125,7 @@ export function GitSyncSection({
               </div>
             </div>
             <div className="flex flex-wrap gap-1">
-              {mergeState.conflictedFiles.map((file) => (
+              {mergeStatus.conflictedFiles.map((file) => (
                 <Badge key={file} variant="outline" size="sm">
                   {file}
                 </Badge>

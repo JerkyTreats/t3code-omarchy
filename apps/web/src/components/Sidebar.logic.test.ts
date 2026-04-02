@@ -1,20 +1,26 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
-  deriveThreadActivityStatusFlags,
+  createThreadJumpHintVisibilityController,
+  getVisibleSidebarThreadIds,
+  resolveAdjacentThreadId,
   getFallbackThreadIdAfterDelete,
   getVisibleThreadsForProject,
   getProjectSortTimestamp,
   hasUnseenCompletion,
+  isContextMenuPointerDown,
+  orderItemsByPreferredIds,
   resolveProjectStatusIndicator,
+  resolveSidebarNewThreadSeedContext,
   resolveSidebarNewThreadEnvMode,
   resolveThreadRowClassName,
   resolveThreadStatusPill,
   shouldClearThreadSelectionOnMouseDown,
   sortProjectsForSidebar,
   sortThreadsForSidebar,
+  THREAD_JUMP_HINT_SHOW_DELAY_MS,
 } from "./Sidebar.logic";
-import { ProjectId, ThreadId } from "@t3tools/contracts";
+import { OrchestrationLatestTurn, ProjectId, ThreadId } from "@t3tools/contracts";
 import {
   DEFAULT_INTERACTION_MODE,
   DEFAULT_RUNTIME_MODE,
@@ -25,7 +31,7 @@ import {
 function makeLatestTurn(overrides?: {
   completedAt?: string | null;
   startedAt?: string | null;
-}): Parameters<typeof hasUnseenCompletion>[0]["latestTurn"] {
+}): OrchestrationLatestTurn {
   return {
     turnId: "turn-1" as never,
     state: "completed",
@@ -36,39 +42,81 @@ function makeLatestTurn(overrides?: {
   };
 }
 
-function makePlanActivity(input: {
-  createdAt?: string;
-  sequence?: number;
-  turnId?: string;
-  steps: ReadonlyArray<{
-    step: string;
-    status: "pending" | "inProgress" | "completed";
-  }>;
-}): NonNullable<Parameters<typeof deriveThreadActivityStatusFlags>[0]>[number] {
-  return {
-    id: `evt-${input.sequence ?? 1}` as never,
-    tone: "info",
-    kind: "turn.plan.updated",
-    summary: "Plan updated",
-    payload: { plan: input.steps },
-    turnId: (input.turnId ?? "turn-1") as never,
-    sequence: input.sequence ?? 1,
-    createdAt: input.createdAt ?? "2026-03-09T10:00:00.000Z",
-  };
-}
-
 describe("hasUnseenCompletion", () => {
   it("returns true when a thread completed after its last visit", () => {
     expect(
       hasUnseenCompletion({
-        activities: [],
+        hasActionableProposedPlan: false,
+        hasPendingApprovals: false,
+        hasPendingUserInput: false,
         interactionMode: "default",
         latestTurn: makeLatestTurn(),
         lastVisitedAt: "2026-03-09T10:04:00.000Z",
-        proposedPlans: [],
         session: null,
       }),
     ).toBe(true);
+  });
+});
+
+describe("createThreadJumpHintVisibilityController", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("delays showing jump hints until the configured delay elapses", () => {
+    const visibilityChanges: boolean[] = [];
+    const controller = createThreadJumpHintVisibilityController({
+      delayMs: THREAD_JUMP_HINT_SHOW_DELAY_MS,
+      onVisibilityChange: (visible) => {
+        visibilityChanges.push(visible);
+      },
+    });
+
+    controller.sync(true);
+    vi.advanceTimersByTime(THREAD_JUMP_HINT_SHOW_DELAY_MS - 1);
+
+    expect(visibilityChanges).toEqual([]);
+
+    vi.advanceTimersByTime(1);
+
+    expect(visibilityChanges).toEqual([true]);
+  });
+
+  it("hides immediately when the modifiers are released", () => {
+    const visibilityChanges: boolean[] = [];
+    const controller = createThreadJumpHintVisibilityController({
+      delayMs: THREAD_JUMP_HINT_SHOW_DELAY_MS,
+      onVisibilityChange: (visible) => {
+        visibilityChanges.push(visible);
+      },
+    });
+
+    controller.sync(true);
+    vi.advanceTimersByTime(THREAD_JUMP_HINT_SHOW_DELAY_MS);
+    controller.sync(false);
+
+    expect(visibilityChanges).toEqual([true, false]);
+  });
+
+  it("cancels a pending reveal when the modifier is released early", () => {
+    const visibilityChanges: boolean[] = [];
+    const controller = createThreadJumpHintVisibilityController({
+      delayMs: THREAD_JUMP_HINT_SHOW_DELAY_MS,
+      onVisibilityChange: (visible) => {
+        visibilityChanges.push(visible);
+      },
+    });
+
+    controller.sync(true);
+    vi.advanceTimersByTime(Math.floor(THREAD_JUMP_HINT_SHOW_DELAY_MS / 2));
+    controller.sync(false);
+    vi.advanceTimersByTime(THREAD_JUMP_HINT_SHOW_DELAY_MS);
+
+    expect(visibilityChanges).toEqual([]);
   });
 });
 
@@ -119,21 +167,241 @@ describe("resolveSidebarNewThreadEnvMode", () => {
   });
 });
 
+describe("resolveSidebarNewThreadSeedContext", () => {
+  it("inherits the active server thread context when creating a new thread in the same project", () => {
+    expect(
+      resolveSidebarNewThreadSeedContext({
+        projectId: "project-1",
+        defaultEnvMode: "local",
+        activeThread: {
+          projectId: "project-1",
+          branch: "effect-atom",
+          worktreePath: null,
+        },
+        activeDraftThread: null,
+      }),
+    ).toEqual({
+      branch: "effect-atom",
+      worktreePath: null,
+      envMode: "local",
+    });
+  });
+
+  it("prefers the active draft thread context when it matches the target project", () => {
+    expect(
+      resolveSidebarNewThreadSeedContext({
+        projectId: "project-1",
+        defaultEnvMode: "local",
+        activeThread: {
+          projectId: "project-1",
+          branch: "effect-atom",
+          worktreePath: null,
+        },
+        activeDraftThread: {
+          projectId: "project-1",
+          branch: "feature/new-draft",
+          worktreePath: "/repo/worktree",
+          envMode: "worktree",
+        },
+      }),
+    ).toEqual({
+      branch: "feature/new-draft",
+      worktreePath: "/repo/worktree",
+      envMode: "worktree",
+    });
+  });
+
+  it("falls back to the default env mode when there is no matching active thread context", () => {
+    expect(
+      resolveSidebarNewThreadSeedContext({
+        projectId: "project-2",
+        defaultEnvMode: "worktree",
+        activeThread: {
+          projectId: "project-1",
+          branch: "effect-atom",
+          worktreePath: null,
+        },
+        activeDraftThread: null,
+      }),
+    ).toEqual({
+      envMode: "worktree",
+    });
+  });
+});
+
+describe("orderItemsByPreferredIds", () => {
+  it("keeps preferred ids first, skips stale ids, and preserves the relative order of remaining items", () => {
+    const ordered = orderItemsByPreferredIds({
+      items: [
+        { id: ProjectId.makeUnsafe("project-1"), name: "One" },
+        { id: ProjectId.makeUnsafe("project-2"), name: "Two" },
+        { id: ProjectId.makeUnsafe("project-3"), name: "Three" },
+      ],
+      preferredIds: [
+        ProjectId.makeUnsafe("project-3"),
+        ProjectId.makeUnsafe("project-missing"),
+        ProjectId.makeUnsafe("project-1"),
+      ],
+      getId: (project) => project.id,
+    });
+
+    expect(ordered.map((project) => project.id)).toEqual([
+      ProjectId.makeUnsafe("project-3"),
+      ProjectId.makeUnsafe("project-1"),
+      ProjectId.makeUnsafe("project-2"),
+    ]);
+  });
+
+  it("does not duplicate items when preferred ids repeat", () => {
+    const ordered = orderItemsByPreferredIds({
+      items: [
+        { id: ProjectId.makeUnsafe("project-1"), name: "One" },
+        { id: ProjectId.makeUnsafe("project-2"), name: "Two" },
+      ],
+      preferredIds: [
+        ProjectId.makeUnsafe("project-2"),
+        ProjectId.makeUnsafe("project-1"),
+        ProjectId.makeUnsafe("project-2"),
+      ],
+      getId: (project) => project.id,
+    });
+
+    expect(ordered.map((project) => project.id)).toEqual([
+      ProjectId.makeUnsafe("project-2"),
+      ProjectId.makeUnsafe("project-1"),
+    ]);
+  });
+});
+
+describe("resolveAdjacentThreadId", () => {
+  it("resolves adjacent thread ids in ordered sidebar traversal", () => {
+    const threads = [
+      ThreadId.makeUnsafe("thread-1"),
+      ThreadId.makeUnsafe("thread-2"),
+      ThreadId.makeUnsafe("thread-3"),
+    ];
+
+    expect(
+      resolveAdjacentThreadId({
+        threadIds: threads,
+        currentThreadId: threads[1] ?? null,
+        direction: "previous",
+      }),
+    ).toBe(threads[0]);
+    expect(
+      resolveAdjacentThreadId({
+        threadIds: threads,
+        currentThreadId: threads[1] ?? null,
+        direction: "next",
+      }),
+    ).toBe(threads[2]);
+    expect(
+      resolveAdjacentThreadId({
+        threadIds: threads,
+        currentThreadId: null,
+        direction: "next",
+      }),
+    ).toBe(threads[0]);
+    expect(
+      resolveAdjacentThreadId({
+        threadIds: threads,
+        currentThreadId: null,
+        direction: "previous",
+      }),
+    ).toBe(threads[2]);
+    expect(
+      resolveAdjacentThreadId({
+        threadIds: threads,
+        currentThreadId: threads[0] ?? null,
+        direction: "previous",
+      }),
+    ).toBeNull();
+  });
+});
+
+describe("getVisibleSidebarThreadIds", () => {
+  it("returns only the rendered visible thread order across projects", () => {
+    expect(
+      getVisibleSidebarThreadIds([
+        {
+          renderedThreadIds: [
+            ThreadId.makeUnsafe("thread-12"),
+            ThreadId.makeUnsafe("thread-11"),
+            ThreadId.makeUnsafe("thread-10"),
+          ],
+        },
+        {
+          renderedThreadIds: [ThreadId.makeUnsafe("thread-8"), ThreadId.makeUnsafe("thread-6")],
+        },
+      ]),
+    ).toEqual([
+      ThreadId.makeUnsafe("thread-12"),
+      ThreadId.makeUnsafe("thread-11"),
+      ThreadId.makeUnsafe("thread-10"),
+      ThreadId.makeUnsafe("thread-8"),
+      ThreadId.makeUnsafe("thread-6"),
+    ]);
+  });
+
+  it("skips threads from collapsed projects whose thread panels are not shown", () => {
+    expect(
+      getVisibleSidebarThreadIds([
+        {
+          shouldShowThreadPanel: false,
+          renderedThreadIds: [
+            ThreadId.makeUnsafe("thread-hidden-2"),
+            ThreadId.makeUnsafe("thread-hidden-1"),
+          ],
+        },
+        {
+          shouldShowThreadPanel: true,
+          renderedThreadIds: [ThreadId.makeUnsafe("thread-12"), ThreadId.makeUnsafe("thread-11")],
+        },
+      ]),
+    ).toEqual([ThreadId.makeUnsafe("thread-12"), ThreadId.makeUnsafe("thread-11")]);
+  });
+});
+
+describe("isContextMenuPointerDown", () => {
+  it("treats secondary-button presses as context menu gestures on all platforms", () => {
+    expect(
+      isContextMenuPointerDown({
+        button: 2,
+        ctrlKey: false,
+        isMac: false,
+      }),
+    ).toBe(true);
+  });
+
+  it("treats ctrl+primary-click as a context menu gesture on macOS", () => {
+    expect(
+      isContextMenuPointerDown({
+        button: 0,
+        ctrlKey: true,
+        isMac: true,
+      }),
+    ).toBe(true);
+  });
+
+  it("does not treat ctrl+primary-click as a context menu gesture off macOS", () => {
+    expect(
+      isContextMenuPointerDown({
+        button: 0,
+        ctrlKey: true,
+        isMac: false,
+      }),
+    ).toBe(false);
+  });
+});
+
 describe("resolveThreadStatusPill", () => {
-  const runningRuntime = {
-    sessionStatus: "running" as const,
-    turnStatus: "running" as const,
-    turnId: "turn-1" as never,
-    pendingTurn: null,
-    updatedAt: "2026-03-09T10:00:00.000Z",
-  };
   const baseThread = {
-    activities: [],
+    hasActionableProposedPlan: false,
+    hasPendingApprovals: false,
+    hasPendingUserInput: false,
     interactionMode: "plan" as const,
     latestTurn: null,
     lastVisitedAt: undefined,
-    proposedPlans: [],
-    runtime: null,
     session: {
       provider: "codex" as const,
       status: "running" as const,
@@ -146,9 +414,11 @@ describe("resolveThreadStatusPill", () => {
   it("shows pending approval before all other statuses", () => {
     expect(
       resolveThreadStatusPill({
-        thread: baseThread,
-        hasPendingApprovals: true,
-        hasPendingUserInput: true,
+        thread: {
+          ...baseThread,
+          hasPendingApprovals: true,
+          hasPendingUserInput: true,
+        },
       }),
     ).toMatchObject({ label: "Pending Approval", pulse: false });
   });
@@ -156,236 +426,20 @@ describe("resolveThreadStatusPill", () => {
   it("shows awaiting input when plan mode is blocked on user answers", () => {
     expect(
       resolveThreadStatusPill({
-        thread: baseThread,
-        hasPendingApprovals: false,
-        hasPendingUserInput: true,
-      }),
-    ).toMatchObject({ label: "Awaiting Input", pulse: false });
-  });
-
-  it("suppresses a stale completed pill while a new local turn is starting", () => {
-    expect(
-      resolveThreadStatusPill({
         thread: {
           ...baseThread,
-          interactionMode: "default",
-          latestTurn: makeLatestTurn(),
-          lastVisitedAt: "2026-03-09T10:04:00.000Z",
-          runtime: {
-            sessionStatus: "ready",
-            turnStatus: "pending",
-            turnId: null,
-            pendingTurn: {
-              turnId: null,
-              messageId: "message-1" as never,
-              requestedAt: "2026-03-09T10:05:30.000Z",
-              sourceProposedPlanThreadId: null,
-              sourceProposedPlanId: null,
-            },
-            updatedAt: "2026-03-09T10:05:30.000Z",
-          },
-          session: {
-            ...baseThread.session,
-            status: "ready",
-            orchestrationStatus: "ready",
-          },
+          hasPendingUserInput: true,
         },
-        hasPendingApprovals: false,
-        hasPendingUserInput: false,
       }),
-    ).toMatchObject({ label: "Working", pulse: true });
+    ).toMatchObject({ label: "Awaiting Input", pulse: false });
   });
 
   it("falls back to working when the thread is actively running without blockers", () => {
     expect(
       resolveThreadStatusPill({
-        thread: {
-          ...baseThread,
-          runtime: runningRuntime,
-        },
-        hasPendingApprovals: false,
-        hasPendingUserInput: false,
+        thread: baseThread,
       }),
     ).toMatchObject({ label: "Working", pulse: true });
-  });
-
-  it("does not keep a completed turn in working when no active turn remains", () => {
-    expect(
-      resolveThreadStatusPill({
-        thread: {
-          ...baseThread,
-          latestTurn: makeLatestTurn(),
-          lastVisitedAt: "2026-03-09T10:04:00.000Z",
-          runtime: {
-            sessionStatus: "running",
-            turnStatus: "completed",
-            turnId: "turn-1" as never,
-            pendingTurn: null,
-            updatedAt: "2026-03-09T10:05:00.000Z",
-          },
-          session: {
-            ...baseThread.session,
-            status: "running",
-            orchestrationStatus: "running",
-            activeTurnId: undefined,
-          },
-        },
-        hasPendingApprovals: false,
-        hasPendingUserInput: false,
-      }),
-    ).toMatchObject({ label: "Completed", pulse: false });
-  });
-
-  it("does not reuse a stale historical plan when the latest turn is missing", () => {
-    expect(
-      resolveThreadStatusPill({
-        thread: {
-          ...baseThread,
-          activities: [
-            makePlanActivity({
-              createdAt: "2026-03-09T06:20:46.000Z",
-              turnId: "turn-old",
-              steps: [
-                { step: "Capture Tailscale versions and sources", status: "completed" },
-                { step: "Write DNS capability whitepaper", status: "completed" },
-                { step: "Update plan and endpoint spec", status: "completed" },
-                { step: "Run doc sanity checks", status: "completed" },
-              ],
-            }),
-          ],
-          runtime: {
-            sessionStatus: "ready",
-            turnStatus: "pending",
-            turnId: null,
-            pendingTurn: {
-              turnId: null,
-              messageId: "message-2" as never,
-              requestedAt: "2026-03-09T07:19:00.000Z",
-              sourceProposedPlanThreadId: null,
-              sourceProposedPlanId: null,
-            },
-            updatedAt: "2026-03-09T07:19:00.000Z",
-          },
-          latestTurn: null,
-        },
-        hasPendingApprovals: false,
-        hasPendingUserInput: false,
-      }),
-    ).toMatchObject({ label: "Working", pulse: true });
-  });
-
-  it("shows current plan progress while the thread is running", () => {
-    expect(
-      resolveThreadStatusPill({
-        thread: {
-          ...baseThread,
-          activities: [
-            makePlanActivity({
-              steps: [
-                { step: "Collect moonbeans", status: "completed" },
-                { step: "Polish the cloud", status: "completed" },
-                { step: "Fold the thunder", status: "inProgress" },
-                { step: "Ship the rainbow", status: "pending" },
-              ],
-            }),
-          ],
-          runtime: runningRuntime,
-          latestTurn: makeLatestTurn({ completedAt: null }),
-        },
-        hasPendingApprovals: false,
-        hasPendingUserInput: false,
-      }),
-    ).toMatchObject({ label: "3/4", pulse: true });
-  });
-
-  it("uses the latest plan update for the active turn", () => {
-    expect(
-      resolveThreadStatusPill({
-        thread: {
-          ...baseThread,
-          activities: [
-            makePlanActivity({
-              sequence: 1,
-              steps: [
-                { step: "Warm the spoon", status: "completed" },
-                { step: "Stir the void", status: "inProgress" },
-              ],
-            }),
-            makePlanActivity({
-              sequence: 2,
-              steps: [
-                { step: "Warm the spoon", status: "completed" },
-                { step: "Stir the void", status: "completed" },
-                { step: "Tune the toaster", status: "inProgress" },
-                { step: "Launch the pancake", status: "pending" },
-              ],
-            }),
-          ],
-          runtime: runningRuntime,
-          latestTurn: makeLatestTurn({ completedAt: null }),
-        },
-        hasPendingApprovals: false,
-        hasPendingUserInput: false,
-      }),
-    ).toMatchObject({ label: "3/4", pulse: true });
-  });
-
-  it("uses the newest plan update even when activities are out of array order", () => {
-    expect(
-      resolveThreadStatusPill({
-        thread: {
-          ...baseThread,
-          activities: [
-            makePlanActivity({
-              sequence: 3,
-              createdAt: "2026-03-09T10:00:03.000Z",
-              steps: [
-                { step: "Warm the spoon", status: "completed" },
-                { step: "Stir the void", status: "completed" },
-                { step: "Tune the toaster", status: "inProgress" },
-                { step: "Launch the pancake", status: "pending" },
-              ],
-            }),
-            makePlanActivity({
-              sequence: 1,
-              createdAt: "2026-03-09T10:00:01.000Z",
-              steps: [
-                { step: "Warm the spoon", status: "completed" },
-                { step: "Stir the void", status: "inProgress" },
-              ],
-            }),
-          ],
-          runtime: runningRuntime,
-          latestTurn: makeLatestTurn({ completedAt: null }),
-        },
-        hasPendingApprovals: false,
-        hasPendingUserInput: false,
-      }),
-    ).toMatchObject({ label: "3/4", pulse: true });
-  });
-
-  it("shows full plan progress while the turn is still active", () => {
-    expect(
-      resolveThreadStatusPill({
-        thread: {
-          ...baseThread,
-          activities: [
-            makePlanActivity({
-              steps: [
-                { step: "Wake the bears", status: "completed" },
-                { step: "Bake the stars", status: "completed" },
-                { step: "Paint the wind", status: "completed" },
-                { step: "Wave goodbye", status: "completed" },
-              ],
-            }),
-          ],
-          runtime: runningRuntime,
-          latestTurn: makeLatestTurn({ completedAt: null }),
-        },
-        hasPendingApprovals: false,
-        hasPendingUserInput: false,
-      }),
-    ).toMatchObject({ label: "4/4", pulse: true });
   });
 
   it("shows plan ready when a settled plan turn has a proposed plan ready for follow-up", () => {
@@ -393,26 +447,14 @@ describe("resolveThreadStatusPill", () => {
       resolveThreadStatusPill({
         thread: {
           ...baseThread,
+          hasActionableProposedPlan: true,
           latestTurn: makeLatestTurn(),
-          proposedPlans: [
-            {
-              id: "plan-1" as never,
-              turnId: "turn-1" as never,
-              createdAt: "2026-03-09T10:00:00.000Z",
-              updatedAt: "2026-03-09T10:05:00.000Z",
-              planMarkdown: "# Plan",
-              implementedAt: null,
-              implementationThreadId: null,
-            },
-          ],
           session: {
             ...baseThread.session,
             status: "ready",
             orchestrationStatus: "ready",
           },
         },
-        hasPendingApprovals: false,
-        hasPendingUserInput: false,
       }),
     ).toMatchObject({ label: "Plan Ready", pulse: false });
   });
@@ -423,25 +465,12 @@ describe("resolveThreadStatusPill", () => {
         thread: {
           ...baseThread,
           latestTurn: makeLatestTurn(),
-          proposedPlans: [
-            {
-              id: "plan-1" as never,
-              turnId: "turn-1" as never,
-              createdAt: "2026-03-09T10:00:00.000Z",
-              updatedAt: "2026-03-09T10:05:00.000Z",
-              planMarkdown: "# Plan",
-              implementedAt: "2026-03-09T10:06:00.000Z",
-              implementationThreadId: "thread-implement" as never,
-            },
-          ],
           session: {
             ...baseThread.session,
             status: "ready",
             orchestrationStatus: "ready",
           },
         },
-        hasPendingApprovals: false,
-        hasPendingUserInput: false,
       }),
     ).toMatchObject({ label: "Completed", pulse: false });
   });
@@ -460,134 +489,8 @@ describe("resolveThreadStatusPill", () => {
             orchestrationStatus: "ready",
           },
         },
-        hasPendingApprovals: false,
-        hasPendingUserInput: false,
       }),
     ).toMatchObject({ label: "Completed", pulse: false });
-  });
-});
-
-describe("deriveThreadActivityStatusFlags", () => {
-  it("tracks pending approvals and pending user input in one pass", () => {
-    expect(
-      deriveThreadActivityStatusFlags([
-        {
-          id: "evt-approval-requested" as never,
-          tone: "approval",
-          kind: "approval.requested",
-          summary: "Approval requested",
-          payload: {
-            requestId: "approval-1",
-            requestKind: "command",
-          },
-          turnId: "turn-1" as never,
-          sequence: 1,
-          createdAt: "2026-03-09T10:00:00.000Z",
-        },
-        {
-          id: "evt-user-input-requested" as never,
-          tone: "info",
-          kind: "user-input.requested",
-          summary: "User input requested",
-          payload: {
-            requestId: "input-1",
-            questions: [
-              {
-                id: "question-1",
-                header: "Need input",
-                question: "Pick one",
-                options: [{ label: "A", description: "Option A" }],
-              },
-            ],
-          },
-          turnId: "turn-1" as never,
-          sequence: 2,
-          createdAt: "2026-03-09T10:00:01.000Z",
-        },
-        {
-          id: "evt-approval-resolved" as never,
-          tone: "approval",
-          kind: "approval.resolved",
-          summary: "Approval resolved",
-          payload: {
-            requestId: "approval-1",
-          },
-          turnId: "turn-1" as never,
-          sequence: 3,
-          createdAt: "2026-03-09T10:00:02.000Z",
-        },
-      ]),
-    ).toEqual({
-      hasPendingApprovals: false,
-      hasPendingUserInput: true,
-    });
-  });
-
-  it("stays correct when request activities are out of array order", () => {
-    expect(
-      deriveThreadActivityStatusFlags([
-        {
-          id: "evt-user-input-resolved" as never,
-          tone: "info",
-          kind: "user-input.resolved",
-          summary: "User input resolved",
-          payload: {
-            requestId: "input-1",
-          },
-          turnId: "turn-1" as never,
-          sequence: 4,
-          createdAt: "2026-03-09T10:00:03.000Z",
-        },
-        {
-          id: "evt-approval-requested" as never,
-          tone: "approval",
-          kind: "approval.requested",
-          summary: "Approval requested",
-          payload: {
-            requestId: "approval-1",
-            requestKind: "command",
-          },
-          turnId: "turn-1" as never,
-          sequence: 1,
-          createdAt: "2026-03-09T10:00:00.000Z",
-        },
-        {
-          id: "evt-approval-resolved" as never,
-          tone: "approval",
-          kind: "approval.resolved",
-          summary: "Approval resolved",
-          payload: {
-            requestId: "approval-1",
-          },
-          turnId: "turn-1" as never,
-          sequence: 2,
-          createdAt: "2026-03-09T10:00:01.000Z",
-        },
-        {
-          id: "evt-user-input-requested" as never,
-          tone: "info",
-          kind: "user-input.requested",
-          summary: "User input requested",
-          payload: {
-            requestId: "input-1",
-            questions: [
-              {
-                id: "question-1",
-                header: "Need input",
-                question: "Pick one",
-                options: [{ label: "A", description: "Option A" }],
-              },
-            ],
-          },
-          turnId: "turn-1" as never,
-          sequence: 3,
-          createdAt: "2026-03-09T10:00:02.000Z",
-        },
-      ]),
-    ).toEqual({
-      hasPendingApprovals: false,
-      hasPendingUserInput: false,
-    });
   });
 });
 
@@ -691,6 +594,9 @@ describe("getVisibleThreadsForProject", () => {
       ThreadId.makeUnsafe("thread-6"),
       ThreadId.makeUnsafe("thread-8"),
     ]);
+    expect(result.hiddenThreads.map((thread) => thread.id)).toEqual([
+      ThreadId.makeUnsafe("thread-7"),
+    ]);
   });
 
   it("returns all threads when the list is expanded", () => {
@@ -711,6 +617,7 @@ describe("getVisibleThreadsForProject", () => {
     expect(result.visibleThreads.map((thread) => thread.id)).toEqual(
       threads.map((thread) => thread.id),
     );
+    expect(result.hiddenThreads).toEqual([]);
   });
 });
 
@@ -725,7 +632,6 @@ function makeProject(overrides: Partial<Project> = {}): Project {
       model: "gpt-5.4",
       ...defaultModelSelection,
     },
-    expanded: true,
     createdAt: "2026-03-09T10:00:00.000Z",
     updatedAt: "2026-03-09T10:00:00.000Z",
     scripts: [],
@@ -751,11 +657,11 @@ function makeThread(overrides: Partial<Thread> = {}): Thread {
     proposedPlans: [],
     error: null,
     createdAt: "2026-03-09T10:00:00.000Z",
+    archivedAt: null,
     updatedAt: "2026-03-09T10:00:00.000Z",
     latestTurn: null,
     branch: null,
     worktreePath: null,
-    issueLink: null,
     turnDiffSummaries: [],
     activities: [],
     ...overrides,
@@ -1066,6 +972,43 @@ describe("sortProjectsForSidebar", () => {
     expect(sorted.map((project) => project.id)).toEqual([
       ProjectId.makeUnsafe("project-2"),
       ProjectId.makeUnsafe("project-1"),
+    ]);
+  });
+
+  it("ignores archived threads when sorting projects", () => {
+    const sorted = sortProjectsForSidebar(
+      [
+        makeProject({
+          id: ProjectId.makeUnsafe("project-1"),
+          name: "Visible project",
+          updatedAt: "2026-03-09T10:01:00.000Z",
+        }),
+        makeProject({
+          id: ProjectId.makeUnsafe("project-2"),
+          name: "Archived-only project",
+          updatedAt: "2026-03-09T10:00:00.000Z",
+        }),
+      ],
+      [
+        makeThread({
+          id: ThreadId.makeUnsafe("thread-visible"),
+          projectId: ProjectId.makeUnsafe("project-1"),
+          updatedAt: "2026-03-09T10:02:00.000Z",
+          archivedAt: null,
+        }),
+        makeThread({
+          id: ThreadId.makeUnsafe("thread-archived"),
+          projectId: ProjectId.makeUnsafe("project-2"),
+          updatedAt: "2026-03-09T10:10:00.000Z",
+          archivedAt: "2026-03-09T10:11:00.000Z",
+        }),
+      ].filter((thread) => thread.archivedAt === null),
+      "updated_at",
+    );
+
+    expect(sorted.map((project) => project.id)).toEqual([
+      ProjectId.makeUnsafe("project-1"),
+      ProjectId.makeUnsafe("project-2"),
     ]);
   });
 

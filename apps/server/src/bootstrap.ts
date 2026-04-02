@@ -1,7 +1,7 @@
 import * as NFS from "node:fs";
 import * as Net from "node:net";
 import * as readline from "node:readline";
-import { Readable } from "node:stream";
+import type { Readable } from "node:stream";
 
 import { Data, Effect, Option, Predicate, Result, Schema } from "effect";
 import { decodeJsonResult } from "@t3tools/shared/schemaJson";
@@ -10,15 +10,6 @@ class BootstrapError extends Data.TaggedError("BootstrapError")<{
   readonly message: string;
   readonly cause?: unknown;
 }> {}
-
-function readErrorCode(error: unknown): string | undefined {
-  if (typeof error !== "object" || error === null || !("code" in error)) {
-    return undefined;
-  }
-
-  const { code } = error as { code?: unknown };
-  return typeof code === "string" ? code : undefined;
-}
 
 export const readBootstrapEnvelope = Effect.fn("readBootstrapEnvelope")(function* <A, I>(
   schema: Schema.Codec<A, I>,
@@ -96,16 +87,6 @@ const isUnavailableBootstrapFdError = Predicate.compose(
   (_) => _.code === "EBADF" || _.code === "ENOENT",
 );
 
-function shouldFallbackToDirectFdStream(error: unknown): boolean {
-  const code = readErrorCode(error);
-  return code === "ENXIO" || code === "EINVAL";
-}
-
-function isRetryableDirectReadError(error: unknown): boolean {
-  const code = readErrorCode(error);
-  return code === "EAGAIN" || code === "EWOULDBLOCK";
-}
-
 const isFdReady = (fd: number) =>
   Effect.try({
     try: () => NFS.fstatSync(fd),
@@ -127,28 +108,25 @@ const makeBootstrapInputStream = (fd: number) =>
     try: () => {
       const fdPath = resolveFdPath(fd);
       if (fdPath === undefined) {
-        const stream = new Net.Socket({
-          fd,
-          readable: true,
-          writable: false,
-        });
-        stream.setEncoding("utf8");
-        return stream;
+        return makeDirectBootstrapStream(fd);
       }
 
+      let streamFd: number | undefined;
       try {
-        const streamFd = NFS.openSync(fdPath, "r");
+        streamFd = NFS.openSync(fdPath, "r");
         return NFS.createReadStream("", {
           fd: streamFd,
           encoding: "utf8",
           autoClose: true,
         });
       } catch (error) {
-        if (!shouldFallbackToDirectFdStream(error)) {
-          throw error;
+        if (isBootstrapFdPathDuplicationError(error)) {
+          if (streamFd !== undefined) {
+            NFS.closeSync(streamFd);
+          }
+          return makeDirectBootstrapStream(fd);
         }
-
-        return makeDirectFdReadStream(fd);
+        throw error;
       }
     },
     catch: (error) =>
@@ -157,6 +135,29 @@ const makeBootstrapInputStream = (fd: number) =>
         cause: error,
       }),
   });
+
+const makeDirectBootstrapStream = (fd: number): Readable => {
+  try {
+    return NFS.createReadStream("", {
+      fd,
+      encoding: "utf8",
+      autoClose: true,
+    });
+  } catch {
+    const stream = new Net.Socket({
+      fd,
+      readable: true,
+      writable: false,
+    });
+    stream.setEncoding("utf8");
+    return stream;
+  }
+};
+
+const isBootstrapFdPathDuplicationError = Predicate.compose(
+  Predicate.hasProperty("code"),
+  (_) => _.code === "ENXIO" || _.code === "EINVAL" || _.code === "EPERM",
+);
 
 export function resolveFdPath(
   fd: number,
@@ -169,76 +170,4 @@ export function resolveFdPath(
     return undefined;
   }
   return `/dev/fd/${fd}`;
-}
-
-function makeDirectFdReadStream(fd: number): Readable {
-  let closed = false;
-  let reading = false;
-
-  const stream = new Readable({
-    read() {
-      pump();
-    },
-    destroy(error, callback) {
-      closed = true;
-      try {
-        NFS.closeSync(fd);
-      } catch {
-        // Ignore cleanup failures when the fd is already gone.
-      }
-      callback(error);
-    },
-  });
-
-  stream.setEncoding("utf8");
-
-  const pump = () => {
-    if (closed || reading) {
-      return;
-    }
-
-    reading = true;
-    const buffer = Buffer.allocUnsafe(64 * 1024);
-
-    const attemptRead = () => {
-      if (closed) {
-        reading = false;
-        return;
-      }
-
-      NFS.read(fd, buffer, 0, buffer.length, null, (error, bytesRead) => {
-        if (closed) {
-          reading = false;
-          return;
-        }
-
-        if (error) {
-          if (isRetryableDirectReadError(error)) {
-            const timer = setTimeout(attemptRead, 10);
-            timer.unref?.();
-            return;
-          }
-
-          reading = false;
-          stream.destroy(error);
-          return;
-        }
-
-        reading = false;
-
-        if (bytesRead === 0) {
-          stream.push(null);
-          return;
-        }
-
-        if (stream.push(buffer.subarray(0, bytesRead))) {
-          pump();
-        }
-      });
-    };
-
-    attemptRead();
-  };
-
-  return stream;
 }

@@ -25,6 +25,7 @@ function makeThread(overrides: Partial<Thread> = {}): Thread {
     proposedPlans: [],
     error: null,
     createdAt: "2026-03-01T00:00:00.000Z",
+    archivedAt: null,
     latestTurn: null,
     lastVisitedAt: "2026-03-01T00:00:00.000Z",
     branch: null,
@@ -103,7 +104,7 @@ describe("resolveGitHubIssueWorkflowState", () => {
       repoNameWithOwner: "pingdotgg/codething-mvp",
       threads: [thread],
       activeThreadId: thread.id,
-      activeIssueLink: thread.issueLink,
+      activeIssueLink: thread.issueLink ?? null,
       activePr: makeActivePr(),
     });
 
