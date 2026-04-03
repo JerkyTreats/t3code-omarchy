@@ -5,15 +5,12 @@ import {
 } from "@t3tools/contracts";
 
 import { showContextMenuFallback } from "./contextMenuFallback";
+import { createRpcGitApi, createRpcGitHubApi } from "./forkNativeApiAdapter";
 import { resetServerStateForTests } from "./rpc/serverState";
 import { __resetWsRpcClientForTests, getWsRpcClient } from "./wsRpcClient";
 
 let instance: { api: NativeApi } | null = null;
 const gitActionProgressListeners = new Set<(event: GitActionProgressEvent) => void>();
-
-function unsupportedRpcMethod(name: string): Promise<never> {
-  return Promise.reject(new Error(`${name} is not available on the RPC transport yet.`));
-}
 
 export function __resetWsNativeApiForTests() {
   instance = null;
@@ -68,44 +65,8 @@ export function createWsNativeApi(): NativeApi {
         window.open(url, "_blank", "noopener,noreferrer");
       },
     },
-    git: {
-      pull: rpcClient.git.pull,
-      status: rpcClient.git.status,
-      runStackedAction: (input) =>
-        rpcClient.git.runStackedAction(input as never, {
-          onProgress: (event) => {
-            for (const listener of gitActionProgressListeners) {
-              listener(event);
-            }
-          },
-        }),
-      listBranches: rpcClient.git.listBranches,
-      createWorktree: rpcClient.git.createWorktree,
-      removeWorktree: rpcClient.git.removeWorktree,
-      createBranch: rpcClient.git.createBranch,
-      mergeBranches: (input) => unsupportedRpcMethod(`git.mergeBranches ${JSON.stringify(input)}`),
-      abortMerge: (input) => unsupportedRpcMethod(`git.abortMerge ${JSON.stringify(input)}`),
-      checkout: rpcClient.git.checkout,
-      init: rpcClient.git.init,
-      resolvePullRequest: rpcClient.git.resolvePullRequest,
-      preparePullRequestThread: rpcClient.git.preparePullRequestThread,
-      repositoryContext: (input) =>
-        unsupportedRpcMethod(`git.repositoryContext ${JSON.stringify(input)}`),
-      onActionProgress: (callback) => {
-        gitActionProgressListeners.add(callback);
-        return () => {
-          gitActionProgressListeners.delete(callback);
-        };
-      },
-    },
-    github: {
-      status: (input) => unsupportedRpcMethod(`github.status ${JSON.stringify(input)}`),
-      login: (input) => unsupportedRpcMethod(`github.login ${JSON.stringify(input)}`),
-      listIssues: (input) => unsupportedRpcMethod(`github.listIssues ${JSON.stringify(input)}`),
-      createIssue: (input) => unsupportedRpcMethod(`github.createIssue ${JSON.stringify(input)}`),
-      closeIssue: (input) => unsupportedRpcMethod(`github.closeIssue ${JSON.stringify(input)}`),
-      reopenIssue: (input) => unsupportedRpcMethod(`github.reopenIssue ${JSON.stringify(input)}`),
-    },
+    git: createRpcGitApi({ rpcClient, gitActionProgressListeners }),
+    github: createRpcGitHubApi(rpcClient),
     contextMenu: {
       show: async <T extends string>(
         items: readonly ContextMenuItem<T>[],

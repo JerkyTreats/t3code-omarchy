@@ -708,6 +708,7 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
       hasUpstream: details.hasUpstream,
       aheadCount: details.aheadCount,
       behindCount: details.behindCount,
+      merge: details.merge,
       pr,
     };
   });
@@ -1658,11 +1659,32 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
     },
   );
 
+  const mergeBranches: GitManagerShape["mergeBranches"] = Effect.fn("mergeBranches")(
+    function* (input) {
+      const result = yield* gitCore.mergeBranches(input);
+      yield* invalidateStatusResultCache(input.cwd);
+      return result;
+    },
+  );
+
+  const abortMerge: GitManagerShape["abortMerge"] = Effect.fn("abortMerge")(function* (input) {
+    const result = yield* gitCore.abortMerge(input);
+    yield* invalidateStatusResultCache(input.cwd);
+    return result;
+  });
+
+  const repositoryContext: GitManagerShape["repositoryContext"] = Effect.fn("repositoryContext")(
+    (input) => gitCore.repositoryContext(input),
+  );
+
   return {
     status,
     resolvePullRequest,
     preparePullRequestThread,
     runStackedAction,
+    mergeBranches,
+    abortMerge,
+    repositoryContext,
   } satisfies GitManagerShape;
 });
 

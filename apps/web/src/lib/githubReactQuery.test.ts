@@ -6,6 +6,7 @@ import {
   githubCreateIssueMutationOptions,
   githubCloseIssueMutationOptions,
   githubReopenIssueMutationOptions,
+  githubStatusQueryOptions,
 } from "./githubReactQuery";
 import * as nativeApi from "../nativeApi";
 
@@ -18,6 +19,7 @@ describe("github mutation options", () => {
 
   it("forwards close issue requests to the native API", async () => {
     const closeIssue = vi.fn().mockResolvedValue({ number: 123, state: "closed" });
+    vi.spyOn(nativeApi, "ensureCurrentNativeApiFeature").mockImplementation(() => undefined);
     vi.spyOn(nativeApi, "ensureNativeApi").mockReturnValue({
       github: {
         closeIssue,
@@ -47,6 +49,7 @@ describe("github mutation options", () => {
       assignees: [],
       author: "tester",
     });
+    vi.spyOn(nativeApi, "ensureCurrentNativeApiFeature").mockImplementation(() => undefined);
     vi.spyOn(nativeApi, "ensureNativeApi").mockReturnValue({
       github: {
         createIssue,
@@ -73,6 +76,7 @@ describe("github mutation options", () => {
 
   it("forwards reopen issue requests to the native API", async () => {
     const reopenIssue = vi.fn().mockResolvedValue({ number: 123, state: "open" });
+    vi.spyOn(nativeApi, "ensureCurrentNativeApiFeature").mockImplementation(() => undefined);
     vi.spyOn(nativeApi, "ensureNativeApi").mockReturnValue({
       github: {
         reopenIssue,
@@ -87,5 +91,13 @@ describe("github mutation options", () => {
       issueNumber: 123,
       repo: "pingdotgg/codething-mvp",
     });
+  });
+
+  it("disables github status queries on transports without github support", () => {
+    vi.spyOn(nativeApi, "hasCurrentNativeApiFeature").mockReturnValue(false);
+
+    const options = githubStatusQueryOptions("/repo/a");
+
+    expect(options.enabled).toBe(false);
   });
 });

@@ -2,11 +2,14 @@ import type { NativeApi } from "@t3tools/contracts";
 import { QueryClient } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  gitMergeBranchesMutationOptions,
   gitMutationKeys,
   gitPreparePullRequestThreadMutationOptions,
   gitPullMutationOptions,
+  gitRepositoryContextQueryOptions,
   gitRunStackedActionMutationOptions,
 } from "./gitReactQuery";
+import { UnsupportedNativeApiFeatureError } from "../forkNativeApiAdapter";
 import * as nativeApi from "../nativeApi";
 
 afterEach(() => {
@@ -113,5 +116,36 @@ describe("git mutation options", () => {
       queryClient,
     });
     expect(options.mutationKey).toEqual(gitMutationKeys.preparePullRequestThread("/repo/a"));
+  });
+
+  it("disables repository context queries when the transport does not support them", () => {
+    vi.spyOn(nativeApi, "hasCurrentNativeApiFeature").mockReturnValue(false);
+
+    const options = gitRepositoryContextQueryOptions("/repo/a");
+
+    expect(options.enabled).toBe(false);
+  });
+
+  it("surfaces typed unsupported errors for merge actions on RPC transport", async () => {
+    vi.spyOn(nativeApi, "ensureNativeApi").mockReturnValue({
+      git: {
+        mergeBranches: vi.fn(),
+      },
+    } as unknown as NativeApi);
+    vi.spyOn(nativeApi, "ensureCurrentNativeApiFeature").mockImplementation(() => {
+      throw new UnsupportedNativeApiFeatureError("git.mergeBranches");
+    });
+
+    const options = gitMergeBranchesMutationOptions({ cwd: "/repo/a", queryClient });
+
+    await expect(
+      options.mutationFn?.(
+        {
+          sourceBranch: "feature",
+          targetBranch: "main",
+        },
+        {} as never,
+      ),
+    ).rejects.toBeInstanceOf(UnsupportedNativeApiFeatureError);
   });
 });

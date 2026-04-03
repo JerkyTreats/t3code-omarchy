@@ -9,7 +9,18 @@ import { ServiceMap } from "effect";
 import type { Effect } from "effect";
 
 import type { ProcessRunResult } from "../../processRunner";
-import type { GitHubCliError } from "@t3tools/contracts";
+import type {
+  GitHubCliError,
+  GitHubCreateIssueInput,
+  GitHubCreateIssueResult,
+  GitHubIssueMutationInput,
+  GitHubIssueMutationResult,
+  GitHubListIssuesInput,
+  GitHubListIssuesResult,
+  GitHubLoginInput,
+  GitHubStatusInput,
+  GitHubStatusResult,
+} from "@t3tools/contracts";
 
 export interface GitHubPullRequestSummary {
   readonly number: number;
@@ -93,6 +104,46 @@ export interface GitHubCliShape {
     readonly reference: string;
     readonly force?: boolean;
   }) => Effect.Effect<void, GitHubCliError>;
+
+  /**
+   * Read GitHub auth and repository status for the current workspace.
+   */
+  readonly getStatus: (
+    input: GitHubStatusInput,
+  ) => Effect.Effect<GitHubStatusResult, GitHubCliError>;
+
+  /**
+   * Run GitHub auth login and return the resulting auth status.
+   */
+  readonly login: (input: GitHubLoginInput) => Effect.Effect<GitHubStatusResult, GitHubCliError>;
+
+  /**
+   * List repository issues.
+   */
+  readonly listIssues: (
+    input: GitHubListIssuesInput,
+  ) => Effect.Effect<GitHubListIssuesResult, GitHubCliError>;
+
+  /**
+   * Create a new issue.
+   */
+  readonly createIssue: (
+    input: GitHubCreateIssueInput,
+  ) => Effect.Effect<GitHubCreateIssueResult, GitHubCliError>;
+
+  /**
+   * Close an existing issue.
+   */
+  readonly closeIssue: (
+    input: GitHubIssueMutationInput,
+  ) => Effect.Effect<GitHubIssueMutationResult, GitHubCliError>;
+
+  /**
+   * Reopen an existing issue.
+   */
+  readonly reopenIssue: (
+    input: GitHubIssueMutationInput,
+  ) => Effect.Effect<GitHubIssueMutationResult, GitHubCliError>;
 }
 
 /**

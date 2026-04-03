@@ -67,12 +67,23 @@ export interface WsRpcClient {
     readonly createWorktree: RpcUnaryMethod<typeof WS_METHODS.gitCreateWorktree>;
     readonly removeWorktree: RpcUnaryMethod<typeof WS_METHODS.gitRemoveWorktree>;
     readonly createBranch: RpcUnaryMethod<typeof WS_METHODS.gitCreateBranch>;
+    readonly mergeBranches: RpcUnaryMethod<typeof WS_METHODS.gitMergeBranches>;
+    readonly abortMerge: RpcUnaryMethod<typeof WS_METHODS.gitAbortMerge>;
     readonly checkout: RpcUnaryMethod<typeof WS_METHODS.gitCheckout>;
     readonly init: RpcUnaryMethod<typeof WS_METHODS.gitInit>;
     readonly resolvePullRequest: RpcUnaryMethod<typeof WS_METHODS.gitResolvePullRequest>;
     readonly preparePullRequestThread: RpcUnaryMethod<
       typeof WS_METHODS.gitPreparePullRequestThread
     >;
+    readonly repositoryContext: RpcUnaryMethod<typeof WS_METHODS.gitRepositoryContext>;
+  };
+  readonly github: {
+    readonly status: RpcUnaryMethod<typeof WS_METHODS.githubStatus>;
+    readonly login: RpcUnaryMethod<typeof WS_METHODS.githubLogin>;
+    readonly listIssues: RpcUnaryMethod<typeof WS_METHODS.githubListIssues>;
+    readonly createIssue: RpcUnaryMethod<typeof WS_METHODS.githubCreateIssue>;
+    readonly closeIssue: RpcUnaryMethod<typeof WS_METHODS.githubCloseIssue>;
+    readonly reopenIssue: RpcUnaryMethod<typeof WS_METHODS.githubReopenIssue>;
   };
   readonly server: {
     readonly getConfig: RpcUnaryNoArgMethod<typeof WS_METHODS.serverGetConfig>;
@@ -163,12 +174,29 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
         transport.request((client) => client[WS_METHODS.gitRemoveWorktree](input)),
       createBranch: (input) =>
         transport.request((client) => client[WS_METHODS.gitCreateBranch](input)),
+      mergeBranches: (input) =>
+        transport.request((client) => client[WS_METHODS.gitMergeBranches](input)),
+      abortMerge: (input) => transport.request((client) => client[WS_METHODS.gitAbortMerge](input)),
       checkout: (input) => transport.request((client) => client[WS_METHODS.gitCheckout](input)),
       init: (input) => transport.request((client) => client[WS_METHODS.gitInit](input)),
       resolvePullRequest: (input) =>
         transport.request((client) => client[WS_METHODS.gitResolvePullRequest](input)),
       preparePullRequestThread: (input) =>
         transport.request((client) => client[WS_METHODS.gitPreparePullRequestThread](input)),
+      repositoryContext: (input) =>
+        transport.request((client) => client[WS_METHODS.gitRepositoryContext](input)),
+    },
+    github: {
+      status: (input) => transport.request((client) => client[WS_METHODS.githubStatus](input)),
+      login: (input) => transport.request((client) => client[WS_METHODS.githubLogin](input)),
+      listIssues: (input) =>
+        transport.request((client) => client[WS_METHODS.githubListIssues](input)),
+      createIssue: (input) =>
+        transport.request((client) => client[WS_METHODS.githubCreateIssue](input)),
+      closeIssue: (input) =>
+        transport.request((client) => client[WS_METHODS.githubCloseIssue](input)),
+      reopenIssue: (input) =>
+        transport.request((client) => client[WS_METHODS.githubReopenIssue](input)),
     },
     server: {
       getConfig: () => transport.request((client) => client[WS_METHODS.serverGetConfig]({})),

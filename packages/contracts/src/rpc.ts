@@ -4,27 +4,45 @@ import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 
 import { OpenError, OpenInEditorInput } from "./editor";
 import {
+  GitAbortMergeInput,
+  GitAbortMergeResult,
   GitActionProgressEvent,
   GitCheckoutInput,
   GitCommandError,
   GitCreateBranchInput,
   GitCreateWorktreeInput,
   GitCreateWorktreeResult,
+  GitHubCliError,
   GitInitInput,
   GitListBranchesInput,
   GitListBranchesResult,
   GitManagerServiceError,
+  GitMergeBranchesInput,
+  GitMergeBranchesResult,
   GitPreparePullRequestThreadInput,
   GitPreparePullRequestThreadResult,
   GitPullInput,
   GitPullRequestRefInput,
   GitPullResult,
   GitRemoveWorktreeInput,
+  GitRepositoryContextInput,
+  GitRepositoryContextResult,
   GitResolvePullRequestResult,
   GitRunStackedActionInput,
   GitStatusInput,
   GitStatusResult,
 } from "./git";
+import {
+  GitHubCreateIssueInput,
+  GitHubCreateIssueResult,
+  GitHubIssueMutationInput,
+  GitHubIssueMutationResult,
+  GitHubListIssuesInput,
+  GitHubListIssuesResult,
+  GitHubLoginInput,
+  GitHubStatusInput,
+  GitHubStatusResult,
+} from "./github";
 import { KeybindingsConfigError } from "./keybindings";
 import {
   ClientOrchestrationCommand,
@@ -89,10 +107,21 @@ export const WS_METHODS = {
   gitCreateWorktree: "git.createWorktree",
   gitRemoveWorktree: "git.removeWorktree",
   gitCreateBranch: "git.createBranch",
+  gitMergeBranches: "git.mergeBranches",
+  gitAbortMerge: "git.abortMerge",
   gitCheckout: "git.checkout",
   gitInit: "git.init",
   gitResolvePullRequest: "git.resolvePullRequest",
   gitPreparePullRequestThread: "git.preparePullRequestThread",
+  gitRepositoryContext: "git.repositoryContext",
+
+  // GitHub methods
+  githubStatus: "github.status",
+  githubLogin: "github.login",
+  githubListIssues: "github.listIssues",
+  githubCreateIssue: "github.createIssue",
+  githubCloseIssue: "github.closeIssue",
+  githubReopenIssue: "github.reopenIssue",
 
   // Terminal methods
   terminalOpen: "terminal.open",
@@ -215,6 +244,18 @@ export const WsGitCreateBranchRpc = Rpc.make(WS_METHODS.gitCreateBranch, {
   error: GitCommandError,
 });
 
+export const WsGitMergeBranchesRpc = Rpc.make(WS_METHODS.gitMergeBranches, {
+  payload: GitMergeBranchesInput,
+  success: GitMergeBranchesResult,
+  error: GitManagerServiceError,
+});
+
+export const WsGitAbortMergeRpc = Rpc.make(WS_METHODS.gitAbortMerge, {
+  payload: GitAbortMergeInput,
+  success: GitAbortMergeResult,
+  error: GitManagerServiceError,
+});
+
 export const WsGitCheckoutRpc = Rpc.make(WS_METHODS.gitCheckout, {
   payload: GitCheckoutInput,
   error: GitCommandError,
@@ -223,6 +264,48 @@ export const WsGitCheckoutRpc = Rpc.make(WS_METHODS.gitCheckout, {
 export const WsGitInitRpc = Rpc.make(WS_METHODS.gitInit, {
   payload: GitInitInput,
   error: GitCommandError,
+});
+
+export const WsGitRepositoryContextRpc = Rpc.make(WS_METHODS.gitRepositoryContext, {
+  payload: GitRepositoryContextInput,
+  success: GitRepositoryContextResult,
+  error: GitManagerServiceError,
+});
+
+export const WsGitHubStatusRpc = Rpc.make(WS_METHODS.githubStatus, {
+  payload: GitHubStatusInput,
+  success: GitHubStatusResult,
+  error: GitHubCliError,
+});
+
+export const WsGitHubLoginRpc = Rpc.make(WS_METHODS.githubLogin, {
+  payload: GitHubLoginInput,
+  success: GitHubStatusResult,
+  error: GitHubCliError,
+});
+
+export const WsGitHubListIssuesRpc = Rpc.make(WS_METHODS.githubListIssues, {
+  payload: GitHubListIssuesInput,
+  success: GitHubListIssuesResult,
+  error: GitHubCliError,
+});
+
+export const WsGitHubCreateIssueRpc = Rpc.make(WS_METHODS.githubCreateIssue, {
+  payload: GitHubCreateIssueInput,
+  success: GitHubCreateIssueResult,
+  error: GitHubCliError,
+});
+
+export const WsGitHubCloseIssueRpc = Rpc.make(WS_METHODS.githubCloseIssue, {
+  payload: GitHubIssueMutationInput,
+  success: GitHubIssueMutationResult,
+  error: GitHubCliError,
+});
+
+export const WsGitHubReopenIssueRpc = Rpc.make(WS_METHODS.githubReopenIssue, {
+  payload: GitHubIssueMutationInput,
+  success: GitHubIssueMutationResult,
+  error: GitHubCliError,
 });
 
 export const WsTerminalOpenRpc = Rpc.make(WS_METHODS.terminalOpen, {
@@ -339,8 +422,17 @@ export const WsRpcGroup = RpcGroup.make(
   WsGitCreateWorktreeRpc,
   WsGitRemoveWorktreeRpc,
   WsGitCreateBranchRpc,
+  WsGitMergeBranchesRpc,
+  WsGitAbortMergeRpc,
   WsGitCheckoutRpc,
   WsGitInitRpc,
+  WsGitRepositoryContextRpc,
+  WsGitHubStatusRpc,
+  WsGitHubLoginRpc,
+  WsGitHubListIssuesRpc,
+  WsGitHubCreateIssueRpc,
+  WsGitHubCloseIssueRpc,
+  WsGitHubReopenIssueRpc,
   WsTerminalOpenRpc,
   WsTerminalWriteRpc,
   WsTerminalResizeRpc,

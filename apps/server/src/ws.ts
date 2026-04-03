@@ -22,6 +22,7 @@ import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 import { CheckpointDiffQuery } from "./checkpointing/Services/CheckpointDiffQuery";
 import { ServerConfig } from "./config";
 import { GitCore } from "./git/Services/GitCore";
+import { GitHubCli } from "./git/Services/GitHubCli";
 import { GitManager } from "./git/Services/GitManager";
 import { Keybindings } from "./keybindings";
 import { Open, resolveAvailableEditors } from "./open";
@@ -46,6 +47,7 @@ const WsRpcLayer = WsRpcGroup.toLayer(
     const open = yield* Open;
     const gitManager = yield* GitManager;
     const git = yield* GitCore;
+    const gitHubCli = yield* GitHubCli;
     const terminalManager = yield* TerminalManager;
     const providerRegistry = yield* ProviderRegistry;
     const config = yield* ServerConfig;
@@ -246,8 +248,17 @@ const WsRpcLayer = WsRpcGroup.toLayer(
       [WS_METHODS.gitCreateWorktree]: (input) => git.createWorktree(input),
       [WS_METHODS.gitRemoveWorktree]: (input) => git.removeWorktree(input),
       [WS_METHODS.gitCreateBranch]: (input) => git.createBranch(input),
+      [WS_METHODS.gitMergeBranches]: (input) => gitManager.mergeBranches(input),
+      [WS_METHODS.gitAbortMerge]: (input) => gitManager.abortMerge(input),
       [WS_METHODS.gitCheckout]: (input) => Effect.scoped(git.checkoutBranch(input)),
       [WS_METHODS.gitInit]: (input) => git.initRepo(input),
+      [WS_METHODS.gitRepositoryContext]: (input) => gitManager.repositoryContext(input),
+      [WS_METHODS.githubStatus]: (input) => gitHubCli.getStatus(input),
+      [WS_METHODS.githubLogin]: (input) => gitHubCli.login(input),
+      [WS_METHODS.githubListIssues]: (input) => gitHubCli.listIssues(input),
+      [WS_METHODS.githubCreateIssue]: (input) => gitHubCli.createIssue(input),
+      [WS_METHODS.githubCloseIssue]: (input) => gitHubCli.closeIssue(input),
+      [WS_METHODS.githubReopenIssue]: (input) => gitHubCli.reopenIssue(input),
       [WS_METHODS.terminalOpen]: (input) => terminalManager.open(input),
       [WS_METHODS.terminalWrite]: (input) => terminalManager.write(input),
       [WS_METHODS.terminalResize]: (input) => terminalManager.resize(input),

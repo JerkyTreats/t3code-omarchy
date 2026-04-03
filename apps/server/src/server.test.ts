@@ -32,6 +32,7 @@ import {
   type CheckpointDiffQueryShape,
 } from "./checkpointing/Services/CheckpointDiffQuery.ts";
 import { GitCore, type GitCoreShape } from "./git/Services/GitCore.ts";
+import { GitHubCli, type GitHubCliShape } from "./git/Services/GitHubCli.ts";
 import { GitManager, type GitManagerShape } from "./git/Services/GitManager.ts";
 import { Keybindings, type KeybindingsShape } from "./keybindings.ts";
 import { Open, type OpenShape } from "./open.ts";
@@ -124,6 +125,7 @@ const buildAppUnderTest = (options?: {
     serverSettings?: Partial<ServerSettingsShape>;
     open?: Partial<OpenShape>;
     gitCore?: Partial<GitCoreShape>;
+    githubCli?: Partial<GitHubCliShape>;
     gitManager?: Partial<GitManagerShape>;
     terminalManager?: Partial<TerminalManagerShape>;
     orchestrationEngine?: Partial<OrchestrationEngineShape>;
@@ -188,6 +190,11 @@ const buildAppUnderTest = (options?: {
       Layer.provide(
         Layer.mock(Open)({
           ...options?.layers?.open,
+        }),
+      ),
+      Layer.provide(
+        Layer.mock(GitHubCli)({
+          ...options?.layers?.githubCli,
         }),
       ),
       Layer.provide(
@@ -828,6 +835,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
                 hasUpstream: true,
                 aheadCount: 0,
                 behindCount: 0,
+                merge: { inProgress: false, conflictedFiles: [] },
                 pr: null,
               }),
             runStackedAction: (input, options) =>
@@ -901,6 +909,95 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
                 },
                 branch: "feature/demo",
                 worktreePath: null,
+              }),
+            mergeBranches: (input) =>
+              Effect.succeed({
+                status: "merged",
+                sourceBranch: input.sourceBranch,
+                targetBranch: input.targetBranch,
+                targetWorktreePath: input.cwd,
+                conflictedFiles: [],
+                mergeCommitSha: "def456",
+              }),
+            abortMerge: (input) =>
+              Effect.succeed({
+                status: "aborted",
+                cwd: input.cwd,
+              }),
+            repositoryContext: (input) =>
+              Effect.succeed({
+                isRepo: true,
+                repoRoot: input.cwd,
+                gitDir: `${input.cwd}/.git`,
+                commonDir: `${input.cwd}/.git`,
+                isWorktree: false,
+              }),
+          },
+          githubCli: {
+            getStatus: () =>
+              Effect.succeed({
+                installed: true,
+                authenticated: true,
+                hostname: "github.com",
+                accountLogin: "JerkyTreats",
+                gitProtocol: "https",
+                tokenSource: "keyring",
+                scopes: ["repo"],
+                repo: {
+                  nameWithOwner: "JerkyTreats/t3code-omarchy",
+                  url: "https://github.com/JerkyTreats/t3code-omarchy",
+                  description: null,
+                  defaultBranch: "main",
+                },
+              }),
+            login: () =>
+              Effect.succeed({
+                installed: true,
+                authenticated: true,
+                hostname: "github.com",
+                accountLogin: "JerkyTreats",
+                gitProtocol: "https",
+                tokenSource: "keyring",
+                scopes: ["repo"],
+                repo: {
+                  nameWithOwner: "JerkyTreats/t3code-omarchy",
+                  url: "https://github.com/JerkyTreats/t3code-omarchy",
+                  description: null,
+                  defaultBranch: "main",
+                },
+              }),
+            listIssues: () =>
+              Effect.succeed({
+                repo: {
+                  nameWithOwner: "JerkyTreats/t3code-omarchy",
+                  url: "https://github.com/JerkyTreats/t3code-omarchy",
+                  description: null,
+                  defaultBranch: "main",
+                },
+                issues: [],
+              }),
+            createIssue: () =>
+              Effect.succeed({
+                number: 16,
+                title: "Sync upstream changes",
+                state: "open",
+                url: "https://github.com/JerkyTreats/t3code-omarchy/issues/16",
+                body: null,
+                createdAt: "2026-04-02T00:00:00.000Z",
+                updatedAt: "2026-04-02T00:00:00.000Z",
+                labels: [],
+                assignees: [],
+                author: "JerkyTreats",
+              }),
+            closeIssue: (input) =>
+              Effect.succeed({
+                number: input.issueNumber,
+                state: "closed",
+              }),
+            reopenIssue: (input) =>
+              Effect.succeed({
+                number: input.issueNumber,
+                state: "open",
               }),
           },
           gitCore: {
@@ -1021,6 +1118,96 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
           }),
         ),
       );
+
+      yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          client[WS_METHODS.gitMergeBranches]({
+            cwd: "/tmp/repo",
+            sourceBranch: "feature/demo",
+            targetBranch: "main",
+          }),
+        ),
+      );
+
+      yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          client[WS_METHODS.gitAbortMerge]({
+            cwd: "/tmp/repo",
+          }),
+        ),
+      );
+
+      const repositoryContext = yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          client[WS_METHODS.gitRepositoryContext]({
+            cwd: "/tmp/repo",
+          }),
+        ),
+      );
+      assert.equal(repositoryContext.isRepo, true);
+
+      const githubStatus = yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          client[WS_METHODS.githubStatus]({
+            cwd: "/tmp/repo",
+            hostname: "github.com",
+          }),
+        ),
+      );
+      assert.equal(githubStatus.authenticated, true);
+
+      const githubIssues = yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          client[WS_METHODS.githubListIssues]({
+            cwd: "/tmp/repo",
+            state: "open",
+            limit: 10,
+          }),
+        ),
+      );
+      assert.equal(githubIssues.repo?.nameWithOwner, "JerkyTreats/t3code-omarchy");
+
+      const githubIssue = yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          client[WS_METHODS.githubCreateIssue]({
+            cwd: "/tmp/repo",
+            title: "Sync upstream changes",
+            body: null,
+          }),
+        ),
+      );
+      assert.equal(githubIssue.number, 16);
+
+      const closedIssue = yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          client[WS_METHODS.githubCloseIssue]({
+            cwd: "/tmp/repo",
+            issueNumber: 16,
+          }),
+        ),
+      );
+      assert.equal(closedIssue.state, "closed");
+
+      const reopenedIssue = yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          client[WS_METHODS.githubReopenIssue]({
+            cwd: "/tmp/repo",
+            issueNumber: 16,
+          }),
+        ),
+      );
+      assert.equal(reopenedIssue.state, "open");
+
+      const loginStatus = yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          client[WS_METHODS.githubLogin]({
+            cwd: "/tmp/repo",
+            hostname: "github.com",
+            gitProtocol: "https",
+          }),
+        ),
+      );
+      assert.equal(loginStatus.accountLogin, "JerkyTreats");
 
       yield* Effect.scoped(
         withWsRpcClient(wsUrl, (client) =>

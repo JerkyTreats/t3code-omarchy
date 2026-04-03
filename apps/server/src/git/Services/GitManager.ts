@@ -7,10 +7,16 @@
  * @module GitManager
  */
 import {
+  GitAbortMergeInput,
+  GitAbortMergeResult,
   GitActionProgressEvent,
+  GitMergeBranchesInput,
+  GitMergeBranchesResult,
   GitPreparePullRequestThreadInput,
   GitPreparePullRequestThreadResult,
   GitPullRequestRefInput,
+  GitRepositoryContextInput,
+  GitRepositoryContextResult,
   GitResolvePullRequestResult,
   GitRunStackedActionInput,
   GitRunStackedActionResult,
@@ -63,6 +69,27 @@ export interface GitManagerShape {
     input: GitRunStackedActionInput,
     options?: GitRunStackedActionOptions,
   ) => Effect.Effect<GitRunStackedActionResult, GitManagerServiceError>;
+
+  /**
+   * Merge a source branch into a target branch within the current workspace.
+   */
+  readonly mergeBranches: (
+    input: GitMergeBranchesInput,
+  ) => Effect.Effect<GitMergeBranchesResult, GitManagerServiceError>;
+
+  /**
+   * Abort an in-progress merge in the current workspace.
+   */
+  readonly abortMerge: (
+    input: GitAbortMergeInput,
+  ) => Effect.Effect<GitAbortMergeResult, GitManagerServiceError>;
+
+  /**
+   * Resolve repository context metadata for the current workspace.
+   */
+  readonly repositoryContext: (
+    input: GitRepositoryContextInput,
+  ) => Effect.Effect<GitRepositoryContextResult, GitManagerServiceError>;
 }
 
 /**

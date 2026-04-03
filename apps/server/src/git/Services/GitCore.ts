@@ -9,6 +9,8 @@
 import { ServiceMap } from "effect";
 import type { Effect, Scope } from "effect";
 import type {
+  GitAbortMergeInput,
+  GitAbortMergeResult,
   GitCheckoutInput,
   GitCreateBranchInput,
   GitCreateWorktreeInput,
@@ -16,7 +18,11 @@ import type {
   GitInitInput,
   GitListBranchesInput,
   GitListBranchesResult,
+  GitMergeBranchesInput,
+  GitMergeBranchesResult,
   GitPullResult,
+  GitRepositoryContextInput,
+  GitRepositoryContextResult,
   GitRemoveWorktreeInput,
   GitStatusInput,
   GitStatusResult,
@@ -281,6 +287,20 @@ export interface GitCoreShape {
   readonly createBranch: (input: GitCreateBranchInput) => Effect.Effect<void, GitCommandError>;
 
   /**
+   * Merge a source branch into the current target workspace branch.
+   */
+  readonly mergeBranches: (
+    input: GitMergeBranchesInput,
+  ) => Effect.Effect<GitMergeBranchesResult, GitCommandError>;
+
+  /**
+   * Abort the current in-progress merge if one exists.
+   */
+  readonly abortMerge: (
+    input: GitAbortMergeInput,
+  ) => Effect.Effect<GitAbortMergeResult, GitCommandError>;
+
+  /**
    * Checkout an existing branch and refresh its upstream metadata in background.
    */
   readonly checkoutBranch: (
@@ -291,6 +311,13 @@ export interface GitCoreShape {
    * Initialize a repository in the provided directory.
    */
   readonly initRepo: (input: GitInitInput) => Effect.Effect<void, GitCommandError>;
+
+  /**
+   * Resolve repository metadata for the current cwd.
+   */
+  readonly repositoryContext: (
+    input: GitRepositoryContextInput,
+  ) => Effect.Effect<GitRepositoryContextResult, GitCommandError>;
 
   /**
    * List local branch names (short format).

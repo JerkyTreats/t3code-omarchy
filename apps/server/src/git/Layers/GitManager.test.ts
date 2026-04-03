@@ -561,6 +561,50 @@ function createGitHubCliWithFakeGh(scenario: FakeGhScenario = {}): {
           cwd: input.cwd,
           args: ["pr", "checkout", input.reference, ...(input.force ? ["--force"] : [])],
         }).pipe(Effect.asVoid),
+      getStatus: () =>
+        Effect.succeed({
+          installed: true,
+          authenticated: true,
+          hostname: "github.com",
+          accountLogin: "octocat",
+          gitProtocol: "https",
+          tokenSource: "keyring",
+          scopes: ["repo"],
+          repo: null,
+        }),
+      login: () =>
+        Effect.succeed({
+          installed: true,
+          authenticated: true,
+          hostname: "github.com",
+          accountLogin: "octocat",
+          gitProtocol: "https",
+          tokenSource: "keyring",
+          scopes: ["repo"],
+          repo: null,
+        }),
+      listIssues: () =>
+        Effect.succeed({
+          repo: null,
+          issues: [],
+        }),
+      createIssue: () =>
+        Effect.fail(
+          new GitHubCliError({
+            operation: "createIssue",
+            detail: "Issue creation is not used in this test harness.",
+          }),
+        ),
+      closeIssue: (input) =>
+        Effect.succeed({
+          number: input.issueNumber,
+          state: "closed",
+        }),
+      reopenIssue: (input) =>
+        Effect.succeed({
+          number: input.issueNumber,
+          state: "open",
+        }),
     },
     ghCalls,
   };

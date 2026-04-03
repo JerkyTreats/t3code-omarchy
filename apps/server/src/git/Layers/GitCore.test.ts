@@ -1522,6 +1522,103 @@ it.layer(TestLayer)("git integration", (it) => {
       }),
     );
 
+    it.effect("reports repository context for repos and linked worktrees", () =>
+      Effect.gen(function* () {
+        const tmp = yield* makeTmpDir();
+        const { initialBranch } = yield* initRepoWithCommit(tmp);
+        const core = yield* GitCore;
+
+        const repoContext = yield* core.repositoryContext({ cwd: tmp });
+        expect(repoContext.isRepo).toBe(true);
+        expect(repoContext.repoRoot).toBe(tmp);
+        expect(repoContext.isWorktree).toBe(false);
+
+        const worktreePath = path.join(tmp, "linked-worktree");
+        const worktree = yield* core.createWorktree({
+          cwd: tmp,
+          branch: initialBranch,
+          newBranch: "feature/repository-context",
+          path: worktreePath,
+        });
+
+        const linkedContext = yield* core.repositoryContext({ cwd: worktree.worktree.path });
+        expect(linkedContext.isRepo).toBe(true);
+        expect(linkedContext.repoRoot).toBe(worktree.worktree.path);
+        expect(linkedContext.isWorktree).toBe(true);
+        expect(linkedContext.gitDir).not.toBe(linkedContext.commonDir);
+        expect(linkedContext.commonDir).toBe(path.join(tmp, ".git"));
+
+        yield* core.removeWorktree({
+          cwd: tmp,
+          path: worktree.worktree.path,
+          force: true,
+        });
+      }),
+    );
+
+    it.effect("merges branches and records merge state for conflicts and aborts", () =>
+      Effect.gen(function* () {
+        const tmp = yield* makeTmpDir();
+        const { initialBranch } = yield* initRepoWithCommit(tmp);
+        const core = yield* GitCore;
+
+        yield* git(tmp, ["checkout", "-b", "feature/conflict-merge"]);
+        yield* writeTextFile(path.join(tmp, "README.md"), "feature change\n");
+        yield* git(tmp, ["add", "README.md"]);
+        yield* git(tmp, ["commit", "-m", "feature change"]);
+
+        yield* git(tmp, ["checkout", initialBranch]);
+        yield* writeTextFile(path.join(tmp, "README.md"), "main change\n");
+        yield* git(tmp, ["add", "README.md"]);
+        yield* git(tmp, ["commit", "-m", "main change"]);
+
+        const conflicted = yield* core.mergeBranches({
+          cwd: tmp,
+          sourceBranch: "feature/conflict-merge",
+          targetBranch: initialBranch,
+        });
+        expect(conflicted.status).toBe("conflicted");
+        expect(conflicted.conflictedFiles).toContain("README.md");
+
+        const conflictedStatus = yield* core.statusDetails(tmp);
+        expect(conflictedStatus.merge?.inProgress).toBe(true);
+        expect(conflictedStatus.merge?.conflictedFiles).toContain("README.md");
+
+        const aborted = yield* core.abortMerge({ cwd: tmp });
+        expect(aborted.status).toBe("aborted");
+
+        const afterAbortStatus = yield* core.statusDetails(tmp);
+        expect(afterAbortStatus.merge?.inProgress).toBe(false);
+        expect(afterAbortStatus.merge?.conflictedFiles ?? []).toHaveLength(0);
+      }),
+    );
+
+    it.effect("merges non-conflicting branches through the new helper", () =>
+      Effect.gen(function* () {
+        const tmp = yield* makeTmpDir();
+        const { initialBranch } = yield* initRepoWithCommit(tmp);
+        const core = yield* GitCore;
+
+        yield* git(tmp, ["checkout", "-b", "feature/clean-merge"]);
+        yield* writeTextFile(path.join(tmp, "feature.txt"), "feature branch content\n");
+        yield* git(tmp, ["add", "feature.txt"]);
+        yield* git(tmp, ["commit", "-m", "feature file"]);
+
+        yield* git(tmp, ["checkout", initialBranch]);
+
+        const merged = yield* core.mergeBranches({
+          cwd: tmp,
+          sourceBranch: "feature/clean-merge",
+          targetBranch: initialBranch,
+        });
+        expect(merged.status).toBe("merged");
+        expect(merged.conflictedFiles).toEqual([]);
+
+        const files = yield* git(tmp, ["ls-files"]);
+        expect(files.split("\n")).toContain("feature.txt");
+      }),
+    );
+
     it.effect("computes ahead count against base branch when no upstream is configured", () =>
       Effect.gen(function* () {
         const tmp = yield* makeTmpDir();

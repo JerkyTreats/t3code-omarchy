@@ -837,6 +837,45 @@ export const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
     return path.isAbsolute(gitCommonDir) ? gitCommonDir : path.resolve(cwd, gitCommonDir);
   });
 
+  const resolveGitPath = Effect.fn("resolveGitPath")(function* (
+    operation: string,
+    cwd: string,
+    revParseFlag: "--git-dir" | "--git-common-dir" | "--show-toplevel",
+  ) {
+    const outputPath = yield* runGitStdout(operation, cwd, ["rev-parse", revParseFlag]).pipe(
+      Effect.map((stdout) => stdout.trim()),
+    );
+    return path.isAbsolute(outputPath) ? outputPath : path.resolve(cwd, outputPath);
+  });
+
+  const hasMergeHead = Effect.fn("hasMergeHead")(function* (cwd: string) {
+    const result = yield* executeGit(
+      "GitCore.hasMergeHead",
+      cwd,
+      ["rev-parse", "-q", "--verify", "MERGE_HEAD"],
+      {
+        allowNonZeroExit: true,
+        timeoutMs: 5_000,
+        maxOutputBytes: 4_096,
+      },
+    );
+    return result.code === 0;
+  });
+
+  const readConflictedFiles = Effect.fn("readConflictedFiles")(function* (cwd: string) {
+    const stdout = yield* runGitStdout(
+      "GitCore.readConflictedFiles",
+      cwd,
+      ["diff", "--name-only", "--diff-filter=U"],
+      true,
+    );
+    return stdout
+      .split(/\r?\n/g)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+      .toSorted((left, right) => left.localeCompare(right));
+  });
+
   const refreshStatusUpstreamCacheEntry = Effect.fn("refreshStatusUpstreamCacheEntry")(function* (
     cacheKey: StatusUpstreamRefreshCacheKey,
   ) {
@@ -1101,14 +1140,24 @@ export const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
   const statusDetails: GitCoreShape["statusDetails"] = Effect.fn("statusDetails")(function* (cwd) {
     yield* refreshStatusUpstreamIfStale(cwd).pipe(Effect.ignoreCause({ log: true }));
 
-    const [statusStdout, unstagedNumstatStdout, stagedNumstatStdout] = yield* Effect.all(
-      [
-        runGitStdout("GitCore.statusDetails.status", cwd, ["status", "--porcelain=2", "--branch"]),
-        runGitStdout("GitCore.statusDetails.unstagedNumstat", cwd, ["diff", "--numstat"]),
-        runGitStdout("GitCore.statusDetails.stagedNumstat", cwd, ["diff", "--cached", "--numstat"]),
-      ],
-      { concurrency: "unbounded" },
-    );
+    const [statusStdout, unstagedNumstatStdout, stagedNumstatStdout, mergeInProgress] =
+      yield* Effect.all(
+        [
+          runGitStdout("GitCore.statusDetails.status", cwd, [
+            "status",
+            "--porcelain=2",
+            "--branch",
+          ]),
+          runGitStdout("GitCore.statusDetails.unstagedNumstat", cwd, ["diff", "--numstat"]),
+          runGitStdout("GitCore.statusDetails.stagedNumstat", cwd, [
+            "diff",
+            "--cached",
+            "--numstat",
+          ]),
+          hasMergeHead(cwd).pipe(Effect.catch(() => Effect.succeed(false))),
+        ],
+        { concurrency: "unbounded" },
+      );
 
     let branch: string | null = null;
     let upstreamRef: string | null = null;
@@ -1116,6 +1165,7 @@ export const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
     let behindCount = 0;
     let hasWorkingTreeChanges = false;
     const changedFilesWithoutNumstat = new Set<string>();
+    const conflictedFiles = new Set<string>();
 
     for (const line of statusStdout.split(/\r?\n/g)) {
       if (line.startsWith("# branch.head ")) {
@@ -1139,6 +1189,9 @@ export const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
         hasWorkingTreeChanges = true;
         const pathValue = parsePorcelainPath(line);
         if (pathValue) changedFilesWithoutNumstat.add(pathValue);
+        if (line.startsWith("u ") && pathValue) {
+          conflictedFiles.add(pathValue);
+        }
       }
     }
 
@@ -1175,6 +1228,13 @@ export const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
     }
     files.sort((a, b) => a.path.localeCompare(b.path));
 
+    const normalizedConflictedFiles =
+      conflictedFiles.size > 0
+        ? Array.from(conflictedFiles).toSorted((left, right) => left.localeCompare(right))
+        : mergeInProgress
+          ? yield* readConflictedFiles(cwd).pipe(Effect.catch(() => Effect.succeed([])))
+          : [];
+
     return {
       branch,
       upstreamRef,
@@ -1187,6 +1247,10 @@ export const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
       hasUpstream: upstreamRef !== null,
       aheadCount,
       behindCount,
+      merge: {
+        inProgress: mergeInProgress,
+        conflictedFiles: normalizedConflictedFiles,
+      },
     };
   });
 
@@ -1199,6 +1263,7 @@ export const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
         hasUpstream: details.hasUpstream,
         aheadCount: details.aheadCount,
         behindCount: details.behindCount,
+        merge: details.merge,
         pr: null,
       })),
     );
@@ -1862,6 +1927,93 @@ export const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
       fallbackErrorMessage: "git branch create failed",
     }).pipe(Effect.asVoid);
 
+  const mergeBranches: GitCoreShape["mergeBranches"] = Effect.fn("mergeBranches")(
+    function* (input) {
+      const details = yield* statusDetails(input.cwd);
+      if (details.branch !== input.targetBranch) {
+        return yield* createGitCommandError(
+          "GitCore.mergeBranches",
+          input.cwd,
+          ["merge", "--no-edit", input.sourceBranch],
+          `Workspace is on ${details.branch ?? "detached HEAD"}, expected ${input.targetBranch}.`,
+        );
+      }
+
+      const beforeHead = yield* runGitStdout("GitCore.mergeBranches.beforeHead", input.cwd, [
+        "rev-parse",
+        "HEAD",
+      ]).pipe(Effect.map((stdout) => stdout.trim()));
+
+      const mergeResult = yield* executeGit(
+        "GitCore.mergeBranches",
+        input.cwd,
+        ["merge", "--no-edit", input.sourceBranch],
+        {
+          allowNonZeroExit: true,
+          timeoutMs: 30_000,
+          fallbackErrorMessage: "git merge failed",
+        },
+      );
+
+      if (mergeResult.code === 0) {
+        const afterHead = yield* runGitStdout("GitCore.mergeBranches.afterHead", input.cwd, [
+          "rev-parse",
+          "HEAD",
+        ]).pipe(Effect.map((stdout) => stdout.trim()));
+        return {
+          status: "merged" as const,
+          sourceBranch: input.sourceBranch,
+          targetBranch: input.targetBranch,
+          targetWorktreePath: input.cwd,
+          conflictedFiles: [],
+          ...(afterHead.length > 0 && afterHead !== beforeHead
+            ? { mergeCommitSha: afterHead }
+            : {}),
+        };
+      }
+
+      const postMergeDetails = yield* statusDetails(input.cwd).pipe(
+        Effect.catch(() => Effect.succeed(details)),
+      );
+      if (postMergeDetails.merge?.inProgress) {
+        return {
+          status: "conflicted" as const,
+          sourceBranch: input.sourceBranch,
+          targetBranch: input.targetBranch,
+          targetWorktreePath: input.cwd,
+          conflictedFiles: postMergeDetails.merge.conflictedFiles,
+        };
+      }
+
+      return yield* createGitCommandError(
+        "GitCore.mergeBranches",
+        input.cwd,
+        ["merge", "--no-edit", input.sourceBranch],
+        mergeResult.stderr.trim() || mergeResult.stdout.trim() || "git merge failed",
+      );
+    },
+  );
+
+  const abortMerge: GitCoreShape["abortMerge"] = Effect.fn("abortMerge")(function* (input) {
+    const mergeInProgress = yield* hasMergeHead(input.cwd);
+    if (!mergeInProgress) {
+      return {
+        status: "skipped_no_merge_in_progress" as const,
+        cwd: input.cwd,
+      };
+    }
+
+    yield* executeGit("GitCore.abortMerge", input.cwd, ["merge", "--abort"], {
+      timeoutMs: 15_000,
+      fallbackErrorMessage: "git merge --abort failed",
+    });
+
+    return {
+      status: "aborted" as const,
+      cwd: input.cwd,
+    };
+  });
+
   const checkoutBranch: GitCoreShape["checkoutBranch"] = Effect.fn("checkoutBranch")(
     function* (input) {
       const [localInputExists, remoteExists] = yield* Effect.all(
@@ -1943,6 +2095,38 @@ export const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
       fallbackErrorMessage: "git init failed",
     }).pipe(Effect.asVoid);
 
+  const repositoryContext: GitCoreShape["repositoryContext"] = Effect.fn("repositoryContext")(
+    function* (input) {
+      const insideWorkTree = yield* isInsideWorkTree(input.cwd);
+      if (!insideWorkTree) {
+        return {
+          isRepo: false,
+          repoRoot: null,
+          gitDir: null,
+          commonDir: null,
+          isWorktree: false,
+        };
+      }
+
+      const [repoRoot, gitDir, commonDir] = yield* Effect.all(
+        [
+          resolveGitPath("GitCore.repositoryContext.repoRoot", input.cwd, "--show-toplevel"),
+          resolveGitPath("GitCore.repositoryContext.gitDir", input.cwd, "--git-dir"),
+          resolveGitPath("GitCore.repositoryContext.commonDir", input.cwd, "--git-common-dir"),
+        ],
+        { concurrency: "unbounded" },
+      );
+
+      return {
+        isRepo: true,
+        repoRoot,
+        gitDir,
+        commonDir,
+        isWorktree: gitDir !== commonDir,
+      };
+    },
+  );
+
   const listLocalBranchNames: GitCoreShape["listLocalBranchNames"] = (cwd) =>
     runGitStdout("GitCore.listLocalBranchNames", cwd, [
       "branch",
@@ -1980,8 +2164,11 @@ export const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
     removeWorktree,
     renameBranch,
     createBranch,
+    mergeBranches,
+    abortMerge,
     checkoutBranch,
     initRepo,
+    repositoryContext,
     listLocalBranchNames,
   } satisfies GitCoreShape;
 });
