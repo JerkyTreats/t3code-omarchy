@@ -38,6 +38,19 @@ The fork has final authority for these areas:
 - workspace promotion behavior and merge guidance
 - governance files and repository process rules
 
+## Protected Fork Features
+
+Treat these as protected fork features during every upstream sync:
+
+- fork first GitHub identity resolution for repo, issue, and panel context
+- draft autonomy for composer text, screenshots, attachments, and local thread state
+- Git panel isolation from active draft ownership and prompt state
+- plan sidebar progress affordances and other fork specific status cues
+- local branch, worktree, and promotion workflow behavior
+- Omarchy specific desktop and screenshot integration behavior
+
+Do not remove, replace, silently degrade, or route around these features without an intentional fork decision that is recorded in the merge notes.
+
 ## Upstream Intake Classes
 
 Classify each meaningful upstream change into one of these outcomes:
@@ -59,6 +72,20 @@ Classify each meaningful upstream change into one of these outcomes:
 - Never discard Omarchy specific UX or desktop behavior only to reduce merge effort.
 - Prefer small integration commits or pull requests that clearly describe what was adopted, adapted, and rejected.
 - When a divergence becomes long lived, isolate the fork seam so future upstream sync work stays cheaper and safer.
+
+## Required Fork Preservation Gate
+
+Before an upstream sync, merge, or divergence update is ready for review or merge, complete this gate:
+
+- identify the protected fork features touched by the incoming upstream change
+- classify each meaningful change as `adopt`, `adapt`, or `reject`
+- state the fork seam or owner module where reconciliation happens
+- verify that no protected fork feature silently falls back to generic upstream behavior
+- verify that active drafts, screenshots, attachments, and local Git context remain intact across the affected flows
+- verify that fork specific sidebar, panel, and workflow affordances still render and behave as expected
+- record the protected fork features reviewed in the pull request, merge notes, or commit body
+
+If this gate is not completed, the upstream merge is not ready.
 
 ## Seam Strategy
 
@@ -83,6 +110,7 @@ Classify each meaningful upstream change into one of these outcomes:
 - Review upstream regularly.
 - Use the external watch workflow to surface new upstream changes.
 - For each upstream sync, record the adopted, adapted, and rejected changes in the pull request or commit body.
+- For each upstream sync, explicitly record which protected fork features were checked and whether any were intentionally changed.
 - Call out compatibility impact for desktop IPC, WebSocket contracts, persisted browser state, server side state, and user visible workflow.
 - When adapting a shared domain, note where the authoritative fork seam lives so later merges have one clear reconciliation point.
 - Before considering an upstream sync complete, ensure `bun fmt`, `bun lint`, and `bun typecheck` all pass.

@@ -25,6 +25,7 @@ This repository is a VERY EARLY WIP. Proposing sweeping changes that improve lon
 - For any request that asks for a commit or amend, review [Commit Policy](governance/commit_policy.md) before running `git commit` or `git commit --amend`.
 - For any request to edit `AGENTS.md` or files under `governance/`, review [Policy Proposal Flow](governance/policy_proposal_flow.md) before editing.
 - For upstream sync, merge, or divergence decisions, review [Upstream Merge Policy](governance/upstream_merge_policy.md) first.
+- For upstream sync or merge implementation work, complete the required fork preservation gate in [Upstream Merge Policy](governance/upstream_merge_policy.md) before considering the work ready for review or merge.
 - Complex workflow mode is opt in and not enforced by CI.
 
 ## Core Priorities
