@@ -853,6 +853,13 @@ async function waitForButtonContainingText(text: string): Promise<HTMLButtonElem
   );
 }
 
+async function waitForButtonByLabel(label: string): Promise<HTMLButtonElement> {
+  return waitForElement(
+    () => document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`),
+    `Unable to find button with label "${label}".`,
+  );
+}
+
 async function expectComposerActionsContained(): Promise<void> {
   const footer = await waitForElement(
     () => document.querySelector<HTMLElement>('[data-chat-composer-footer="true"]'),
@@ -1271,6 +1278,43 @@ describe("ChatView timeline estimator parity (full app)", () => {
       expect(narrowest.timelineWidthMeasuredPx).toBeLessThan(widest.timelineWidthMeasuredPx);
       expect(narrowest.measuredRowHeightPx).toBeGreaterThan(widest.measuredRowHeightPx);
       expect(narrowest.estimatedHeightPx).toBeGreaterThan(widest.estimatedHeightPx);
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("opens and closes the Git panel from the header button", async () => {
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createSnapshotForTargetUser({
+        targetMessageId: "msg-user-git-panel-toggle" as MessageId,
+        targetText: "git panel toggle",
+      }),
+    });
+
+    try {
+      const gitToggle = await waitForButtonByLabel("Toggle GitHub panel");
+      expect(gitToggle.getAttribute("aria-pressed")).toBe("false");
+
+      gitToggle.click();
+
+      await vi.waitFor(
+        () => {
+          expect(mounted.router.state.location.search.github).toBe("1");
+          expect(gitToggle.getAttribute("aria-pressed")).toBe("true");
+        },
+        { timeout: 8_000, interval: 16 },
+      );
+
+      gitToggle.click();
+
+      await vi.waitFor(
+        () => {
+          expect(mounted.router.state.location.search.github).toBeUndefined();
+          expect(gitToggle.getAttribute("aria-pressed")).toBe("false");
+        },
+        { timeout: 8_000, interval: 16 },
+      );
     } finally {
       await mounted.cleanup();
     }

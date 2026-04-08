@@ -31,6 +31,7 @@ import { useGitStatus } from "~/lib/gitStatusState";
 import { projectSearchEntriesQueryOptions } from "~/lib/projectReactQuery";
 import { isElectron } from "../env";
 import { parseDiffRouteSearch, stripDiffSearchParams } from "../diffRouteSearch";
+import { parseGitPanelRouteSearch, stripGitPanelSearchParams } from "../gitPanelRouteSearch";
 import {
   clampCollapsedComposerCursor,
   type ComposerTrigger,
@@ -590,7 +591,10 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const navigate = useNavigate();
   const rawSearch = useSearch({
     strict: false,
-    select: (params) => parseDiffRouteSearch(params),
+    select: (params) => ({
+      ...parseDiffRouteSearch(params),
+      ...parseGitPanelRouteSearch(params),
+    }),
   });
   const { resolvedTheme } = useTheme();
   const composerDraft = useComposerThreadDraft(threadId);
@@ -845,6 +849,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const isLocalDraftThread = !isServerThread && localDraftThread !== undefined;
   const canCheckoutPullRequestIntoThread = isLocalDraftThread;
   const diffOpen = rawSearch.diff === "1";
+  const gitOpen = rawSearch.github === "1";
   const activeThreadId = activeThread?.id ?? null;
   const existingOpenTerminalThreadIds = useMemo(() => {
     const existingThreadIds = new Set<ThreadId>([...serverThreadIds, ...draftThreadIds]);
@@ -1583,6 +1588,20 @@ export default function ChatView({ threadId }: ChatViewProps) {
       },
     });
   }, [diffOpen, navigate, threadId]);
+  const onToggleGit = useCallback(() => {
+    void navigate({
+      to: "/$threadId",
+      params: { threadId },
+      replace: true,
+      search: (previous) => {
+        if (gitOpen) {
+          return { ...stripGitPanelSearchParams(previous), github: undefined };
+        }
+        const rest = stripGitPanelSearchParams(stripDiffSearchParams(previous));
+        return { ...rest, github: "1" };
+      },
+    });
+  }, [gitOpen, navigate, threadId]);
 
   const envLocked = Boolean(
     activeThread &&
@@ -3950,6 +3969,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
           terminalToggleShortcutLabel={terminalToggleShortcutLabel}
           diffToggleShortcutLabel={diffPanelShortcutLabel}
           gitCwd={gitCwd}
+          gitOpen={gitOpen}
           diffOpen={diffOpen}
           onRunProjectScript={(script) => {
             void runProjectScript(script);
@@ -3958,6 +3978,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
           onUpdateProjectScript={updateProjectScript}
           onDeleteProjectScript={deleteProjectScript}
           onToggleTerminal={toggleTerminalVisibility}
+          onToggleGit={onToggleGit}
           onToggleDiff={onToggleDiff}
         />
       </header>
