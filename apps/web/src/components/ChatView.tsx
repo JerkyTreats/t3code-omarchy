@@ -100,8 +100,6 @@ import {
   ChevronRightIcon,
   CircleAlertIcon,
   ListTodoIcon,
-  LockIcon,
-  LockOpenIcon,
   XIcon,
 } from "lucide-react";
 import { Button } from "./ui/button";
@@ -143,6 +141,7 @@ import {
   type TerminalContextDraft,
   type TerminalContextSelection,
 } from "../lib/terminalContext";
+import { buildComposerRichDraftEdit, type ComposerRichDraftFormat } from "../composerRichDraft";
 import { deriveLatestContextWindowSnapshot } from "../lib/contextWindow";
 import {
   resolveComposerFooterContentWidth,
@@ -155,16 +154,17 @@ import { ComposerPromptEditor, type ComposerPromptEditorHandle } from "./Compose
 import { PullRequestThreadDialog } from "./PullRequestThreadDialog";
 import { MessagesTimeline } from "./chat/MessagesTimeline";
 import { ChatHeader } from "./chat/ChatHeader";
-import { ContextWindowMeter } from "./chat/ContextWindowMeter";
+import { ComposerFooterControls } from "./chat/ComposerFooterControls";
 import { buildExpandedImagePreview, ExpandedImagePreview } from "./chat/ExpandedImagePreview";
 import { AVAILABLE_PROVIDER_OPTIONS, ProviderModelPicker } from "./chat/ProviderModelPicker";
 import { ComposerCommandItem, ComposerCommandMenu } from "./chat/ComposerCommandMenu";
 import { ComposerPendingApprovalActions } from "./chat/ComposerPendingApprovalActions";
 import { CompactComposerControlsMenu } from "./chat/CompactComposerControlsMenu";
-import { ComposerPrimaryActions } from "./chat/ComposerPrimaryActions";
 import { ComposerPendingApprovalPanel } from "./chat/ComposerPendingApprovalPanel";
 import { ComposerPendingUserInputPanel } from "./chat/ComposerPendingUserInputPanel";
 import { ComposerPlanFollowUpBanner } from "./chat/ComposerPlanFollowUpBanner";
+import { ComposerRichDraftToolbar } from "./chat/ComposerRichDraftToolbar";
+import { ComposerTopActions } from "./chat/ComposerTopActions";
 import {
   getComposerProviderState,
   renderProviderTraitsMenuContent,
@@ -610,6 +610,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
       }),
     [composerImages.length, composerTerminalContexts, prompt],
   );
+  const richDraftMode = composerDraft.richDraftMode;
   const nonPersistedComposerImageIds = composerDraft.nonPersistedImageIds;
   const setComposerDraftPrompt = useComposerDraftStore((store) => store.setPrompt);
   const setComposerDraftModelSelection = useComposerDraftStore((store) => store.setModelSelection);
@@ -617,6 +618,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const setComposerDraftInteractionMode = useComposerDraftStore(
     (store) => store.setInteractionMode,
   );
+  const setComposerDraftRichDraftMode = useComposerDraftStore((store) => store.setRichDraftMode);
   const addComposerDraftImage = useComposerDraftStore((store) => store.addImage);
   const addComposerDraftImages = useComposerDraftStore((store) => store.addImages);
   const removeComposerDraftImage = useComposerDraftStore((store) => store.removeImage);
@@ -1618,6 +1620,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
     null;
   const hasReachedSplitLimit =
     (activeTerminalGroup?.terminalIds.length ?? 0) >= MAX_TERMINALS_PER_GROUP;
+  const canCaptureDesktopScreenshot = typeof window.desktopBridge?.captureScreenshot === "function";
   const setThreadError = useCallback(
     (targetThreadId: ThreadId | null, error: string | null) => {
       if (!targetThreadId) return;
@@ -2714,54 +2717,95 @@ export default function ChatView({ threadId }: ChatViewProps) {
     toggleTerminalVisibility,
   ]);
 
-  const addComposerImages = (files: File[]) => {
-    if (!activeThreadId || files.length === 0) return;
+  const addComposerImages = useCallback(
+    (files: File[]) => {
+      if (!activeThreadId || files.length === 0) return;
 
-    if (pendingUserInputs.length > 0) {
-      toastManager.add({
-        type: "error",
-        title: "Attach images after answering plan questions.",
-      });
+      if (pendingUserInputs.length > 0) {
+        toastManager.add({
+          type: "error",
+          title: "Attach images after answering plan questions.",
+        });
+        return;
+      }
+
+      const nextImages: ComposerImageAttachment[] = [];
+      let nextImageCount = composerImagesRef.current.length;
+      let error: string | null = null;
+      for (const file of files) {
+        if (!file.type.startsWith("image/")) {
+          error = `Unsupported file type for '${file.name}'. Please attach image files only.`;
+          continue;
+        }
+        if (file.size > PROVIDER_SEND_TURN_MAX_IMAGE_BYTES) {
+          error = `'${file.name}' exceeds the ${IMAGE_SIZE_LIMIT_LABEL} attachment limit.`;
+          continue;
+        }
+        if (nextImageCount >= PROVIDER_SEND_TURN_MAX_ATTACHMENTS) {
+          error = `You can attach up to ${PROVIDER_SEND_TURN_MAX_ATTACHMENTS} images per message.`;
+          break;
+        }
+
+        const previewUrl = URL.createObjectURL(file);
+        nextImages.push({
+          type: "image",
+          id: randomUUID(),
+          name: file.name || "image",
+          mimeType: file.type,
+          sizeBytes: file.size,
+          previewUrl,
+          file,
+        });
+        nextImageCount += 1;
+      }
+
+      if (nextImages.length === 1 && nextImages[0]) {
+        addComposerImage(nextImages[0]);
+      } else if (nextImages.length > 1) {
+        addComposerImagesToDraft(nextImages);
+      }
+      setThreadError(activeThreadId, error);
+    },
+    [
+      activeThreadId,
+      addComposerImage,
+      addComposerImagesToDraft,
+      pendingUserInputs.length,
+      setThreadError,
+    ],
+  );
+
+  const captureComposerScreenshot = useCallback(async () => {
+    if (!activeThreadId) {
+      return;
+    }
+    const bridge = window.desktopBridge;
+    if (!bridge || typeof bridge.captureScreenshot !== "function") {
+      setThreadError(activeThreadId, "Screenshot capture is unavailable in this desktop build.");
       return;
     }
 
-    const nextImages: ComposerImageAttachment[] = [];
-    let nextImageCount = composerImagesRef.current.length;
-    let error: string | null = null;
-    for (const file of files) {
-      if (!file.type.startsWith("image/")) {
-        error = `Unsupported file type for '${file.name}'. Please attach image files only.`;
-        continue;
+    try {
+      const capturedScreenshot = await bridge.captureScreenshot();
+      if (!capturedScreenshot) {
+        return;
       }
-      if (file.size > PROVIDER_SEND_TURN_MAX_IMAGE_BYTES) {
-        error = `'${file.name}' exceeds the ${IMAGE_SIZE_LIMIT_LABEL} attachment limit.`;
-        continue;
-      }
-      if (nextImageCount >= PROVIDER_SEND_TURN_MAX_ATTACHMENTS) {
-        error = `You can attach up to ${PROVIDER_SEND_TURN_MAX_ATTACHMENTS} images per message.`;
-        break;
-      }
-
-      const previewUrl = URL.createObjectURL(file);
-      nextImages.push({
-        type: "image",
-        id: randomUUID(),
-        name: file.name || "image",
-        mimeType: file.type,
-        sizeBytes: file.size,
-        previewUrl,
-        file,
+      const screenshotMimeType = capturedScreenshot.mimeType || "image/png";
+      const screenshotBlob = await fetch(capturedScreenshot.dataUrl).then((response) =>
+        response.blob(),
+      );
+      const screenshotFile = new File([screenshotBlob], capturedScreenshot.name, {
+        type: screenshotMimeType,
       });
-      nextImageCount += 1;
+      addComposerImages([screenshotFile]);
+      setThreadError(activeThreadId, null);
+      focusComposer();
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unable to capture screenshot right now.";
+      setThreadError(activeThreadId, message);
     }
-
-    if (nextImages.length === 1 && nextImages[0]) {
-      addComposerImage(nextImages[0]);
-    } else if (nextImages.length > 1) {
-      addComposerImagesToDraft(nextImages);
-    }
-    setThreadError(activeThreadId, error);
-  };
+  }, [activeThreadId, addComposerImages, focusComposer, setThreadError]);
 
   const removeComposerImage = (imageId: string) => {
     removeComposerImageFromDraft(imageId);
@@ -3623,6 +3667,13 @@ export default function ChatView({ threadId }: ChatViewProps) {
     prompt,
     onPromptChange: setPromptFromTraits,
   });
+  const onRichDraftModeChange = useCallback(
+    (enabled: boolean) => {
+      setComposerDraftRichDraftMode(threadId, enabled);
+      scheduleComposerFocus();
+    },
+    [scheduleComposerFocus, setComposerDraftRichDraftMode, threadId],
+  );
   const onEnvModeChange = useCallback(
     (mode: DraftThreadEnvMode) => {
       if (isLocalDraftThread) {
@@ -3638,7 +3689,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
       rangeStart: number,
       rangeEnd: number,
       replacement: string,
-      options?: { expectedText?: string },
+      options?: { expectedText?: string; nextExpandedCursor?: number },
     ): boolean => {
       const currentText = promptRef.current;
       const safeStart = Math.max(0, Math.min(currentText.length, rangeStart));
@@ -3650,7 +3701,6 @@ export default function ChatView({ threadId }: ChatViewProps) {
         return false;
       }
       const next = replaceTextRange(promptRef.current, rangeStart, rangeEnd, replacement);
-      const nextCursor = collapseExpandedComposerCursor(next.text, next.cursor);
       promptRef.current = next.text;
       const activePendingQuestion = activePendingProgress?.activeQuestion;
       if (activePendingQuestion && activePendingUserInput) {
@@ -3667,12 +3717,15 @@ export default function ChatView({ threadId }: ChatViewProps) {
       } else {
         setPrompt(next.text);
       }
-      setComposerCursor(nextCursor);
-      setComposerTrigger(
-        detectComposerTrigger(next.text, expandCollapsedComposerCursor(next.text, nextCursor)),
+      const nextExpandedCursor = Math.max(
+        0,
+        Math.min(next.text.length, Math.floor(options?.nextExpandedCursor ?? next.cursor)),
       );
+      const nextCollapsedCursor = collapseExpandedComposerCursor(next.text, nextExpandedCursor);
+      setComposerCursor(nextCollapsedCursor);
+      setComposerTrigger(detectComposerTrigger(next.text, nextExpandedCursor));
       window.requestAnimationFrame(() => {
-        composerEditorRef.current?.focusAt(nextCursor);
+        composerEditorRef.current?.focusAt(nextCollapsedCursor);
       });
       return true;
     },
@@ -3683,6 +3736,8 @@ export default function ChatView({ threadId }: ChatViewProps) {
     value: string;
     cursor: number;
     expandedCursor: number;
+    selectionStart: number;
+    selectionEnd: number;
     terminalContextIds: string[];
   } => {
     const editorSnapshot = composerEditorRef.current?.readSnapshot();
@@ -3693,9 +3748,27 @@ export default function ChatView({ threadId }: ChatViewProps) {
       value: promptRef.current,
       cursor: composerCursor,
       expandedCursor: expandCollapsedComposerCursor(promptRef.current, composerCursor),
+      selectionStart: expandCollapsedComposerCursor(promptRef.current, composerCursor),
+      selectionEnd: expandCollapsedComposerCursor(promptRef.current, composerCursor),
       terminalContextIds: composerTerminalContexts.map((context) => context.id),
     };
   }, [composerCursor, composerTerminalContexts]);
+
+  const onApplyRichDraftFormat = useCallback(
+    (format: ComposerRichDraftFormat) => {
+      const snapshot = readComposerSnapshot();
+      const edit = buildComposerRichDraftEdit({
+        text: snapshot.value,
+        selectionStart: snapshot.selectionStart,
+        selectionEnd: snapshot.selectionEnd,
+        format,
+      });
+      applyPromptReplacement(edit.rangeStart, edit.rangeEnd, edit.replacement, {
+        nextExpandedCursor: edit.nextExpandedCursor,
+      });
+    },
+    [applyPromptReplacement, readComposerSnapshot],
+  );
 
   const resolveActiveComposerTrigger = useCallback((): {
     snapshot: { value: string; cursor: number; expandedCursor: number };
@@ -3878,7 +3951,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
       }
     }
 
-    if (key === "Enter" && !event.shiftKey) {
+    if (key === "Enter" && !event.shiftKey && !richDraftMode) {
       void onSend();
       return true;
     }
@@ -4122,6 +4195,21 @@ export default function ChatView({ threadId }: ChatViewProps) {
                       </div>
                     )}
 
+                    {!isComposerApprovalState ? (
+                      <ComposerTopActions
+                        canCaptureDesktopScreenshot={canCaptureDesktopScreenshot}
+                        runtimeMode={runtimeMode}
+                        onCaptureScreenshot={() => {
+                          void captureComposerScreenshot();
+                        }}
+                        onToggleRuntimeMode={() => {
+                          void handleRuntimeModeChange(
+                            runtimeMode === "full-access" ? "approval-required" : "full-access",
+                          );
+                        }}
+                      />
+                    ) : null}
+
                     {!isComposerApprovalState &&
                       pendingUserInputs.length === 0 &&
                       composerImages.length > 0 && (
@@ -4191,39 +4279,76 @@ export default function ChatView({ threadId }: ChatViewProps) {
                           ))}
                         </div>
                       )}
-                    <ComposerPromptEditor
-                      ref={composerEditorRef}
-                      value={
-                        isComposerApprovalState
-                          ? ""
-                          : activePendingProgress
-                            ? activePendingProgress.customAnswer
-                            : prompt
-                      }
-                      cursor={composerCursor}
-                      terminalContexts={
-                        !isComposerApprovalState && pendingUserInputs.length === 0
-                          ? composerTerminalContexts
-                          : []
-                      }
-                      onRemoveTerminalContext={removeComposerTerminalContextFromDraft}
-                      onChange={onPromptChange}
-                      onCommandKeyDown={onComposerCommandKey}
-                      onPaste={onComposerPaste}
-                      placeholder={
-                        isComposerApprovalState
-                          ? (activePendingApproval?.detail ??
-                            "Resolve this approval request to continue")
-                          : activePendingProgress
-                            ? "Type your own answer, or leave this blank to use the selected option"
-                            : showPlanFollowUpPrompt && activeProposedPlan
-                              ? "Add feedback to refine the plan, or leave this blank to implement it"
-                              : phase === "disconnected"
-                                ? "Ask for follow-up changes or attach images"
-                                : "Ask anything, @tag files/folders, or use / to show available commands"
-                      }
-                      disabled={isConnecting || isComposerApprovalState}
-                    />
+                    {(!isComposerApprovalState || richDraftMode) && !activePendingApproval ? (
+                      <div className="mb-2 flex items-start justify-between gap-2 pr-20 sm:pr-24">
+                        {richDraftMode ? (
+                          <ComposerRichDraftToolbar
+                            disabled={isConnecting || isComposerApprovalState}
+                            onApplyFormat={onApplyRichDraftFormat}
+                          />
+                        ) : (
+                          <div />
+                        )}
+
+                        {!isComposerApprovalState ? (
+                          <div className="flex shrink-0 items-center gap-1.5">
+                            {activePlan || sidebarProposedPlan || planSidebarOpen ? (
+                              <Button
+                                variant="ghost"
+                                className={cn(
+                                  "shrink-0 whitespace-nowrap px-2",
+                                  planSidebarOpen
+                                    ? "text-blue-400 hover:text-blue-300"
+                                    : "text-muted-foreground/70 hover:text-foreground/80",
+                                )}
+                                size="sm"
+                                type="button"
+                                onClick={togglePlanSidebar}
+                                title={planSidebarOpen ? "Hide plan sidebar" : "Show plan sidebar"}
+                              >
+                                <ListTodoIcon />
+                                <span className="sr-only lg:not-sr-only">Plan</span>
+                              </Button>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    <div className="pr-20 sm:pr-24">
+                      <ComposerPromptEditor
+                        ref={composerEditorRef}
+                        value={
+                          isComposerApprovalState
+                            ? ""
+                            : activePendingProgress
+                              ? activePendingProgress.customAnswer
+                              : prompt
+                        }
+                        cursor={composerCursor}
+                        terminalContexts={
+                          !isComposerApprovalState && pendingUserInputs.length === 0
+                            ? composerTerminalContexts
+                            : []
+                        }
+                        onRemoveTerminalContext={removeComposerTerminalContextFromDraft}
+                        onChange={onPromptChange}
+                        onCommandKeyDown={onComposerCommandKey}
+                        onPaste={onComposerPaste}
+                        placeholder={
+                          isComposerApprovalState
+                            ? (activePendingApproval?.detail ??
+                              "Resolve this approval request to continue")
+                            : activePendingProgress
+                              ? "Type your own answer, or leave this blank to use the selected option"
+                              : showPlanFollowUpPrompt && activeProposedPlan
+                                ? "Add feedback to refine the plan, or leave this blank to implement it"
+                                : phase === "disconnected"
+                                  ? "Ask for follow-up changes or attach images"
+                                  : "Ask anything, @tag files/folders, or use / to show available commands"
+                        }
+                        disabled={isConnecting || isComposerApprovalState}
+                      />
+                    </div>
                   </div>
 
                   {/* Bottom toolbar */}
@@ -4280,8 +4405,10 @@ export default function ChatView({ threadId }: ChatViewProps) {
                             )}
                             interactionMode={interactionMode}
                             planSidebarOpen={planSidebarOpen}
+                            richDraftMode={richDraftMode}
                             runtimeMode={runtimeMode}
                             traitsMenuContent={providerTraitsMenuContent}
+                            onToggleRichDraftMode={() => onRichDraftModeChange(!richDraftMode)}
                             onToggleInteractionMode={toggleInteractionMode}
                             onTogglePlanSidebar={togglePlanSidebar}
                             onToggleRuntimeMode={toggleRuntimeMode}
@@ -4326,30 +4453,6 @@ export default function ChatView({ threadId }: ChatViewProps) {
                               className="mx-0.5 hidden h-4 sm:block"
                             />
 
-                            <Button
-                              variant="ghost"
-                              className="shrink-0 whitespace-nowrap px-2 text-muted-foreground/70 hover:text-foreground/80 sm:px-3"
-                              size="sm"
-                              type="button"
-                              onClick={() =>
-                                void handleRuntimeModeChange(
-                                  runtimeMode === "full-access"
-                                    ? "approval-required"
-                                    : "full-access",
-                                )
-                              }
-                              title={
-                                runtimeMode === "full-access"
-                                  ? "Full access — click to require approvals"
-                                  : "Approval required — click for full access"
-                              }
-                            >
-                              {runtimeMode === "full-access" ? <LockOpenIcon /> : <LockIcon />}
-                              <span className="sr-only sm:not-sr-only">
-                                {runtimeMode === "full-access" ? "Full access" : "Supervised"}
-                              </span>
-                            </Button>
-
                             {activePlan || sidebarProposedPlan || planSidebarOpen ? (
                               <>
                                 <Separator
@@ -4389,39 +4492,53 @@ export default function ChatView({ threadId }: ChatViewProps) {
                         }
                         className="flex shrink-0 flex-nowrap items-center justify-end gap-2"
                       >
-                        {activeContextWindow ? (
-                          <ContextWindowMeter usage={activeContextWindow} />
-                        ) : null}
-                        {isPreparingWorktree ? (
-                          <span className="text-muted-foreground/70 text-xs">
-                            Preparing worktree...
-                          </span>
-                        ) : null}
-                        <ComposerPrimaryActions
-                          compact={isComposerPrimaryActionsCompact}
-                          pendingAction={
+                        <ComposerFooterControls
+                          activeContextWindow={activeContextWindow}
+                          activePendingIsResponding={activePendingIsResponding}
+                          activePendingProgress={
                             activePendingProgress
                               ? {
-                                  questionIndex: activePendingProgress.questionIndex,
-                                  isLastQuestion: activePendingProgress.isLastQuestion,
                                   canAdvance: activePendingProgress.canAdvance,
-                                  isResponding: activePendingIsResponding,
-                                  isComplete: Boolean(activePendingResolvedAnswers),
+                                  isLastQuestion: activePendingProgress.isLastQuestion,
+                                  questionIndex: activePendingProgress.questionIndex,
                                 }
                               : null
                           }
-                          isRunning={phase === "running"}
+                          activePendingResolvedAnswers={Boolean(activePendingResolvedAnswers)}
+                          composerHasSendableContent={composerSendState.hasSendableContent}
+                          interactionMode={interactionMode}
+                          isConnecting={isConnecting}
+                          isPreparingWorktree={isPreparingWorktree}
+                          isSendBusy={isSendBusy}
+                          onImplementPlanInNewThread={() => {
+                            void onImplementPlanInNewThread();
+                          }}
+                          onInterrupt={() => {
+                            void onInterrupt();
+                          }}
+                          onPreviousQuestion={onPreviousActivePendingUserInputQuestion}
+                          onSubmit={
+                            activePendingProgress
+                              ? "pending-progress"
+                              : phase === "running"
+                                ? "running"
+                                : showPlanFollowUpPrompt && pendingUserInputs.length === 0
+                                  ? "plan-follow-up"
+                                  : "send"
+                          }
+                          onToggleInteractionMode={toggleInteractionMode}
+                          onToggleRichDraftMode={onRichDraftModeChange}
+                          pendingResolvedAnswersLabel={
+                            activePendingIsResponding
+                              ? "Submitting..."
+                              : activePendingProgress?.isLastQuestion
+                                ? "Submit answers"
+                                : "Next question"
+                          }
+                          richDraftMode={richDraftMode}
                           showPlanFollowUpPrompt={
                             pendingUserInputs.length === 0 && showPlanFollowUpPrompt
                           }
-                          promptHasText={prompt.trim().length > 0}
-                          isSendBusy={isSendBusy}
-                          isConnecting={isConnecting}
-                          isPreparingWorktree={isPreparingWorktree}
-                          hasSendableContent={composerSendState.hasSendableContent}
-                          onPreviousPendingQuestion={onPreviousActivePendingUserInputQuestion}
-                          onInterrupt={() => void onInterrupt()}
-                          onImplementPlanInNewThread={() => void onImplementPlanInNewThread()}
                         />
                       </div>
                     </div>

@@ -249,6 +249,59 @@ function buildRepoFlag(repository: string | undefined): Array<string> {
   return repository ? ["--repo", repository] : [];
 }
 
+function parseGitRemoteNames(raw: string): ReadonlyArray<string> {
+  return raw
+    .split(/\r?\n/g)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+}
+
+function parseRemoteHostAndPath(remoteUrl: string): { host: string; path: string } | null {
+  const trimmed = remoteUrl.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  if (trimmed.startsWith("git@")) {
+    const hostWithPath = trimmed.slice("git@".length);
+    const separatorIndex = hostWithPath.search(/[:/]/);
+    if (separatorIndex <= 0) {
+      return null;
+    }
+    return {
+      host: hostWithPath.slice(0, separatorIndex).toLowerCase(),
+      path: hostWithPath.slice(separatorIndex + 1),
+    };
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+    return {
+      host: parsed.hostname.toLowerCase(),
+      path: parsed.pathname.replace(/^\/+/, ""),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function parseGitHubRepositoryFromRemoteUrl(remoteUrl: string, hostname: string): string | null {
+  const parsed = parseRemoteHostAndPath(remoteUrl);
+  if (!parsed || parsed.host !== hostname.toLowerCase()) {
+    return null;
+  }
+
+  const path = parsed.path.replace(/\/+$/, "").replace(/\.git$/i, "");
+  const segments = path.split("/").filter((segment) => segment.length > 0);
+  if (segments.length < 2) {
+    return null;
+  }
+
+  const owner = segments[0];
+  const repo = segments[1];
+  return owner && repo ? `${owner}/${repo}` : null;
+}
+
 function decodeGitHubJson<S extends Schema.Top>(
   raw: string,
   schema: S,
@@ -285,17 +338,83 @@ const makeGitHubCli = Effect.sync(() => {
       catch: (error) => normalizeGitHubCliError("execute", error),
     });
 
-  const readRepository = (input: { cwd: string | null; repository?: string }) =>
-    execute({
-      cwd: resolveCommandCwd(input.cwd),
-      args: [
-        "repo",
-        "view",
-        ...(input.repository ? [input.repository] : []),
-        "--json",
-        "nameWithOwner,url,description,defaultBranchRef",
-      ],
-    }).pipe(
+  const runGitStdout = (input: { cwd: string | null; args: ReadonlyArray<string> }) =>
+    Effect.tryPromise({
+      try: async () => {
+        const result = await runProcess("git", input.args, {
+          cwd: resolveCommandCwd(input.cwd),
+          allowNonZeroExit: true,
+        });
+        return result.code === 0 ? result.stdout.trim() : "";
+      },
+      catch: (error) => normalizeGitHubCliError("execute", error),
+    }).pipe(Effect.catch(() => Effect.succeed("")));
+
+  const resolveRepositoryArg = Effect.fn("resolveRepositoryArg")(function* (input: {
+    cwd: string | null;
+    repository?: string;
+    hostname?: string;
+  }) {
+    const explicitRepository = input.repository?.trim();
+    if (explicitRepository) {
+      return explicitRepository;
+    }
+    if (!input.cwd) {
+      return undefined;
+    }
+
+    const hostname = input.hostname ?? "github.com";
+    const currentBranch = yield* runGitStdout({
+      cwd: input.cwd,
+      args: ["branch", "--show-current"],
+    });
+    const branchPushRemote =
+      currentBranch.length > 0
+        ? yield* runGitStdout({
+            cwd: input.cwd,
+            args: ["config", "--get", `branch.${currentBranch}.pushRemote`],
+          })
+        : "";
+    const remotePushDefault = yield* runGitStdout({
+      cwd: input.cwd,
+      args: ["config", "--get", "remote.pushDefault"],
+    });
+    const remoteNames = parseGitRemoteNames(
+      yield* runGitStdout({
+        cwd: input.cwd,
+        args: ["remote"],
+      }),
+    );
+    const preferredRemoteName =
+      branchPushRemote ||
+      remotePushDefault ||
+      (remoteNames.includes("origin") ? "origin" : (remoteNames[0] ?? ""));
+    if (!preferredRemoteName) {
+      return undefined;
+    }
+
+    const remoteUrl = yield* runGitStdout({
+      cwd: input.cwd,
+      args: ["remote", "get-url", preferredRemoteName],
+    });
+    const parsedRepository = parseGitHubRepositoryFromRemoteUrl(remoteUrl, hostname);
+    return parsedRepository ?? undefined;
+  });
+
+  const readRepository = (input: { cwd: string | null; repository?: string; hostname?: string }) =>
+    resolveRepositoryArg(input).pipe(
+      Effect.flatMap((repository) =>
+        execute({
+          cwd: resolveCommandCwd(input.cwd),
+          args: [
+            "repo",
+            "view",
+            ...(repository ? [repository] : []),
+            "--json",
+            "nameWithOwner,url,description,defaultBranchRef",
+          ],
+        }),
+      ),
       Effect.map((result) => result.stdout.trim()),
       Effect.flatMap((raw) =>
         decodeGitHubJson(
@@ -308,18 +427,26 @@ const makeGitHubCli = Effect.sync(() => {
       Effect.map(normalizeRepository),
     );
 
-  const readIssue = (input: { cwd: string | null; repository?: string; reference: string }) =>
-    execute({
-      cwd: resolveCommandCwd(input.cwd),
-      args: [
-        "issue",
-        "view",
-        input.reference,
-        ...buildRepoFlag(input.repository),
-        "--json",
-        "number,title,state,url,body,createdAt,updatedAt,labels,assignees,author",
-      ],
-    }).pipe(
+  const readIssue = (input: {
+    cwd: string | null;
+    repository?: string;
+    hostname?: string;
+    reference: string;
+  }) =>
+    resolveRepositoryArg(input).pipe(
+      Effect.flatMap((repository) =>
+        execute({
+          cwd: resolveCommandCwd(input.cwd),
+          args: [
+            "issue",
+            "view",
+            input.reference,
+            ...buildRepoFlag(repository),
+            "--json",
+            "number,title,state,url,body,createdAt,updatedAt,labels,assignees,author",
+          ],
+        }),
+      ),
       Effect.map((result) => result.stdout.trim()),
       Effect.flatMap((raw) =>
         decodeGitHubJson(
@@ -354,7 +481,7 @@ const makeGitHubCli = Effect.sync(() => {
         const authenticated =
           activeEntry?.state === "success" && (activeEntry.active ?? true) === true;
 
-        return readRepository({ cwd: input.cwd }).pipe(
+        return readRepository({ cwd: input.cwd, hostname }).pipe(
           Effect.catch(() => Effect.succeed(null)),
           Effect.map((repo) => ({
             installed: true,
@@ -524,31 +651,35 @@ const makeGitHubCli = Effect.sync(() => {
     getStatus,
     login,
     listIssues: (input) =>
-      execute({
-        cwd: resolveCommandCwd(input.cwd),
-        args: [
-          "issue",
-          "list",
-          ...(input.state ? ["--state", input.state] : []),
-          "--limit",
-          String(input.limit ?? 20),
-          "--json",
-          "number,title,state,url,body,createdAt,updatedAt,labels,assignees,author",
-        ],
-      }).pipe(
-        Effect.map((result) => result.stdout.trim()),
-        Effect.flatMap((raw) =>
-          raw.length === 0
+      resolveRepositoryArg({ cwd: input.cwd }).pipe(
+        Effect.flatMap((repository) =>
+          execute({
+            cwd: resolveCommandCwd(input.cwd),
+            args: [
+              "issue",
+              "list",
+              ...buildRepoFlag(repository),
+              ...(input.state ? ["--state", input.state] : []),
+              "--limit",
+              String(input.limit ?? 20),
+              "--json",
+              "number,title,state,url,body,createdAt,updatedAt,labels,assignees,author",
+            ],
+          }).pipe(Effect.map((result) => ({ repository, stdout: result.stdout.trim() }))),
+        ),
+        Effect.flatMap(({ repository, stdout }) =>
+          (stdout.length === 0
             ? Effect.succeed([] as Array<Schema.Schema.Type<typeof RawGitHubIssueSchema>>)
             : decodeGitHubJson(
-                raw,
+                stdout,
                 Schema.Array(RawGitHubIssueSchema),
                 "listIssues",
                 "GitHub CLI returned invalid issue list JSON.",
-              ),
+              )
+          ).pipe(Effect.map((issues) => ({ repository, issues }))),
         ),
-        Effect.flatMap((issues) =>
-          readRepository({ cwd: input.cwd }).pipe(
+        Effect.flatMap(({ repository, issues }) =>
+          readRepository({ cwd: input.cwd, ...(repository ? { repository } : {}) }).pipe(
             Effect.catch(() => Effect.succeed(null)),
             Effect.map((repo) => ({
               repo,
@@ -558,29 +689,36 @@ const makeGitHubCli = Effect.sync(() => {
         ),
       ),
     createIssue: (input) =>
-      execute({
-        cwd: resolveCommandCwd(input.cwd),
-        args: [
-          "issue",
-          "create",
-          ...buildRepoFlag(input.repo),
-          "--title",
-          input.title,
-          "--body",
-          input.body ?? "",
-        ],
+      resolveRepositoryArg({
+        cwd: input.cwd,
+        ...(input.repo ? { repository: input.repo } : {}),
       }).pipe(
-        Effect.map((result) =>
-          result.stdout
+        Effect.flatMap((repository) =>
+          execute({
+            cwd: resolveCommandCwd(input.cwd),
+            args: [
+              "issue",
+              "create",
+              ...buildRepoFlag(repository),
+              "--title",
+              input.title,
+              "--body",
+              input.body ?? "",
+            ],
+          }).pipe(Effect.map((result) => ({ repository, stdout: result.stdout }))),
+        ),
+        Effect.map(({ repository, stdout }) => ({
+          repository,
+          reference: stdout
             .split(/\r?\n/g)
             .map((line) => line.trim())
             .find((line) => line.length > 0),
-        ),
-        Effect.flatMap((reference) =>
+        })),
+        Effect.flatMap(({ repository, reference }) =>
           reference
             ? readIssue({
                 cwd: input.cwd,
-                ...(input.repo ? { repository: input.repo } : {}),
+                ...(repository ? { repository } : {}),
                 reference,
               })
             : Effect.fail(
@@ -592,20 +730,32 @@ const makeGitHubCli = Effect.sync(() => {
         ),
       ),
     closeIssue: (input) =>
-      execute({
-        cwd: resolveCommandCwd(input.cwd),
-        args: ["issue", "close", String(input.issueNumber), ...buildRepoFlag(input.repo)],
+      resolveRepositoryArg({
+        cwd: input.cwd,
+        ...(input.repo ? { repository: input.repo } : {}),
       }).pipe(
+        Effect.flatMap((repository) =>
+          execute({
+            cwd: resolveCommandCwd(input.cwd),
+            args: ["issue", "close", String(input.issueNumber), ...buildRepoFlag(repository)],
+          }),
+        ),
         Effect.as({
           number: input.issueNumber,
           state: "closed" as const,
         }),
       ),
     reopenIssue: (input) =>
-      execute({
-        cwd: resolveCommandCwd(input.cwd),
-        args: ["issue", "reopen", String(input.issueNumber), ...buildRepoFlag(input.repo)],
+      resolveRepositoryArg({
+        cwd: input.cwd,
+        ...(input.repo ? { repository: input.repo } : {}),
       }).pipe(
+        Effect.flatMap((repository) =>
+          execute({
+            cwd: resolveCommandCwd(input.cwd),
+            args: ["issue", "reopen", String(input.issueNumber), ...buildRepoFlag(repository)],
+          }),
+        ),
         Effect.as({
           number: input.issueNumber,
           state: "open" as const,
