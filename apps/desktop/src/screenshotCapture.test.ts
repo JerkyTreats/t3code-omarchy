@@ -199,6 +199,46 @@ describe("captureDesktopScreenshot", () => {
     expect(screenshot?.dataUrl).toContain(screenshotBytes.toString("base64"));
   });
 
+  it("captures an Omarchy screenshot after the output directory is created on demand", async () => {
+    const tempHome = await FS.mkdtemp(Path.join(OS.tmpdir(), "capture-home-"));
+    const screenshotDirectory = Path.join(tempHome, "Shots");
+    tempDirectories.push(tempHome);
+
+    const commandPath = Path.join(
+      tempHome,
+      ".local",
+      "share",
+      "omarchy",
+      "bin",
+      "omarchy-cmd-screenshot",
+    );
+    await makeExecutable(commandPath);
+
+    mockedHomedir.mockReturnValue(tempHome);
+    process.env.OMARCHY_SCREENSHOT_DIR = screenshotDirectory;
+    readImageMock.mockReturnValue(emptyClipboardImage());
+
+    const screenshotBytes = pngBytes();
+    spawnMock.mockImplementation(() =>
+      createSpawnedChild({
+        onStart: async () => {
+          await FS.mkdir(screenshotDirectory, { recursive: true });
+          await FS.writeFile(
+            Path.join(screenshotDirectory, "omarchy-created-dir.png"),
+            screenshotBytes,
+          );
+        },
+      }),
+    );
+
+    const { captureDesktopScreenshot } = await import("./screenshotCapture");
+    const screenshot = await captureDesktopScreenshot();
+
+    expect(screenshot?.name).toBe("omarchy-created-dir.png");
+    expect(screenshot?.sizeBytes).toBe(screenshotBytes.byteLength);
+    expect(screenshot?.dataUrl).toContain(screenshotBytes.toString("base64"));
+  });
+
   it("resolves the Omarchy output directory from user-dirs config", async () => {
     const tempHome = await FS.mkdtemp(Path.join(OS.tmpdir(), "capture-home-"));
     const picturesDirectory = Path.join(tempHome, "Pictures", "Shots");
