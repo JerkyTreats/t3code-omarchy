@@ -2,18 +2,16 @@ import { Effect, Layer, Schema } from "effect";
 import { PositiveInt, TrimmedNonEmptyString } from "@t3tools/contracts";
 
 import { runProcess } from "../../processRunner";
-import { GitHubCliError } from "../Errors.ts";
+import { GitHubCliError } from "@t3tools/contracts";
 import {
   GitHubCli,
   type GitHubRepositoryCloneUrls,
   type GitHubCliShape,
-  type GitHubIssueSummary,
   type GitHubPullRequestSummary,
 } from "../Services/GitHubCli.ts";
+import type { GitHubIssue } from "@t3tools/contracts";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
-const LOGIN_TIMEOUT_MS = 10 * 60_000;
-const DEFAULT_HOSTNAME = "github.com";
 
 function normalizeGitHubCliError(operation: "execute" | "stdout", error: unknown): GitHubCliError {
   if (error instanceof Error) {
@@ -112,6 +110,59 @@ const RawGitHubRepositoryCloneUrlsSchema = Schema.Struct({
   sshUrl: TrimmedNonEmptyString,
 });
 
+const RawGitHubRepositorySchema = Schema.Struct({
+  nameWithOwner: TrimmedNonEmptyString,
+  url: TrimmedNonEmptyString,
+  description: Schema.optional(Schema.NullOr(Schema.String)),
+  defaultBranchRef: Schema.optional(
+    Schema.NullOr(
+      Schema.Struct({
+        name: TrimmedNonEmptyString,
+      }),
+    ),
+  ),
+});
+
+const RawGitHubAuthHostEntrySchema = Schema.Struct({
+  state: Schema.optional(Schema.NullOr(Schema.String)),
+  active: Schema.optional(Schema.Boolean),
+  host: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
+  login: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
+  tokenSource: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
+  scopes: Schema.optional(Schema.NullOr(Schema.String)),
+  gitProtocol: Schema.optional(Schema.NullOr(Schema.String)),
+});
+
+const RawGitHubAuthStatusSchema = Schema.Struct({
+  hosts: Schema.Record(Schema.String, Schema.Array(RawGitHubAuthHostEntrySchema)),
+});
+
+const RawGitHubIssueLabelSchema = Schema.Struct({
+  name: TrimmedNonEmptyString,
+  color: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
+});
+
+const RawGitHubIssueAssigneeSchema = Schema.Struct({
+  login: TrimmedNonEmptyString,
+});
+
+const RawGitHubIssueAuthorSchema = Schema.Struct({
+  login: TrimmedNonEmptyString,
+});
+
+const RawGitHubIssueSchema = Schema.Struct({
+  number: PositiveInt,
+  title: TrimmedNonEmptyString,
+  state: TrimmedNonEmptyString,
+  url: TrimmedNonEmptyString,
+  body: Schema.optional(Schema.NullOr(Schema.String)),
+  createdAt: TrimmedNonEmptyString,
+  updatedAt: TrimmedNonEmptyString,
+  labels: Schema.Array(RawGitHubIssueLabelSchema),
+  assignees: Schema.Array(RawGitHubIssueAssigneeSchema),
+  author: Schema.optional(Schema.NullOr(RawGitHubIssueAuthorSchema)),
+});
+
 function normalizePullRequestSummary(
   raw: Schema.Schema.Type<typeof RawGitHubPullRequestSchema>,
 ): GitHubPullRequestSummary {
@@ -146,10 +197,69 @@ function normalizeRepositoryCloneUrls(
   };
 }
 
+function normalizeRepository(raw: Schema.Schema.Type<typeof RawGitHubRepositorySchema>) {
+  return {
+    nameWithOwner: raw.nameWithOwner,
+    url: raw.url,
+    description: raw.description ?? null,
+    defaultBranch: raw.defaultBranchRef?.name ?? null,
+  };
+}
+
+function normalizeIssueState(state: string): "open" | "closed" {
+  return state.toUpperCase() === "CLOSED" ? "closed" : "open";
+}
+
+function normalizeIssue(raw: Schema.Schema.Type<typeof RawGitHubIssueSchema>): GitHubIssue {
+  return {
+    number: raw.number,
+    title: raw.title,
+    state: normalizeIssueState(raw.state),
+    url: raw.url,
+    body: raw.body ?? null,
+    createdAt: raw.createdAt,
+    updatedAt: raw.updatedAt,
+    labels: raw.labels.map((label) => ({
+      name: label.name,
+      color: label.color ?? null,
+    })),
+    assignees: raw.assignees.map((assignee) => ({
+      login: assignee.login,
+    })),
+    author: raw.author?.login ?? null,
+  };
+}
+
+function splitScopes(raw: string | null | undefined): ReadonlyArray<string> {
+  return (raw ?? "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+}
+
+function normalizeGitProtocol(raw: string | null | undefined): "https" | "ssh" | null {
+  return raw === "https" || raw === "ssh" ? raw : null;
+}
+
+function resolveCommandCwd(cwd: string | null | undefined): string {
+  return cwd ?? process.cwd();
+}
+
+function buildRepoFlag(repository: string | undefined): Array<string> {
+  return repository ? ["--repo", repository] : [];
+}
+
 function decodeGitHubJson<S extends Schema.Top>(
   raw: string,
   schema: S,
-  operation: "listOpenPullRequests" | "getPullRequest" | "getRepositoryCloneUrls",
+  operation:
+    | "listOpenPullRequests"
+    | "getPullRequest"
+    | "getRepositoryCloneUrls"
+    | "getStatus"
+    | "listIssues"
+    | "readRepository"
+    | "readIssue",
   invalidDetail: string,
 ): Effect.Effect<S["Type"], GitHubCliError, S["DecodingServices"]> {
   return Schema.decodeEffect(Schema.fromJsonString(schema))(raw).pipe(
@@ -164,242 +274,6 @@ function decodeGitHubJson<S extends Schema.Top>(
   );
 }
 
-function parseAuthStatus(
-  raw: string,
-  hostname: string,
-): {
-  state: string;
-  active: boolean;
-  host: string;
-  login: string | null;
-  tokenSource: string | null;
-  scopes: ReadonlyArray<string>;
-  gitProtocol: "https" | "ssh" | null;
-} | null {
-  const trimmed = raw.trim();
-  if (trimmed.length === 0) return null;
-
-  const parsed: unknown = JSON.parse(trimmed);
-  if (!parsed || typeof parsed !== "object") {
-    throw new Error("GitHub CLI returned invalid auth status JSON.");
-  }
-
-  const hosts = (parsed as { hosts?: unknown }).hosts;
-  if (!hosts || typeof hosts !== "object") {
-    return null;
-  }
-
-  const accounts = (hosts as Record<string, unknown>)[hostname];
-  if (!Array.isArray(accounts) || accounts.length === 0) {
-    return null;
-  }
-
-  const candidate =
-    accounts.find(
-      (entry) =>
-        entry && typeof entry === "object" && (entry as { active?: unknown }).active === true,
-    ) ?? accounts[0];
-  if (!candidate || typeof candidate !== "object") {
-    return null;
-  }
-
-  const record = candidate as Record<string, unknown>;
-  const gitProtocol = record.gitProtocol;
-  const scopes = record.scopes;
-
-  return {
-    state: typeof record.state === "string" ? record.state : "unknown",
-    active: record.active === true,
-    host: typeof record.host === "string" ? record.host : hostname,
-    login: typeof record.login === "string" && record.login.trim().length > 0 ? record.login : null,
-    tokenSource:
-      typeof record.tokenSource === "string" && record.tokenSource.trim().length > 0
-        ? record.tokenSource
-        : null,
-    scopes:
-      typeof scopes === "string"
-        ? scopes
-            .split(",")
-            .map((scope) => scope.trim())
-            .filter((scope) => scope.length > 0)
-        : [],
-    gitProtocol: gitProtocol === "https" || gitProtocol === "ssh" ? gitProtocol : null,
-  };
-}
-
-function parseRepository(raw: string): {
-  nameWithOwner: string;
-  url: string;
-  description: string | null;
-  defaultBranch: string | null;
-} | null {
-  const trimmed = raw.trim();
-  if (trimmed.length === 0) return null;
-
-  const parsed: unknown = JSON.parse(trimmed);
-  if (!parsed || typeof parsed !== "object") {
-    throw new Error("GitHub CLI returned invalid repository JSON.");
-  }
-
-  const record = parsed as Record<string, unknown>;
-  const nameWithOwner = record.nameWithOwner;
-  const url = record.url;
-  const description = record.description;
-  const defaultBranchRef = record.defaultBranchRef;
-
-  if (typeof nameWithOwner !== "string" || typeof url !== "string") {
-    return null;
-  }
-
-  let defaultBranch: string | null = null;
-  if (defaultBranchRef && typeof defaultBranchRef === "object") {
-    const name = (defaultBranchRef as { name?: unknown }).name;
-    if (typeof name === "string" && name.trim().length > 0) {
-      defaultBranch = name;
-    }
-  }
-
-  return {
-    nameWithOwner,
-    url,
-    description: typeof description === "string" ? description : null,
-    defaultBranch,
-  };
-}
-
-function parseIssues(raw: string): ReadonlyArray<GitHubIssueSummary> {
-  return parseIssueCollection(raw, "GitHub CLI returned invalid issue list JSON.");
-}
-
-function normalizeIssue(entry: unknown): GitHubIssueSummary | null {
-  if (!entry || typeof entry !== "object") {
-    return null;
-  }
-
-  const record = entry as Record<string, unknown>;
-  const state = record.state;
-  const number = record.number;
-  const title = record.title;
-  const url = record.url;
-  const body = record.body;
-  const createdAt = record.createdAt;
-  const updatedAt = record.updatedAt;
-
-  if (
-    typeof number !== "number" ||
-    !Number.isInteger(number) ||
-    number <= 0 ||
-    typeof title !== "string" ||
-    typeof url !== "string" ||
-    typeof createdAt !== "string" ||
-    typeof updatedAt !== "string"
-  ) {
-    return null;
-  }
-
-  const normalizedState = state === "CLOSED" ? "closed" : state === "OPEN" ? "open" : null;
-  if (!normalizedState) {
-    return null;
-  }
-
-  const labels = Array.isArray(record.labels)
-    ? record.labels.flatMap((label) => {
-        if (!label || typeof label !== "object") {
-          return [];
-        }
-        const labelRecord = label as Record<string, unknown>;
-        const name = labelRecord.name;
-        const color = labelRecord.color;
-        if (typeof name !== "string" || name.trim().length === 0) {
-          return [];
-        }
-        return [
-          { name, color: typeof color === "string" && color.trim().length > 0 ? color : null },
-        ];
-      })
-    : [];
-
-  const assignees = Array.isArray(record.assignees)
-    ? record.assignees.flatMap((assignee) => {
-        if (!assignee || typeof assignee !== "object") {
-          return [];
-        }
-        const login = (assignee as Record<string, unknown>).login;
-        if (typeof login !== "string" || login.trim().length === 0) {
-          return [];
-        }
-        return [{ login }];
-      })
-    : [];
-
-  const authorRecord = record.author;
-  const author =
-    authorRecord && typeof authorRecord === "object"
-      ? (authorRecord as { login?: unknown }).login
-      : null;
-
-  return {
-    number,
-    title,
-    state: normalizedState,
-    url,
-    body: typeof body === "string" ? body : null,
-    createdAt,
-    updatedAt,
-    labels,
-    assignees,
-    author: typeof author === "string" && author.trim().length > 0 ? author : null,
-  };
-}
-
-function parseIssueCollection(
-  raw: string,
-  invalidDetail: string,
-): ReadonlyArray<GitHubIssueSummary> {
-  const trimmed = raw.trim();
-  if (trimmed.length === 0) return [];
-
-  const parsed: unknown = JSON.parse(trimmed);
-  if (!Array.isArray(parsed)) {
-    throw new Error(invalidDetail);
-  }
-
-  const issues: GitHubIssueSummary[] = [];
-
-  for (const entry of parsed) {
-    const issue = normalizeIssue(entry);
-    if (issue) {
-      issues.push(issue);
-    }
-  }
-
-  return issues;
-}
-
-function parseIssue(raw: string): GitHubIssueSummary | null {
-  const trimmed = raw.trim();
-  if (trimmed.length === 0) {
-    return null;
-  }
-
-  const parsed: unknown = JSON.parse(trimmed);
-  return normalizeIssue(parsed);
-}
-
-function parseCreatedIssueReference(raw: string): string | null {
-  const trimmed = raw.trim();
-  if (trimmed.length === 0) {
-    return null;
-  }
-
-  const urlMatch = trimmed.match(/https?:\/\/\S+/u);
-  if (urlMatch) {
-    return urlMatch[0];
-  }
-
-  return trimmed.includes(" ") ? null : trimmed;
-}
-
 const makeGitHubCli = Effect.sync(() => {
   const execute: GitHubCliShape["execute"] = (input) =>
     Effect.tryPromise({
@@ -411,6 +285,142 @@ const makeGitHubCli = Effect.sync(() => {
       catch: (error) => normalizeGitHubCliError("execute", error),
     });
 
+  const readRepository = (input: { cwd: string | null; repository?: string }) =>
+    execute({
+      cwd: resolveCommandCwd(input.cwd),
+      args: [
+        "repo",
+        "view",
+        ...(input.repository ? [input.repository] : []),
+        "--json",
+        "nameWithOwner,url,description,defaultBranchRef",
+      ],
+    }).pipe(
+      Effect.map((result) => result.stdout.trim()),
+      Effect.flatMap((raw) =>
+        decodeGitHubJson(
+          raw,
+          RawGitHubRepositorySchema,
+          "readRepository",
+          "GitHub CLI returned invalid repository JSON.",
+        ),
+      ),
+      Effect.map(normalizeRepository),
+    );
+
+  const readIssue = (input: { cwd: string | null; repository?: string; reference: string }) =>
+    execute({
+      cwd: resolveCommandCwd(input.cwd),
+      args: [
+        "issue",
+        "view",
+        input.reference,
+        ...buildRepoFlag(input.repository),
+        "--json",
+        "number,title,state,url,body,createdAt,updatedAt,labels,assignees,author",
+      ],
+    }).pipe(
+      Effect.map((result) => result.stdout.trim()),
+      Effect.flatMap((raw) =>
+        decodeGitHubJson(
+          raw,
+          RawGitHubIssueSchema,
+          "readIssue",
+          "GitHub CLI returned invalid issue JSON.",
+        ),
+      ),
+      Effect.map(normalizeIssue),
+    );
+
+  const getStatus: GitHubCliShape["getStatus"] = (input) => {
+    const hostname = input.hostname ?? "github.com";
+    return execute({
+      cwd: resolveCommandCwd(input.cwd),
+      args: ["auth", "status", "--hostname", hostname, "--active", "--json", "hosts"],
+    }).pipe(
+      Effect.map((result) => result.stdout.trim()),
+      Effect.flatMap((raw) =>
+        decodeGitHubJson(
+          raw,
+          RawGitHubAuthStatusSchema,
+          "getStatus",
+          "GitHub CLI returned invalid auth status JSON.",
+        ),
+      ),
+      Effect.flatMap((rawStatus) => {
+        const hostEntries = rawStatus.hosts[hostname] ?? [];
+        const activeEntry =
+          hostEntries.find((entry) => entry.active === true) ?? hostEntries.at(0) ?? null;
+        const authenticated =
+          activeEntry?.state === "success" && (activeEntry.active ?? true) === true;
+
+        return readRepository({ cwd: input.cwd }).pipe(
+          Effect.catch(() => Effect.succeed(null)),
+          Effect.map((repo) => ({
+            installed: true,
+            authenticated,
+            hostname,
+            accountLogin: authenticated ? (activeEntry?.login ?? null) : null,
+            gitProtocol: authenticated ? normalizeGitProtocol(activeEntry?.gitProtocol) : null,
+            tokenSource: authenticated ? (activeEntry?.tokenSource ?? null) : null,
+            scopes: authenticated ? Array.from(splitScopes(activeEntry?.scopes)) : [],
+            repo: authenticated ? repo : null,
+          })),
+        );
+      }),
+      Effect.catch((error) => {
+        if (error.detail.includes("required but not available")) {
+          return Effect.succeed({
+            installed: false,
+            authenticated: false,
+            hostname,
+            accountLogin: null,
+            gitProtocol: null,
+            tokenSource: null,
+            scopes: [],
+            repo: null,
+          });
+        }
+        if (error.detail.includes("not authenticated")) {
+          return Effect.succeed({
+            installed: true,
+            authenticated: false,
+            hostname,
+            accountLogin: null,
+            gitProtocol: null,
+            tokenSource: null,
+            scopes: [],
+            repo: null,
+          });
+        }
+        return Effect.fail(error);
+      }),
+    );
+  };
+
+  const login: GitHubCliShape["login"] = (input) =>
+    execute({
+      cwd: resolveCommandCwd(input.cwd),
+      args: [
+        "auth",
+        "login",
+        "--hostname",
+        input.hostname ?? "github.com",
+        "--git-protocol",
+        input.gitProtocol ?? "https",
+        "--web",
+      ],
+      timeoutMs: 5 * 60_000,
+    }).pipe(
+      Effect.asVoid,
+      Effect.flatMap(() =>
+        getStatus({
+          cwd: input.cwd,
+          hostname: input.hostname,
+        }),
+      ),
+    );
+
   const service = {
     execute,
     listOpenPullRequests: (input) =>
@@ -419,7 +429,6 @@ const makeGitHubCli = Effect.sync(() => {
         args: [
           "pr",
           "list",
-          ...(input.repo ? ["--repo", input.repo] : []),
           "--head",
           input.headSelector,
           "--state",
@@ -427,7 +436,7 @@ const makeGitHubCli = Effect.sync(() => {
           "--limit",
           String(input.limit ?? 1),
           "--json",
-          "number,title,url,baseRefName,headRefName",
+          "number,title,url,baseRefName,headRefName,state,mergedAt,isCrossRepository,headRepository,headRepositoryOwner",
         ],
       }).pipe(
         Effect.map((result) => result.stdout.trim()),
@@ -450,7 +459,6 @@ const makeGitHubCli = Effect.sync(() => {
           "pr",
           "view",
           input.reference,
-          ...(input.repo ? ["--repo", input.repo] : []),
           "--json",
           "number,title,url,baseRefName,headRefName,state,mergedAt,isCrossRepository,headRepository,headRepositoryOwner",
         ],
@@ -482,24 +490,12 @@ const makeGitHubCli = Effect.sync(() => {
         ),
         Effect.map(normalizeRepositoryCloneUrls),
       ),
-    checkoutPullRequest: (input) =>
-      execute({
-        cwd: input.cwd,
-        args: [
-          "pr",
-          "checkout",
-          input.reference,
-          ...(input.repo ? ["--repo", input.repo] : []),
-          ...(input.force ? ["--force"] : []),
-        ],
-      }).pipe(Effect.asVoid),
     createPullRequest: (input) =>
       execute({
         cwd: input.cwd,
         args: [
           "pr",
           "create",
-          ...(input.repo ? ["--repo", input.repo] : []),
           "--base",
           input.baseBranch,
           "--head",
@@ -513,200 +509,108 @@ const makeGitHubCli = Effect.sync(() => {
     getDefaultBranch: (input) =>
       execute({
         cwd: input.cwd,
-        args: [
-          "repo",
-          "view",
-          ...(input.repo ? [input.repo] : []),
-          "--json",
-          "defaultBranchRef",
-          "--jq",
-          ".defaultBranchRef.name",
-        ],
+        args: ["repo", "view", "--json", "defaultBranchRef", "--jq", ".defaultBranchRef.name"],
       }).pipe(
         Effect.map((value) => {
           const trimmed = value.stdout.trim();
           return trimmed.length > 0 ? trimmed : null;
         }),
       ),
-    getAuthStatus: (input) => {
-      const hostname = input?.hostname ?? DEFAULT_HOSTNAME;
-      return execute({
-        ...(input?.cwd ? { cwd: input.cwd } : {}),
-        args: ["auth", "status", "--hostname", hostname, "--json", "hosts"],
-      }).pipe(
-        Effect.map((result) => result.stdout),
-        Effect.flatMap((raw) =>
-          Effect.try({
-            try: () => parseAuthStatus(raw, hostname),
-            catch: (error: unknown) =>
-              new GitHubCliError({
-                operation: "getAuthStatus",
-                detail:
-                  error instanceof Error
-                    ? `GitHub CLI returned invalid auth status JSON: ${error.message}`
-                    : "GitHub CLI returned invalid auth status JSON.",
-                ...(error !== undefined ? { cause: error } : {}),
-              }),
-          }),
-        ),
-      );
-    },
-    loginWithBrowser: (input) =>
+    checkoutPullRequest: (input) =>
       execute({
-        ...(input?.cwd ? { cwd: input.cwd } : {}),
-        timeoutMs: LOGIN_TIMEOUT_MS,
-        args: [
-          "auth",
-          "login",
-          "--hostname",
-          input?.hostname ?? DEFAULT_HOSTNAME,
-          "--git-protocol",
-          input?.gitProtocol ?? "https",
-          "--web",
-        ],
+        cwd: input.cwd,
+        args: ["pr", "checkout", input.reference, ...(input.force ? ["--force"] : [])],
       }).pipe(Effect.asVoid),
-    getRepository: (input) =>
-      execute({
-        ...(input.cwd ? { cwd: input.cwd } : {}),
-        args: [
-          "repo",
-          "view",
-          ...(input.repo ? [input.repo] : []),
-          "--json",
-          "nameWithOwner,url,description,defaultBranchRef",
-        ],
-      }).pipe(
-        Effect.map((result) => result.stdout),
-        Effect.flatMap((raw) =>
-          Effect.try({
-            try: () => parseRepository(raw),
-            catch: (error: unknown) =>
-              new GitHubCliError({
-                operation: "getRepository",
-                detail:
-                  error instanceof Error
-                    ? `GitHub CLI returned invalid repository JSON: ${error.message}`
-                    : "GitHub CLI returned invalid repository JSON.",
-                ...(error !== undefined ? { cause: error } : {}),
-              }),
-          }),
-        ),
-      ),
+    getStatus,
+    login,
     listIssues: (input) =>
       execute({
-        ...(input.cwd ? { cwd: input.cwd } : {}),
+        cwd: resolveCommandCwd(input.cwd),
         args: [
           "issue",
           "list",
-          ...(input.repo ? ["--repo", input.repo] : []),
-          "--state",
-          input.state ?? "open",
+          ...(input.state ? ["--state", input.state] : []),
           "--limit",
-          String(input.limit ?? 25),
+          String(input.limit ?? 20),
           "--json",
           "number,title,state,url,body,createdAt,updatedAt,labels,assignees,author",
         ],
       }).pipe(
-        Effect.map((result) => result.stdout),
+        Effect.map((result) => result.stdout.trim()),
         Effect.flatMap((raw) =>
-          Effect.try({
-            try: () => parseIssues(raw),
-            catch: (error: unknown) =>
-              new GitHubCliError({
-                operation: "listIssues",
-                detail:
-                  error instanceof Error
-                    ? `GitHub CLI returned invalid issue list JSON: ${error.message}`
-                    : "GitHub CLI returned invalid issue list JSON.",
-                ...(error !== undefined ? { cause: error } : {}),
-              }),
-          }),
+          raw.length === 0
+            ? Effect.succeed([] as Array<Schema.Schema.Type<typeof RawGitHubIssueSchema>>)
+            : decodeGitHubJson(
+                raw,
+                Schema.Array(RawGitHubIssueSchema),
+                "listIssues",
+                "GitHub CLI returned invalid issue list JSON.",
+              ),
+        ),
+        Effect.flatMap((issues) =>
+          readRepository({ cwd: input.cwd }).pipe(
+            Effect.catch(() => Effect.succeed(null)),
+            Effect.map((repo) => ({
+              repo,
+              issues: issues.map(normalizeIssue),
+            })),
+          ),
         ),
       ),
     createIssue: (input) =>
       execute({
-        ...(input.cwd ? { cwd: input.cwd } : {}),
+        cwd: resolveCommandCwd(input.cwd),
         args: [
           "issue",
           "create",
-          ...(input.repo ? ["--repo", input.repo] : []),
+          ...buildRepoFlag(input.repo),
           "--title",
           input.title,
           "--body",
           input.body ?? "",
         ],
       }).pipe(
-        Effect.map((result) => result.stdout),
-        Effect.flatMap((raw) => {
-          const reference = parseCreatedIssueReference(raw);
-          if (!reference) {
-            return Effect.fail(
-              new GitHubCliError({
-                operation: "createIssue",
-                detail: "GitHub CLI did not return the created issue reference.",
-              }),
-            );
-          }
-
-          return execute({
-            ...(input.cwd ? { cwd: input.cwd } : {}),
-            args: [
-              "issue",
-              "view",
-              reference,
-              ...(input.repo ? ["--repo", input.repo] : []),
-              "--json",
-              "number,title,state,url,body,createdAt,updatedAt,labels,assignees,author",
-            ],
-          }).pipe(
-            Effect.map((result) => result.stdout),
-            Effect.flatMap((viewRaw) =>
-              Effect.try({
-                try: () => parseIssue(viewRaw),
-                catch: (error: unknown) =>
-                  new GitHubCliError({
-                    operation: "createIssue",
-                    detail:
-                      error instanceof Error
-                        ? `GitHub CLI returned invalid created issue JSON: ${error.message}`
-                        : "GitHub CLI returned invalid created issue JSON.",
-                    ...(error !== undefined ? { cause: error } : {}),
-                  }),
-              }),
-            ),
-            Effect.flatMap((issue) =>
-              issue
-                ? Effect.succeed(issue)
-                : Effect.fail(
-                    new GitHubCliError({
-                      operation: "createIssue",
-                      detail: "GitHub CLI returned incomplete created issue data.",
-                    }),
-                  ),
-            ),
-          );
-        }),
+        Effect.map((result) =>
+          result.stdout
+            .split(/\r?\n/g)
+            .map((line) => line.trim())
+            .find((line) => line.length > 0),
+        ),
+        Effect.flatMap((reference) =>
+          reference
+            ? readIssue({
+                cwd: input.cwd,
+                ...(input.repo ? { repository: input.repo } : {}),
+                reference,
+              })
+            : Effect.fail(
+                new GitHubCliError({
+                  operation: "createIssue",
+                  detail: "GitHub CLI did not return the created issue URL.",
+                }),
+              ),
+        ),
       ),
     closeIssue: (input) =>
       execute({
-        ...(input.cwd ? { cwd: input.cwd } : {}),
-        args: [
-          "issue",
-          "close",
-          String(input.issueNumber),
-          ...(input.repo ? ["--repo", input.repo] : []),
-        ],
-      }).pipe(Effect.as({ number: input.issueNumber, state: "closed" as const })),
+        cwd: resolveCommandCwd(input.cwd),
+        args: ["issue", "close", String(input.issueNumber), ...buildRepoFlag(input.repo)],
+      }).pipe(
+        Effect.as({
+          number: input.issueNumber,
+          state: "closed" as const,
+        }),
+      ),
     reopenIssue: (input) =>
       execute({
-        ...(input.cwd ? { cwd: input.cwd } : {}),
-        args: [
-          "issue",
-          "reopen",
-          String(input.issueNumber),
-          ...(input.repo ? ["--repo", input.repo] : []),
-        ],
-      }).pipe(Effect.as({ number: input.issueNumber, state: "open" as const })),
+        cwd: resolveCommandCwd(input.cwd),
+        args: ["issue", "reopen", String(input.issueNumber), ...buildRepoFlag(input.repo)],
+      }).pipe(
+        Effect.as({
+          number: input.issueNumber,
+          state: "open" as const,
+        }),
+      ),
   } satisfies GitHubCliShape;
 
   return service;

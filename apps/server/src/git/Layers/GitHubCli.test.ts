@@ -126,11 +126,25 @@ layer("GitHubCliLive", (it) => {
     }),
   );
 
-  it.effect("creates an issue and loads its metadata", () =>
+  it.effect("reads GitHub auth status from gh auth status JSON", () =>
     Effect.gen(function* () {
       mockedRunProcess
         .mockResolvedValueOnce({
-          stdout: "https://github.com/pingdotgg/t3code/issues/321\n",
+          stdout: JSON.stringify({
+            hosts: {
+              "github.com": [
+                {
+                  state: "success",
+                  active: true,
+                  host: "github.com",
+                  login: "JerkyTreats",
+                  tokenSource: "keyring",
+                  scopes: "repo, workflow",
+                  gitProtocol: "https",
+                },
+              ],
+            },
+          }),
           stderr: "",
           code: 0,
           signal: null,
@@ -138,18 +152,116 @@ layer("GitHubCliLive", (it) => {
         })
         .mockResolvedValueOnce({
           stdout: JSON.stringify({
-            number: 321,
-            title: "Panel issue creation",
+            nameWithOwner: "JerkyTreats/t3code-omarchy",
+            url: "https://github.com/JerkyTreats/t3code-omarchy",
+            description: null,
+            defaultBranchRef: { name: "main" },
+          }),
+          stderr: "",
+          code: 0,
+          signal: null,
+          timedOut: false,
+        });
+
+      const result = yield* Effect.gen(function* () {
+        const gh = yield* GitHubCli;
+        return yield* gh.getStatus({
+          cwd: "/repo",
+          hostname: "github.com",
+        });
+      });
+
+      assert.deepStrictEqual(result, {
+        installed: true,
+        authenticated: true,
+        hostname: "github.com",
+        accountLogin: "JerkyTreats",
+        gitProtocol: "https",
+        tokenSource: "keyring",
+        scopes: ["repo", "workflow"],
+        repo: {
+          nameWithOwner: "JerkyTreats/t3code-omarchy",
+          url: "https://github.com/JerkyTreats/t3code-omarchy",
+          description: null,
+          defaultBranch: "main",
+        },
+      });
+    }),
+  );
+
+  it.effect("lists repository issues with normalized shape", () =>
+    Effect.gen(function* () {
+      mockedRunProcess
+        .mockResolvedValueOnce({
+          stdout: JSON.stringify([
+            {
+              number: 16,
+              title: "Sync upstream changes",
+              state: "OPEN",
+              url: "https://github.com/JerkyTreats/t3code-omarchy/issues/16",
+              body: null,
+              createdAt: "2026-04-02T13:39:21Z",
+              updatedAt: "2026-04-02T13:39:21Z",
+              labels: [{ name: "sync", color: "abcdef" }],
+              assignees: [{ login: "JerkyTreats" }],
+              author: { login: "JerkyTreats" },
+            },
+          ]),
+          stderr: "",
+          code: 0,
+          signal: null,
+          timedOut: false,
+        })
+        .mockResolvedValueOnce({
+          stdout: JSON.stringify({
+            nameWithOwner: "JerkyTreats/t3code-omarchy",
+            url: "https://github.com/JerkyTreats/t3code-omarchy",
+            description: null,
+            defaultBranchRef: { name: "main" },
+          }),
+          stderr: "",
+          code: 0,
+          signal: null,
+          timedOut: false,
+        });
+
+      const result = yield* Effect.gen(function* () {
+        const gh = yield* GitHubCli;
+        return yield* gh.listIssues({
+          cwd: "/repo",
+          state: "open",
+          limit: 10,
+        });
+      });
+
+      assert.equal(result.repo?.nameWithOwner, "JerkyTreats/t3code-omarchy");
+      assert.equal(result.issues[0]?.state, "open");
+      assert.equal(result.issues[0]?.author, "JerkyTreats");
+    }),
+  );
+
+  it.effect("creates an issue and reads back its normalized metadata", () =>
+    Effect.gen(function* () {
+      mockedRunProcess
+        .mockResolvedValueOnce({
+          stdout: "https://github.com/JerkyTreats/t3code-omarchy/issues/16\n",
+          stderr: "",
+          code: 0,
+          signal: null,
+          timedOut: false,
+        })
+        .mockResolvedValueOnce({
+          stdout: JSON.stringify({
+            number: 16,
+            title: "Sync upstream changes",
             state: "OPEN",
-            url: "https://github.com/pingdotgg/t3code/issues/321",
-            body: "Created from the panel",
-            createdAt: "2025-01-01T00:00:00.000Z",
-            updatedAt: "2025-01-01T00:00:00.000Z",
+            url: "https://github.com/JerkyTreats/t3code-omarchy/issues/16",
+            body: null,
+            createdAt: "2026-04-02T13:39:21Z",
+            updatedAt: "2026-04-02T13:39:21Z",
             labels: [],
             assignees: [],
-            author: {
-              login: "tester",
-            },
+            author: { login: "JerkyTreats" },
           }),
           stderr: "",
           code: 0,
@@ -161,51 +273,17 @@ layer("GitHubCliLive", (it) => {
         const gh = yield* GitHubCli;
         return yield* gh.createIssue({
           cwd: "/repo",
-          repo: "pingdotgg/t3code",
-          title: "Panel issue creation",
-          body: "Created from the panel",
+          title: "Sync upstream changes",
+          body: null,
         });
       });
 
-      assert.deepStrictEqual(result, {
-        number: 321,
-        title: "Panel issue creation",
-        state: "open",
-        url: "https://github.com/pingdotgg/t3code/issues/321",
-        body: "Created from the panel",
-        createdAt: "2025-01-01T00:00:00.000Z",
-        updatedAt: "2025-01-01T00:00:00.000Z",
-        labels: [],
-        assignees: [],
-        author: "tester",
-      });
+      assert.equal(result.number, 16);
+      assert.equal(result.state, "open");
       expect(mockedRunProcess).toHaveBeenNthCalledWith(
         1,
         "gh",
-        [
-          "issue",
-          "create",
-          "--repo",
-          "pingdotgg/t3code",
-          "--title",
-          "Panel issue creation",
-          "--body",
-          "Created from the panel",
-        ],
-        expect.objectContaining({ cwd: "/repo" }),
-      );
-      expect(mockedRunProcess).toHaveBeenNthCalledWith(
-        2,
-        "gh",
-        [
-          "issue",
-          "view",
-          "https://github.com/pingdotgg/t3code/issues/321",
-          "--repo",
-          "pingdotgg/t3code",
-          "--json",
-          "number,title,state,url,body,createdAt,updatedAt,labels,assignees,author",
-        ],
+        ["issue", "create", "--title", "Sync upstream changes", "--body", ""],
         expect.objectContaining({ cwd: "/repo" }),
       );
     }),

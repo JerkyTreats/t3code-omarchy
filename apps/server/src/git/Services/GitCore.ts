@@ -1,15 +1,15 @@
 /**
  * GitCore - Effect service contract for low-level Git operations.
  *
- * Owns repository primitives only.
- * Higher-level workflow policy, user-facing guardrails, and product-specific
- * orchestration should live in GitManager or adjacent workflow modules.
+ * Wraps core repository primitives used by higher-level orchestration
+ * services and WebSocket routes.
  *
  * @module GitCore
  */
 import { ServiceMap } from "effect";
 import type { Effect, Scope } from "effect";
 import type {
+  GitAbortMergeInput,
   GitAbortMergeResult,
   GitCheckoutInput,
   GitCreateBranchInput,
@@ -20,23 +20,26 @@ import type {
   GitListBranchesResult,
   GitMergeBranchesInput,
   GitMergeBranchesResult,
-  GitRepositoryContextResult,
   GitPullResult,
+  GitRepositoryContextInput,
+  GitRepositoryContextResult,
   GitRemoveWorktreeInput,
   GitStatusInput,
   GitStatusResult,
 } from "@t3tools/contracts";
 
-import type { GitCommandError } from "../Errors.ts";
+import type { GitCommandError } from "@t3tools/contracts";
 
 export interface ExecuteGitInput {
   readonly operation: string;
   readonly cwd: string;
   readonly args: ReadonlyArray<string>;
+  readonly stdin?: string;
   readonly env?: NodeJS.ProcessEnv;
   readonly allowNonZeroExit?: boolean;
   readonly timeoutMs?: number;
   readonly maxOutputBytes?: number;
+  readonly truncateOutputAtMaxBytes?: boolean;
   readonly progress?: ExecuteGitProgress;
 }
 
@@ -44,6 +47,8 @@ export interface ExecuteGitResult {
   readonly code: number;
   readonly stdout: string;
   readonly stderr: string;
+  readonly stdoutTruncated: boolean;
+  readonly stderrTruncated: boolean;
 }
 
 export interface GitStatusDetails extends Omit<GitStatusResult, "pr"> {
@@ -97,6 +102,11 @@ export interface GitRangeContext {
   diffPatch: string;
 }
 
+export interface GitListWorkspaceFilesResult {
+  readonly paths: ReadonlyArray<string>;
+  readonly truncated: boolean;
+}
+
 export interface GitRenameBranchInput {
   cwd: string;
   oldBranch: string;
@@ -105,18 +115,6 @@ export interface GitRenameBranchInput {
 
 export interface GitRenameBranchResult {
   branch: string;
-}
-
-export interface GitDeleteBranchInput {
-  cwd: string;
-  branch: string;
-  deleteRemote?: boolean;
-}
-
-export interface GitDeleteBranchResult {
-  branch: string;
-  deletedLocal: boolean;
-  deletedRemote: boolean;
 }
 
 export interface GitFetchPullRequestBranchInput {
@@ -147,9 +145,6 @@ export interface GitSetBranchUpstreamInput {
 
 /**
  * GitCoreShape - Service API for low-level Git repository interactions.
- *
- * Keep this surface primitive-oriented so upstream syncs can land here with
- * minimal fork conflicts.
  */
 export interface GitCoreShape {
   /**
@@ -158,8 +153,7 @@ export interface GitCoreShape {
   readonly execute: (input: ExecuteGitInput) => Effect.Effect<ExecuteGitResult, GitCommandError>;
 
   /**
-   * Read raw Git status for a repository.
-   * Do not add product-specific decoration here.
+   * Read Git status for a repository.
    */
   readonly status: (input: GitStatusInput) => Effect.Effect<GitStatusResult, GitCommandError>;
 
@@ -211,12 +205,24 @@ export interface GitCoreShape {
   ) => Effect.Effect<string | null, GitCommandError>;
 
   /**
-   * Resolve repository root and git dir metadata for a cwd.
-   * Do not shape browser-specific repository workflow context here.
+   * Determine whether the provided cwd is inside a git work tree.
    */
-  readonly getRepositoryContext: (
+  readonly isInsideWorkTree: (cwd: string) => Effect.Effect<boolean, GitCommandError>;
+
+  /**
+   * List tracked and untracked workspace file paths relative to cwd.
+   */
+  readonly listWorkspaceFiles: (
     cwd: string,
-  ) => Effect.Effect<GitRepositoryContextResult, GitCommandError>;
+  ) => Effect.Effect<GitListWorkspaceFilesResult, GitCommandError>;
+
+  /**
+   * Remove gitignored paths from a relative path list.
+   */
+  readonly filterIgnoredPaths: (
+    cwd: string,
+    relativePaths: ReadonlyArray<string>,
+  ) => Effect.Effect<ReadonlyArray<string>, GitCommandError>;
 
   /**
    * List local + remote branches and branch metadata.
@@ -281,16 +287,18 @@ export interface GitCoreShape {
   readonly createBranch: (input: GitCreateBranchInput) => Effect.Effect<void, GitCommandError>;
 
   /**
-   * Merge one local branch into the target branch currently checked out in cwd.
+   * Merge a source branch into the current target workspace branch.
    */
   readonly mergeBranches: (
     input: GitMergeBranchesInput,
   ) => Effect.Effect<GitMergeBranchesResult, GitCommandError>;
 
   /**
-   * Abort an in-progress merge in the provided cwd.
+   * Abort the current in-progress merge if one exists.
    */
-  readonly abortMerge: (cwd: string) => Effect.Effect<GitAbortMergeResult, GitCommandError>;
+  readonly abortMerge: (
+    input: GitAbortMergeInput,
+  ) => Effect.Effect<GitAbortMergeResult, GitCommandError>;
 
   /**
    * Checkout an existing branch and refresh its upstream metadata in background.
@@ -305,16 +313,16 @@ export interface GitCoreShape {
   readonly initRepo: (input: GitInitInput) => Effect.Effect<void, GitCommandError>;
 
   /**
+   * Resolve repository metadata for the current cwd.
+   */
+  readonly repositoryContext: (
+    input: GitRepositoryContextInput,
+  ) => Effect.Effect<GitRepositoryContextResult, GitCommandError>;
+
+  /**
    * List local branch names (short format).
    */
   readonly listLocalBranchNames: (cwd: string) => Effect.Effect<string[], GitCommandError>;
-
-  /**
-   * Delete a local branch and optionally its remote tracking branch.
-   */
-  readonly deleteBranch: (
-    input: GitDeleteBranchInput,
-  ) => Effect.Effect<GitDeleteBranchResult, GitCommandError>;
 }
 
 /**

@@ -1,7 +1,9 @@
-import { ProjectId, type ModelSelection, type ThreadId } from "@t3tools/contracts";
-import { type ChatMessage, type Thread } from "../types";
+import { ProjectId, type ModelSelection, type ThreadId, type TurnId } from "@t3tools/contracts";
+import { type ChatMessage, type SessionPhase, type Thread, type ThreadSession } from "../types";
+import { randomUUID } from "~/lib/utils";
 import { type ComposerImageAttachment, type DraftThreadState } from "../composerDraftStore";
 import { Schema } from "effect";
+import { useStore } from "../store";
 import {
   filterTerminalContextsWithText,
   stripInlineTerminalContextPlaceholders,
@@ -9,6 +11,7 @@ import {
 } from "../lib/terminalContext";
 
 export const LAST_INVOKED_SCRIPT_BY_PROJECT_KEY = "t3code:last-invoked-script-by-project";
+const WORKTREE_BRANCH_PREFIX = "t3code";
 
 export const LastInvokedScriptByProjectSchema = Schema.Record(ProjectId, Schema.String);
 
@@ -30,11 +33,10 @@ export function buildLocalDraftThread(
     messages: [],
     error,
     createdAt: draftThread.createdAt,
+    archivedAt: null,
     latestTurn: null,
-    lastVisitedAt: draftThread.createdAt,
     branch: draftThread.branch,
     worktreePath: draftThread.worktreePath,
-    issueLink: null,
     turnDiffSummaries: [],
     activities: [],
     proposedPlans: [],
@@ -73,8 +75,6 @@ export function collectUserMessageBlobPreviewUrls(message: ChatMessage): string[
   return previewUrls;
 }
 
-export type SendPhase = "idle" | "preparing-worktree" | "sending-turn";
-
 export interface PullRequestDialogState {
   initialReference: string | null;
   key: number;
@@ -95,6 +95,12 @@ export function readFileAsDataUrl(file: File): Promise<string> {
     });
     reader.readAsDataURL(file);
   });
+}
+
+export function buildTemporaryWorktreeBranchName(): string {
+  // Keep the 8-hex suffix shape for backend temporary-branch detection.
+  const token = randomUUID().slice(0, 8).toLowerCase();
+  return `${WORKTREE_BRANCH_PREFIX}/${token}`;
 }
 
 export function cloneComposerImageForRetry(
@@ -152,4 +158,117 @@ export function buildExpiredTerminalContextToastCopy(
     title: `${noun} omitted from message`,
     description: "Re-add it if you want that terminal output included.",
   };
+}
+
+export function threadHasStarted(thread: Thread | null | undefined): boolean {
+  return Boolean(
+    thread && (thread.latestTurn !== null || thread.messages.length > 0 || thread.session !== null),
+  );
+}
+
+export async function waitForStartedServerThread(
+  threadId: ThreadId,
+  timeoutMs = 1_000,
+): Promise<boolean> {
+  const getThread = () => useStore.getState().threads.find((thread) => thread.id === threadId);
+  const thread = getThread();
+
+  if (threadHasStarted(thread)) {
+    return true;
+  }
+
+  return await new Promise<boolean>((resolve) => {
+    let settled = false;
+    let timeoutId: ReturnType<typeof globalThis.setTimeout> | null = null;
+    const finish = (result: boolean) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (timeoutId !== null) {
+        globalThis.clearTimeout(timeoutId);
+      }
+      unsubscribe();
+      resolve(result);
+    };
+
+    const unsubscribe = useStore.subscribe((state) => {
+      if (!threadHasStarted(state.threads.find((thread) => thread.id === threadId))) {
+        return;
+      }
+      finish(true);
+    });
+
+    if (threadHasStarted(getThread())) {
+      finish(true);
+      return;
+    }
+
+    timeoutId = globalThis.setTimeout(() => {
+      finish(false);
+    }, timeoutMs);
+  });
+}
+
+export interface LocalDispatchSnapshot {
+  startedAt: string;
+  preparingWorktree: boolean;
+  latestTurnTurnId: TurnId | null;
+  latestTurnRequestedAt: string | null;
+  latestTurnStartedAt: string | null;
+  latestTurnCompletedAt: string | null;
+  sessionOrchestrationStatus: ThreadSession["orchestrationStatus"] | null;
+  sessionUpdatedAt: string | null;
+}
+
+export function createLocalDispatchSnapshot(
+  activeThread: Thread | undefined,
+  options?: { preparingWorktree?: boolean },
+): LocalDispatchSnapshot {
+  const latestTurn = activeThread?.latestTurn ?? null;
+  const session = activeThread?.session ?? null;
+  return {
+    startedAt: new Date().toISOString(),
+    preparingWorktree: Boolean(options?.preparingWorktree),
+    latestTurnTurnId: latestTurn?.turnId ?? null,
+    latestTurnRequestedAt: latestTurn?.requestedAt ?? null,
+    latestTurnStartedAt: latestTurn?.startedAt ?? null,
+    latestTurnCompletedAt: latestTurn?.completedAt ?? null,
+    sessionOrchestrationStatus: session?.orchestrationStatus ?? null,
+    sessionUpdatedAt: session?.updatedAt ?? null,
+  };
+}
+
+export function hasServerAcknowledgedLocalDispatch(input: {
+  localDispatch: LocalDispatchSnapshot | null;
+  phase: SessionPhase;
+  latestTurn: Thread["latestTurn"] | null;
+  session: Thread["session"] | null;
+  hasPendingApproval: boolean;
+  hasPendingUserInput: boolean;
+  threadError: string | null | undefined;
+}): boolean {
+  if (!input.localDispatch) {
+    return false;
+  }
+  if (
+    input.phase === "running" ||
+    input.hasPendingApproval ||
+    input.hasPendingUserInput ||
+    Boolean(input.threadError)
+  ) {
+    return true;
+  }
+
+  const latestTurn = input.latestTurn ?? null;
+  const session = input.session ?? null;
+
+  return (
+    input.localDispatch.latestTurnTurnId !== (latestTurn?.turnId ?? null) ||
+    input.localDispatch.latestTurnRequestedAt !== (latestTurn?.requestedAt ?? null) ||
+    input.localDispatch.latestTurnStartedAt !== (latestTurn?.startedAt ?? null) ||
+    input.localDispatch.latestTurnCompletedAt !== (latestTurn?.completedAt ?? null) ||
+    input.localDispatch.sessionOrchestrationStatus !== (session?.orchestrationStatus ?? null) ||
+    input.localDispatch.sessionUpdatedAt !== (session?.updatedAt ?? null)
+  );
 }

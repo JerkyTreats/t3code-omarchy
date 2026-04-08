@@ -21,7 +21,7 @@ export interface GitHubIssueWorkflowState {
 }
 
 function matchesIssueLink(
-  issueLink: GitHubIssueLink | null,
+  issueLink: GitHubIssueLink | null | undefined,
   repoNameWithOwner: string | null,
   issueNumber: number,
 ): boolean {

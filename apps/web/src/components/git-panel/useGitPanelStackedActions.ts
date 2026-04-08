@@ -178,7 +178,7 @@ export function useGitPanelStackedActions({
           result.push.status === "pushed" &&
           !actionIsDefaultBranch;
         const shouldOfferCloseIssueCta =
-          result.promote.status === "promoted" &&
+          result.promote?.status === "promoted" &&
           !!resolvedIssueLink &&
           resolvedIssueLink.state === "open" &&
           actionStatus?.pr?.state !== "open" &&

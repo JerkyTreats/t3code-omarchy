@@ -195,7 +195,7 @@ export function useGitPanelWorkspaceActions({
       buildPrimaryWorkspaceResolutionPrompt({
         workspacePath: repoRoot,
         takeoverBranch: activeThreadBranch ?? activeWorkspaceBranch ?? null,
-        conflictedFiles: primaryWorkspaceStatus?.merge.conflictedFiles ?? [],
+        conflictedFiles: primaryWorkspaceStatus?.merge?.conflictedFiles ?? [],
         changedFiles: primaryWorkspaceStatus?.workingTree.files.map((file) => file.path) ?? [],
       }),
     );
@@ -209,7 +209,7 @@ export function useGitPanelWorkspaceActions({
     activeThreadBranch,
     activeWorkspaceBranch,
     focusPrimaryWorkspaceDraft,
-    primaryWorkspaceStatus?.merge.conflictedFiles,
+    primaryWorkspaceStatus?.merge?.conflictedFiles,
     primaryWorkspaceStatus?.workingTree.files,
     repoRoot,
     setPrompt,

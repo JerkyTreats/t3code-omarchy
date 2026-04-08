@@ -1,7 +1,11 @@
 import type { GitHubIssueLink, GitStackedAction } from "@t3tools/contracts";
 import { mutationOptions, queryOptions, type QueryClient } from "@tanstack/react-query";
 import { randomUUID } from "./utils";
-import { ensureNativeApi } from "../nativeApi";
+import {
+  ensureCurrentNativeApiFeature,
+  ensureNativeApi,
+  hasCurrentNativeApiFeature,
+} from "../nativeApi";
 
 const GIT_STATUS_STALE_TIME_MS = 5_000;
 const GIT_STATUS_REFETCH_INTERVAL_MS = 15_000;
@@ -91,9 +95,10 @@ export function gitRepositoryContextQueryOptions(cwd: string | null) {
     queryFn: async () => {
       const api = ensureNativeApi();
       if (!cwd) throw new Error("Git repository context is unavailable.");
+      ensureCurrentNativeApiFeature("git.repositoryContext");
       return api.git.repositoryContext({ cwd });
     },
-    enabled: cwd !== null,
+    enabled: cwd !== null && hasCurrentNativeApiFeature("git.repositoryContext"),
     staleTime: GIT_REPOSITORY_CONTEXT_STALE_TIME_MS,
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
@@ -262,6 +267,7 @@ export function gitMergeBranchesMutationOptions(input: {
     }) => {
       const api = ensureNativeApi();
       if (!input.cwd) throw new Error("Git merge is unavailable.");
+      ensureCurrentNativeApiFeature("git.mergeBranches");
       return api.git.mergeBranches({ cwd: input.cwd, sourceBranch, targetBranch });
     },
     onSettled: async () => {
@@ -280,6 +286,7 @@ export function gitAbortMergeMutationOptions(input: {
       const api = ensureNativeApi();
       const cwd = cwdOverride ?? input.cwd;
       if (!cwd) throw new Error("Git merge abort is unavailable.");
+      ensureCurrentNativeApiFeature("git.abortMerge");
       return api.git.abortMerge({ cwd });
     },
     onSettled: async () => {

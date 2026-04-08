@@ -3,6 +3,7 @@ import { TrimmedNonEmptyString } from "./baseSchemas";
 
 export const EDITORS = [
   { id: "cursor", label: "Cursor", command: "cursor", supportsGoto: true },
+  { id: "trae", label: "Trae", command: "trae", supportsGoto: true },
   { id: "vscode", label: "VS Code", command: "code", supportsGoto: true },
   {
     id: "vscode-insiders",
@@ -24,3 +25,8 @@ export const OpenInEditorInput = Schema.Struct({
   editor: EditorId,
 });
 export type OpenInEditorInput = typeof OpenInEditorInput.Type;
+
+export class OpenError extends Schema.TaggedErrorClass<OpenError>()("OpenError", {
+  message: Schema.String,
+  cause: Schema.optional(Schema.Defect),
+}) {}

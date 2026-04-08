@@ -59,7 +59,11 @@ import {
 } from "~/githubIssueThreads";
 import { cn, newCommandId, newMessageId, newThreadId } from "~/lib/utils";
 import { preferredTerminalEditor, resolvePathLinkTarget } from "~/terminal-links";
-import { readNativeApi } from "~/nativeApi";
+import {
+  readNativeApi,
+  supportsCurrentNativeApiGitHub,
+  supportsCurrentNativeApiGitMerge,
+} from "~/nativeApi";
 import { useComposerDraftStore } from "~/composerDraftStore";
 import { useStore } from "~/store";
 import { GitHubAuthSection } from "./GitHubAuthSection";
@@ -72,6 +76,7 @@ import { GitWorkspaceSection } from "./GitWorkspaceSection";
 import { GitCommitDialog } from "./GitCommitDialog";
 import { GitDefaultBranchDialog } from "./GitDefaultBranchDialog";
 import { GitPromoteDialog } from "./GitPromoteDialog";
+import { GitPanelSection } from "./GitPanelSection";
 import { useGitPanelGitHubActions } from "./useGitPanelGitHubActions";
 import { useGitPanelMergeActions } from "./useGitPanelMergeActions";
 import {
@@ -110,6 +115,8 @@ export default function GitPanel({
   repoRoot,
   activeThreadId,
 }: GitPanelProps) {
+  const supportsGitMerge = supportsCurrentNativeApiGitMerge();
+  const supportsGitHub = supportsCurrentNativeApiGitHub();
   const { settings } = useAppSettings();
   const navigate = useNavigate();
   const projects = useStore((store) => store.projects);
@@ -208,7 +215,7 @@ export default function GitPanel({
         githubStatusQuery.data?.repo !== null,
     }),
   );
-  const isGitHubAuthenticated = githubStatusQuery.data?.authenticated === true;
+  const isGitHubAuthenticated = supportsGitHub && githubStatusQuery.data?.authenticated === true;
 
   const runImmediateGitActionMutation = useMutation(
     gitRunStackedActionMutationOptions({
@@ -1094,7 +1101,7 @@ export default function GitPanel({
             {/* ============================================================ */}
             {/* SYNC SECTION - Pull changes INTO this workspace */}
             {/* ============================================================ */}
-            {isRepo && localBranches.length > 1 && (
+            {isRepo && localBranches.length > 1 && supportsGitMerge && (
               <GitSyncSection
                 localBranches={localBranches}
                 activeWorkspaceBranch={activeWorkspaceBranch}
@@ -1114,82 +1121,99 @@ export default function GitPanel({
               />
             )}
 
+            {isRepo && localBranches.length > 1 && !supportsGitMerge && (
+              <GitPanelSection title="Sync" collapsible defaultOpen={mergeExpanded}>
+                <div className="rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+                  Merge and conflict workflows stay fork owned. The current upstream RPC transport
+                  does not expose that adapter yet.
+                </div>
+              </GitPanelSection>
+            )}
+
             {/* ============================================================ */}
             {/* GITHUB AUTH SECTION */}
             {/* ============================================================ */}
-            <GitHubAuthSection
-              accountLogin={githubStatusQuery.data?.accountLogin ?? null}
-              installed={githubStatusQuery.data?.installed === true}
-              authenticated={isGitHubAuthenticated}
-              isFetching={githubStatusQuery.isFetching}
-              isAuthenticating={loginMutation.isPending}
-              githubRepoUrl={githubRepoUrl}
-              errorMessage={loginMutation.error?.message ?? null}
-              onAuthAction={runAuthAction}
-              onOpenRepo={() => {
-                if (githubRepoUrl) {
-                  void openExternalUrl(githubRepoUrl);
-                }
-              }}
-            />
+            {supportsGitHub ? (
+              <>
+                <GitHubAuthSection
+                  accountLogin={githubStatusQuery.data?.accountLogin ?? null}
+                  installed={githubStatusQuery.data?.installed === true}
+                  authenticated={isGitHubAuthenticated}
+                  isFetching={githubStatusQuery.isFetching}
+                  isAuthenticating={loginMutation.isPending}
+                  githubRepoUrl={githubRepoUrl}
+                  errorMessage={loginMutation.error?.message ?? null}
+                  onAuthAction={runAuthAction}
+                  onOpenRepo={() => {
+                    if (githubRepoUrl) {
+                      void openExternalUrl(githubRepoUrl);
+                    }
+                  }}
+                />
 
-            <GitHubLinkedIssueSection
-              visible={activeThreadIssueLink !== null}
-              issueLink={activeThreadIssueLink}
-              activePr={gitStatusForActions?.pr ?? null}
-              canMarkIssueResolved={canMarkIssueResolved}
-              isClosingIssue={closeIssueMutation.isPending}
-              isReopeningIssue={reopenIssueMutation.isPending}
-              onOpenIssue={(url) => {
-                void openExternalUrl(url);
-              }}
-              onOpenPullRequest={(url) => {
-                void openExternalUrl(url);
-              }}
-              onCloseIssue={() => {
-                void updateActiveIssueState("closed");
-              }}
-              onReopenIssue={() => {
-                void updateActiveIssueState("open");
-              }}
-            />
+                <GitHubLinkedIssueSection
+                  visible={activeThreadIssueLink !== null}
+                  issueLink={activeThreadIssueLink}
+                  activePr={gitStatusForActions?.pr ?? null}
+                  canMarkIssueResolved={canMarkIssueResolved}
+                  isClosingIssue={closeIssueMutation.isPending}
+                  isReopeningIssue={reopenIssueMutation.isPending}
+                  onOpenIssue={(url) => {
+                    void openExternalUrl(url);
+                  }}
+                  onOpenPullRequest={(url) => {
+                    void openExternalUrl(url);
+                  }}
+                  onCloseIssue={() => {
+                    void updateActiveIssueState("closed");
+                  }}
+                  onReopenIssue={() => {
+                    void updateActiveIssueState("open");
+                  }}
+                />
 
-            {/* ============================================================ */}
-            {/* ISSUES SECTION */}
-            {/* ============================================================ */}
-            <GitHubIssuesSection
-              visible={
-                githubStatusQuery.data?.authenticated === true &&
-                githubStatusQuery.data?.repo !== null
-              }
-              canCreateIssue={!issuesDisabled}
-              issueState={issueState}
-              onCreateIssue={() => {
-                createIssueMutation.reset();
-                setIsCreateIssueDialogOpen(true);
-              }}
-              onIssueStateChange={setIssueState}
-              isCreatingIssue={createIssueMutation.isPending}
-              isLoading={githubIssuesQuery.isLoading}
-              isFetching={githubIssuesQuery.isFetching}
-              issuesDisabled={issuesDisabled}
-              errorMessage={githubIssuesQuery.error?.message ?? null}
-              issues={githubIssuesQuery.data?.issues ?? []}
-              workflowsByIssueNumber={issueWorkflowsByNumber}
-              onOpenIssue={(url) => {
-                void openExternalUrl(url);
-              }}
-              onContinueIssueThread={(threadId) => {
-                void navigateToThread(threadId);
-              }}
-              onOpenPullRequest={(url) => {
-                void openExternalUrl(url);
-              }}
-              onResolveIssue={(issue) => {
-                void startIssueWorkspaceThread(issue);
-              }}
-              resolvingIssueNumber={resolvingIssueNumber}
-            />
+                <GitHubIssuesSection
+                  visible={
+                    githubStatusQuery.data?.authenticated === true &&
+                    githubStatusQuery.data?.repo !== null
+                  }
+                  canCreateIssue={!issuesDisabled}
+                  issueState={issueState}
+                  onCreateIssue={() => {
+                    createIssueMutation.reset();
+                    setIsCreateIssueDialogOpen(true);
+                  }}
+                  onIssueStateChange={setIssueState}
+                  isCreatingIssue={createIssueMutation.isPending}
+                  isLoading={githubIssuesQuery.isLoading}
+                  isFetching={githubIssuesQuery.isFetching}
+                  issuesDisabled={issuesDisabled}
+                  errorMessage={githubIssuesQuery.error?.message ?? null}
+                  issues={githubIssuesQuery.data?.issues ?? []}
+                  workflowsByIssueNumber={issueWorkflowsByNumber}
+                  onOpenIssue={(url) => {
+                    void openExternalUrl(url);
+                  }}
+                  onContinueIssueThread={(threadId) => {
+                    void navigateToThread(threadId);
+                  }}
+                  onOpenPullRequest={(url) => {
+                    void openExternalUrl(url);
+                  }}
+                  onResolveIssue={(issue) => {
+                    void startIssueWorkspaceThread(issue);
+                  }}
+                  resolvingIssueNumber={resolvingIssueNumber}
+                />
+              </>
+            ) : (
+              <GitPanelSection title="GitHub">
+                <div className="rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+                  GitHub issue and auth flows remain fork owned. The current upstream RPC transport
+                  does not expose that adapter yet.
+                </div>
+              </GitPanelSection>
+            )}
           </div>
         </ScrollArea>
       </div>
