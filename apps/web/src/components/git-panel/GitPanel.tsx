@@ -562,6 +562,7 @@ export default function GitPanel({
           cwd: repoCwd,
           branch: baseBranch,
           newBranch: branchName,
+          path: null,
         });
         worktreePath = worktreeResult.worktree.path;
 

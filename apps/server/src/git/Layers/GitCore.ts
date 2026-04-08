@@ -18,7 +18,10 @@ import {
 } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
-import { GitCommandError } from "@t3tools/contracts";
+import { GitCommandError, type GitBranch } from "@t3tools/contracts";
+import { dedupeRemoteBranchesWithLocalMatches } from "@t3tools/shared/git";
+import { compactTraceAttributes } from "../../observability/Attributes.ts";
+import { gitCommandDuration, gitCommandsTotal, withMetrics } from "../../observability/Metrics.ts";
 import {
   GitCore,
   type ExecuteGitProgress,
@@ -49,6 +52,7 @@ const STATUS_UPSTREAM_REFRESH_TIMEOUT = Duration.seconds(5);
 const STATUS_UPSTREAM_REFRESH_FAILURE_COOLDOWN = Duration.seconds(5);
 const STATUS_UPSTREAM_REFRESH_CACHE_CAPACITY = 2_048;
 const DEFAULT_BASE_BRANCH_CANDIDATES = ["main", "master"] as const;
+const GIT_LIST_BRANCHES_DEFAULT_LIMIT = 100;
 
 type TraceTailState = {
   processedChars: number;
@@ -180,6 +184,40 @@ function parseBranchLine(line: string): { name: string; current: boolean } | nul
   return {
     name,
     current: trimmed.startsWith("* "),
+  };
+}
+
+function filterBranchesForListQuery(
+  branches: ReadonlyArray<GitBranch>,
+  query?: string,
+): ReadonlyArray<GitBranch> {
+  if (!query) {
+    return branches;
+  }
+
+  const normalizedQuery = query.toLowerCase();
+  return branches.filter((branch) => branch.name.toLowerCase().includes(normalizedQuery));
+}
+
+function paginateBranches(input: {
+  branches: ReadonlyArray<GitBranch>;
+  cursor?: number | undefined;
+  limit?: number | undefined;
+}): {
+  branches: ReadonlyArray<GitBranch>;
+  nextCursor: number | null;
+  totalCount: number;
+} {
+  const cursor = input.cursor ?? 0;
+  const limit = input.limit ?? GIT_LIST_BRANCHES_DEFAULT_LIMIT;
+  const totalCount = input.branches.length;
+  const branches = input.branches.slice(cursor, cursor + limit);
+  const nextCursor = cursor + branches.length < totalCount ? cursor + branches.length : null;
+
+  return {
+    branches,
+    nextCursor,
+    totalCount,
   };
 }
 
@@ -336,6 +374,18 @@ interface Trace2Monitor {
   readonly flush: Effect.Effect<void, never>;
 }
 
+const nowUnixNano = (): bigint => BigInt(Date.now()) * 1_000_000n;
+
+const addCurrentSpanEvent = (name: string, attributes: Record<string, unknown>) =>
+  Effect.currentSpan.pipe(
+    Effect.tap((span) =>
+      Effect.sync(() => {
+        span.event(name, nowUnixNano(), compactTraceAttributes(attributes));
+      }),
+    ),
+    Effect.catch(() => Effect.void),
+  );
+
 function trace2ChildKey(record: Record<string, unknown>): string | null {
   const childId = record.child_id;
   if (typeof childId === "number" || typeof childId === "string") {
@@ -408,6 +458,9 @@ const createTrace2Monitor = Effect.fn("createTrace2Monitor")(function* (
 
     if (event === "child_start") {
       hookStartByChildKey.set(childKey, { hookName, startedAtMs: Date.now() });
+      yield* addCurrentSpanEvent("git.hook.started", {
+        hookName,
+      });
       if (progress.onHookStarted) {
         yield* progress.onHookStarted(hookName);
       }
@@ -416,12 +469,19 @@ const createTrace2Monitor = Effect.fn("createTrace2Monitor")(function* (
 
     if (event === "child_exit") {
       hookStartByChildKey.delete(childKey);
+      const code = traceRecord.success.code;
+      const exitCode = typeof code === "number" && Number.isInteger(code) ? code : null;
+      const durationMs = started ? Math.max(0, Date.now() - started.startedAtMs) : null;
+      yield* addCurrentSpanEvent("git.hook.finished", {
+        hookName: started?.hookName ?? hookName,
+        exitCode,
+        durationMs,
+      });
       if (progress.onHookFinished) {
-        const code = traceRecord.success.code;
         yield* progress.onHookFinished({
           hookName: started?.hookName ?? hookName,
-          exitCode: typeof code === "number" && Number.isInteger(code) ? code : null,
-          durationMs: started ? Math.max(0, Date.now() - started.startedAtMs) : null,
+          exitCode,
+          durationMs,
         });
       }
     }
@@ -573,13 +633,13 @@ export const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
   const path = yield* Path.Path;
   const { worktreesDir } = yield* ServerConfig;
 
-  let execute: GitCoreShape["execute"];
+  let executeRaw: GitCoreShape["execute"];
 
   if (options?.executeOverride) {
-    execute = options.executeOverride;
+    executeRaw = options.executeOverride;
   } else {
     const commandSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    execute = Effect.fnUntraced(function* (input) {
+    executeRaw = Effect.fnUntraced(function* (input) {
       const commandInput = {
         ...input,
         args: [...input.args],
@@ -679,6 +739,25 @@ export const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
       );
     });
   }
+
+  const execute: GitCoreShape["execute"] = (input) =>
+    executeRaw(input).pipe(
+      withMetrics({
+        counter: gitCommandsTotal,
+        timer: gitCommandDuration,
+        attributes: {
+          operation: input.operation,
+        },
+      }),
+      Effect.withSpan(input.operation, {
+        kind: "client",
+        attributes: {
+          "git.operation": input.operation,
+          "git.cwd": input.cwd,
+          "git.args_count": input.args.length,
+        },
+      }),
+    );
 
   const executeGit = (
     operation: string,
@@ -1137,27 +1216,55 @@ export const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
     return branchLastCommit;
   });
 
-  const statusDetails: GitCoreShape["statusDetails"] = Effect.fn("statusDetails")(function* (cwd) {
-    yield* refreshStatusUpstreamIfStale(cwd).pipe(Effect.ignoreCause({ log: true }));
+  const readStatusDetailsLocal = Effect.fn("readStatusDetailsLocal")(function* (cwd: string) {
+    const statusResult = yield* executeGit(
+      "GitCore.statusDetails.status",
+      cwd,
+      ["status", "--porcelain=2", "--branch"],
+      {
+        allowNonZeroExit: true,
+      },
+    );
 
-    const [statusStdout, unstagedNumstatStdout, stagedNumstatStdout, mergeInProgress] =
+    if (statusResult.code !== 0) {
+      const stderr = statusResult.stderr.trim();
+      return yield* createGitCommandError(
+        "GitCore.statusDetails.status",
+        cwd,
+        ["status", "--porcelain=2", "--branch"],
+        stderr || "git status failed",
+      );
+    }
+
+    const [unstagedNumstatStdout, stagedNumstatStdout, defaultRefResult, hasOriginRemote] =
       yield* Effect.all(
         [
-          runGitStdout("GitCore.statusDetails.status", cwd, [
-            "status",
-            "--porcelain=2",
-            "--branch",
-          ]),
           runGitStdout("GitCore.statusDetails.unstagedNumstat", cwd, ["diff", "--numstat"]),
           runGitStdout("GitCore.statusDetails.stagedNumstat", cwd, [
             "diff",
             "--cached",
             "--numstat",
           ]),
-          hasMergeHead(cwd).pipe(Effect.catch(() => Effect.succeed(false))),
+          executeGit(
+            "GitCore.statusDetails.defaultRef",
+            cwd,
+            ["symbolic-ref", "refs/remotes/origin/HEAD"],
+            {
+              allowNonZeroExit: true,
+            },
+          ),
+          originRemoteExists(cwd).pipe(Effect.catch(() => Effect.succeed(false))),
         ],
         { concurrency: "unbounded" },
       );
+    const statusStdout = statusResult.stdout;
+    const defaultBranch =
+      defaultRefResult.code === 0
+        ? defaultRefResult.stdout.trim().replace(/^refs\/remotes\/origin\//, "")
+        : null;
+    const mergeInProgress = yield* hasMergeHead(cwd).pipe(
+      Effect.catch(() => Effect.succeed(false)),
+    );
 
     let branch: string | null = null;
     let upstreamRef: string | null = null;
@@ -1236,6 +1343,12 @@ export const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
           : [];
 
     return {
+      isRepo: true,
+      hasOriginRemote,
+      isDefaultBranch:
+        branch !== null &&
+        (branch === defaultBranch ||
+          (defaultBranch === null && (branch === "main" || branch === "master"))),
       branch,
       upstreamRef,
       hasWorkingTreeChanges,
@@ -1254,9 +1367,23 @@ export const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
     };
   });
 
+  const statusDetailsLocal: GitCoreShape["statusDetailsLocal"] = Effect.fn("statusDetailsLocal")(
+    function* (cwd) {
+      return yield* readStatusDetailsLocal(cwd);
+    },
+  );
+
+  const statusDetails: GitCoreShape["statusDetails"] = Effect.fn("statusDetails")(function* (cwd) {
+    yield* refreshStatusUpstreamIfStale(cwd).pipe(Effect.ignoreCause({ log: true }));
+    return yield* readStatusDetailsLocal(cwd);
+  });
+
   const status: GitCoreShape["status"] = (input) =>
     statusDetails(input.cwd).pipe(
       Effect.map((details) => ({
+        isRepo: details.isRepo,
+        hasOriginRemote: details.hasOriginRemote,
+        isDefaultBranch: details.isDefaultBranch,
         branch: details.branch,
         hasWorkingTreeChanges: details.hasWorkingTreeChanges,
         workingTree: details.workingTree,
@@ -1406,7 +1533,7 @@ export const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
           "push",
           "-u",
           publishRemoteName,
-          branch,
+          `HEAD:refs/heads/${branch}`,
         ]);
         return {
           status: "pushed" as const,
@@ -1636,7 +1763,13 @@ export const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
     if (localBranchResult.code !== 0) {
       const stderr = localBranchResult.stderr.trim();
       if (stderr.toLowerCase().includes("not a git repository")) {
-        return { branches: [], isRepo: false, hasOriginRemote: false };
+        return {
+          branches: [],
+          isRepo: false,
+          hasOriginRemote: false,
+          nextCursor: null,
+          totalCount: 0,
+        };
       }
       return yield* createGitCommandError(
         "GitCore.listBranches",
@@ -1800,9 +1933,22 @@ export const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
             })
         : [];
 
-    const branches = [...localBranches, ...remoteBranches];
+    const branches = paginateBranches({
+      branches: filterBranchesForListQuery(
+        dedupeRemoteBranchesWithLocalMatches([...localBranches, ...remoteBranches]),
+        input.query,
+      ),
+      cursor: input.cursor,
+      limit: input.limit,
+    });
 
-    return { branches, isRepo: true, hasOriginRemote: remoteNames.includes("origin") };
+    return {
+      branches: [...branches.branches],
+      isRepo: true,
+      hasOriginRemote: remoteNames.includes("origin"),
+      nextCursor: branches.nextCursor,
+      totalCount: branches.totalCount,
+    };
   });
 
   const createWorktree: GitCoreShape["createWorktree"] = Effect.fn("createWorktree")(
@@ -1920,12 +2066,6 @@ export const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
 
     return { branch: targetBranch };
   });
-
-  const createBranch: GitCoreShape["createBranch"] = (input) =>
-    executeGit("GitCore.createBranch", input.cwd, ["branch", input.branch], {
-      timeoutMs: 10_000,
-      fallbackErrorMessage: "git branch create failed",
-    }).pipe(Effect.asVoid);
 
   const mergeBranches: GitCoreShape["mergeBranches"] = Effect.fn("mergeBranches")(
     function* (input) {
@@ -2086,8 +2226,27 @@ export const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
         timeoutMs: 10_000,
         fallbackErrorMessage: "git checkout failed",
       });
+
+      const branch = yield* runGitStdout("GitCore.checkoutBranch.currentBranch", input.cwd, [
+        "branch",
+        "--show-current",
+      ]).pipe(Effect.map((stdout) => stdout.trim() || null));
+
+      return { branch };
     },
   );
+
+  const createBranch: GitCoreShape["createBranch"] = Effect.fn("createBranch")(function* (input) {
+    yield* executeGit("GitCore.createBranch", input.cwd, ["branch", input.branch], {
+      timeoutMs: 10_000,
+      fallbackErrorMessage: "git branch create failed",
+    });
+    if (input.checkout) {
+      yield* checkoutBranch({ cwd: input.cwd, branch: input.branch });
+    }
+
+    return { branch: input.branch };
+  });
 
   const initRepo: GitCoreShape["initRepo"] = (input) =>
     executeGit("GitCore.initRepo", input.cwd, ["init"], {
@@ -2146,6 +2305,7 @@ export const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
     execute,
     status,
     statusDetails,
+    statusDetailsLocal,
     prepareCommitContext,
     commit,
     pushCurrentBranch,

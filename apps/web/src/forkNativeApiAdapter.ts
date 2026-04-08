@@ -161,7 +161,9 @@ export function createRpcGitApi(input: {
 
   return {
     pull: rpcClient.git.pull,
-    status: rpcClient.git.status,
+    status: rpcClient.git.refreshStatus,
+    refreshStatus: rpcClient.git.refreshStatus,
+    onStatus: (input, callback, options) => rpcClient.git.onStatus(input, callback, options),
     runStackedAction: (payload) =>
       rpcClient.git.runStackedAction(payload as never, {
         onProgress: (event) => {

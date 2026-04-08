@@ -1,6 +1,7 @@
 import "../index.css";
 
 import {
+  DEFAULT_SERVER_SETTINGS,
   ORCHESTRATION_WS_METHODS,
   type MessageId,
   type OrchestrationReadModel,
@@ -18,9 +19,18 @@ import { render } from "vitest-browser-react";
 
 import { useComposerDraftStore } from "../composerDraftStore";
 import { __resetNativeApiForTests } from "../nativeApi";
+import { AppAtomRegistryProvider } from "../rpc/atomRegistry";
+import { getServerConfig } from "../rpc/serverState";
 import { getRouter } from "../router";
 import { useStore } from "../store";
 import { BrowserWsRpcHarness } from "../../test/wsRpcHarness";
+
+vi.mock("../lib/gitStatusState", () => ({
+  useGitStatus: () => ({ data: null, error: null, cause: null, isPending: false }),
+  useGitStatuses: () => new Map(),
+  refreshGitStatus: () => Promise.resolve(null),
+  resetGitStatusStateForTests: () => undefined,
+}));
 
 const THREAD_ID = "thread-kb-toast-test" as ThreadId;
 const PROJECT_ID = "project-1" as ProjectId;
@@ -56,7 +66,14 @@ function createBaseServerConfig(): ServerConfig {
       },
     ],
     availableEditors: [],
+    observability: {
+      logsDirectoryPath: "/repo/project/.t3/logs",
+      localTracingEnabled: true,
+      otlpTracesEnabled: false,
+      otlpMetricsEnabled: false,
+    },
     settings: {
+      ...DEFAULT_SERVER_SETTINGS,
       enableAssistantStreaming: false,
       defaultThreadEnvMode: "local" as const,
       textGenerationModelSelection: { provider: "codex" as const, model: "gpt-5.4-mini" },
@@ -158,18 +175,9 @@ function resolveWsRpc(tag: string): unknown {
     return {
       isRepo: true,
       hasOriginRemote: true,
+      nextCursor: null,
+      totalCount: 1,
       branches: [{ name: "main", current: true, isDefault: true, worktreePath: null }],
-    };
-  }
-  if (tag === WS_METHODS.gitStatus) {
-    return {
-      branch: "main",
-      hasWorkingTreeChanges: false,
-      workingTree: { files: [], insertions: 0, deletions: 0 },
-      hasUpstream: true,
-      aheadCount: 0,
-      behindCount: 0,
-      pr: null,
     };
   }
   if (tag === WS_METHODS.projectsSearchEntries) {
@@ -246,6 +254,29 @@ async function waitForNoToast(title: string): Promise<void> {
   );
 }
 
+async function waitForInitialWsSubscriptions(): Promise<void> {
+  await vi.waitFor(
+    () => {
+      expect(
+        rpcHarness.requests.some((request) => request._tag === WS_METHODS.subscribeServerLifecycle),
+      ).toBe(true);
+      expect(
+        rpcHarness.requests.some((request) => request._tag === WS_METHODS.subscribeServerConfig),
+      ).toBe(true);
+    },
+    { timeout: 8_000, interval: 16 },
+  );
+}
+
+async function waitForServerConfigSnapshot(): Promise<void> {
+  await vi.waitFor(
+    () => {
+      expect(getServerConfig()).not.toBeNull();
+    },
+    { timeout: 8_000, interval: 16 },
+  );
+}
+
 async function mountApp(): Promise<{ cleanup: () => Promise<void> }> {
   const host = document.createElement("div");
   host.style.position = "fixed";
@@ -258,8 +289,15 @@ async function mountApp(): Promise<{ cleanup: () => Promise<void> }> {
 
   const router = getRouter(createMemoryHistory({ initialEntries: [`/${THREAD_ID}`] }));
 
-  const screen = await render(<RouterProvider router={router} />, { container: host });
+  const screen = await render(
+    <AppAtomRegistryProvider>
+      <RouterProvider router={router} />
+    </AppAtomRegistryProvider>,
+    { container: host },
+  );
   await waitForComposerEditor();
+  await waitForInitialWsSubscriptions();
+  await waitForServerConfigSnapshot();
 
   return {
     cleanup: async () => {
@@ -310,7 +348,7 @@ describe("Keybindings update toast", () => {
         return [];
       },
     });
-    __resetNativeApiForTests();
+    await __resetNativeApiForTests();
     localStorage.clear();
     document.body.innerHTML = "";
     useComposerDraftStore.setState({

@@ -382,6 +382,7 @@ function toUserInputQuestions(payload: Record<string, unknown> | undefined) {
         header,
         question: prompt,
         options,
+        multiSelect: question.multiSelect === true,
       };
     })
     .filter(
@@ -392,6 +393,7 @@ function toUserInputQuestions(payload: Record<string, unknown> | undefined) {
         header: string;
         question: string;
         options: Array<{ label: string; description: string }>;
+        multiSelect: boolean;
       } => question !== undefined,
     );
 
@@ -1667,7 +1669,9 @@ const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     listSessions,
     hasSession,
     stopAll,
-    streamEvents: Stream.fromQueue(runtimeEventQueue),
+    get streamEvents() {
+      return Stream.fromQueue(runtimeEventQueue);
+    },
   } satisfies CodexAdapterShape;
 });
 

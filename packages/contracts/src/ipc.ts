@@ -3,6 +3,7 @@ import type {
   GitAbortMergeResult,
   GitActionProgressEvent,
   GitCheckoutInput,
+  GitCheckoutResult,
   GitCreateBranchInput,
   GitCreateWorktreeInput,
   GitCreateWorktreeResult,
@@ -24,6 +25,7 @@ import type {
   GitRunStackedActionResult,
   GitStatusInput,
   GitStatusResult,
+  GitCreateBranchResult,
 } from "./git";
 import type {
   GitHubCreateIssueInput,
@@ -184,10 +186,10 @@ export interface NativeApi {
     listBranches: (input: GitListBranchesInput) => Promise<GitListBranchesResult>;
     createWorktree: (input: GitCreateWorktreeInput) => Promise<GitCreateWorktreeResult>;
     removeWorktree: (input: GitRemoveWorktreeInput) => Promise<void>;
-    createBranch: (input: GitCreateBranchInput) => Promise<void>;
+    createBranch: (input: GitCreateBranchInput) => Promise<GitCreateBranchResult>;
     mergeBranches: (input: GitMergeBranchesInput) => Promise<GitMergeBranchesResult>;
     abortMerge: (input: GitAbortMergeInput) => Promise<GitAbortMergeResult>;
-    checkout: (input: GitCheckoutInput) => Promise<void>;
+    checkout: (input: GitCheckoutInput) => Promise<GitCheckoutResult>;
     init: (input: GitInitInput) => Promise<void>;
     resolvePullRequest: (input: GitPullRequestRefInput) => Promise<GitResolvePullRequestResult>;
     preparePullRequestThread: (
@@ -196,6 +198,14 @@ export interface NativeApi {
     repositoryContext: (input: GitRepositoryContextInput) => Promise<GitRepositoryContextResult>;
     pull: (input: GitPullInput) => Promise<GitPullResult>;
     status: (input: GitStatusInput) => Promise<GitStatusResult>;
+    refreshStatus: (input: GitStatusInput) => Promise<GitStatusResult>;
+    onStatus: (
+      input: GitStatusInput,
+      callback: (status: GitStatusResult) => void,
+      options?: {
+        onResubscribe?: () => void;
+      },
+    ) => () => void;
     runStackedAction: (input: GitRunStackedActionInput) => Promise<GitRunStackedActionResult>;
     onActionProgress: (callback: (event: GitActionProgressEvent) => void) => () => void;
   };
@@ -228,6 +238,11 @@ export interface NativeApi {
       input: OrchestrationGetFullThreadDiffInput,
     ) => Promise<OrchestrationGetFullThreadDiffResult>;
     replayEvents: (fromSequenceExclusive: number) => Promise<OrchestrationEvent[]>;
-    onDomainEvent: (callback: (event: OrchestrationEvent) => void) => () => void;
+    onDomainEvent: (
+      callback: (event: OrchestrationEvent) => void,
+      options?: {
+        onResubscribe?: () => void;
+      },
+    ) => () => void;
   };
 }

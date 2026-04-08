@@ -1,4 +1,4 @@
-import { projectScriptCwd } from "~/projectScripts";
+import { projectScriptCwd } from "@t3tools/shared/projectScripts";
 import type { Project, Thread } from "~/types";
 
 export function resolveGitPanelContext(input: {

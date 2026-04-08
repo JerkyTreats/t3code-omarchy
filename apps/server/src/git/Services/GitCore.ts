@@ -7,12 +7,14 @@
  * @module GitCore
  */
 import { ServiceMap } from "effect";
-import type { Effect, Scope } from "effect";
+import type { Effect } from "effect";
 import type {
   GitAbortMergeInput,
   GitAbortMergeResult,
   GitCheckoutInput,
+  GitCheckoutResult,
   GitCreateBranchInput,
+  GitCreateBranchResult,
   GitCreateWorktreeInput,
   GitCreateWorktreeResult,
   GitInitInput,
@@ -163,6 +165,11 @@ export interface GitCoreShape {
   readonly statusDetails: (cwd: string) => Effect.Effect<GitStatusDetails, GitCommandError>;
 
   /**
+   * Read detailed working tree / branch status without refreshing remote tracking refs.
+   */
+  readonly statusDetailsLocal: (cwd: string) => Effect.Effect<GitStatusDetails, GitCommandError>;
+
+  /**
    * Build staged change context for commit generation.
    */
   readonly prepareCommitContext: (
@@ -284,7 +291,9 @@ export interface GitCoreShape {
   /**
    * Create a local branch.
    */
-  readonly createBranch: (input: GitCreateBranchInput) => Effect.Effect<void, GitCommandError>;
+  readonly createBranch: (
+    input: GitCreateBranchInput,
+  ) => Effect.Effect<GitCreateBranchResult, GitCommandError>;
 
   /**
    * Merge a source branch into the current target workspace branch.
@@ -305,7 +314,7 @@ export interface GitCoreShape {
    */
   readonly checkoutBranch: (
     input: GitCheckoutInput,
-  ) => Effect.Effect<void, GitCommandError, Scope.Scope>;
+  ) => Effect.Effect<GitCheckoutResult, GitCommandError>;
 
   /**
    * Initialize a repository in the provided directory.

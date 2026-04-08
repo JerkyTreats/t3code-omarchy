@@ -184,5 +184,5 @@ export function preferredTerminalEditor(): EditorIdType {
     return stored;
   }
 
-  return EDITORS.find((editor) => editor.command)?.id ?? EDITORS[0]?.id ?? "cursor";
+  return EDITORS.find((editor) => editor.commands !== null)?.id ?? EDITORS[0]?.id ?? "cursor";
 }

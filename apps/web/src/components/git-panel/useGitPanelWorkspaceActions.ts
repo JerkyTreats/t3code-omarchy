@@ -29,6 +29,7 @@ interface UseGitPanelWorkspaceActionsInput {
     cwd: string;
     branch: string;
     newBranch: string;
+    path: string | null;
   }) => Promise<GitCreateWorktreeResult>;
   setPrompt: (threadId: ThreadId, prompt: string) => void;
   threadToastData: { threadId: ThreadId } | undefined;
@@ -63,6 +64,7 @@ export function useGitPanelWorkspaceActions({
         cwd: repoCwd,
         branch: activeWorkspaceBranch,
         newBranch: buildTemporaryWorktreeBranchName(),
+        path: null,
       });
       await focusDraftThread(result.worktree.branch, result.worktree.path);
       toastManager.add({

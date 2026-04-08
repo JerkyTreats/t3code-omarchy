@@ -9,6 +9,18 @@ import { deriveServerPaths } from "./config";
 import { resolveServerConfig } from "./cli";
 
 it.layer(NodeServices.layer)("cli config resolution", (it) => {
+  const defaultObservabilityConfig = {
+    traceMinLevel: "Info",
+    traceTimingEnabled: true,
+    traceBatchWindowMs: 200,
+    traceMaxBytes: 10 * 1024 * 1024,
+    traceMaxFiles: 10,
+    otlpTracesUrl: undefined,
+    otlpMetricsUrl: undefined,
+    otlpExportIntervalMs: 10_000,
+    otlpServiceName: "t3-server",
+  } as const;
+
   const openBootstrapFd = Effect.fn(function* (payload: Record<string, unknown>) {
     const fs = yield* FileSystem.FileSystem;
     const filePath = yield* fs.makeTempFileScoped({ prefix: "t3-bootstrap-", suffix: ".ndjson" });
@@ -28,6 +40,7 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
           port: Option.none(),
           host: Option.none(),
           baseDir: Option.none(),
+          cwd: Option.none(),
           devUrl: Option.none(),
           noBrowser: Option.none(),
           authToken: Option.none(),
@@ -62,6 +75,7 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
 
       expect(resolved).toEqual({
         logLevel: "Warn",
+        ...defaultObservabilityConfig,
         mode: "desktop",
         port: 4001,
         cwd: process.cwd(),
@@ -89,6 +103,7 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
           port: Option.some(8788),
           host: Option.some("127.0.0.1"),
           baseDir: Option.some(baseDir),
+          cwd: Option.none(),
           devUrl: Option.some(new URL("http://127.0.0.1:4173")),
           noBrowser: Option.some(true),
           authToken: Option.some("flag-token"),
@@ -123,6 +138,7 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
 
       expect(resolved).toEqual({
         logLevel: "Debug",
+        ...defaultObservabilityConfig,
         mode: "web",
         port: 8788,
         cwd: process.cwd(),
@@ -153,6 +169,8 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         authToken: "bootstrap-token",
         autoBootstrapProjectFromCwd: false,
         logWebSocketEvents: true,
+        otlpTracesUrl: "http://localhost:4318/v1/traces",
+        otlpMetricsUrl: "http://localhost:4318/v1/metrics",
       });
       const derivedPaths = yield* deriveServerPaths(baseDir, new URL("http://127.0.0.1:5173"));
 
@@ -162,6 +180,7 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
           port: Option.none(),
           host: Option.none(),
           baseDir: Option.none(),
+          cwd: Option.none(),
           devUrl: Option.none(),
           noBrowser: Option.none(),
           authToken: Option.none(),
@@ -187,6 +206,9 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
 
       expect(resolved).toEqual({
         logLevel: "Info",
+        ...defaultObservabilityConfig,
+        otlpTracesUrl: "http://localhost:4318/v1/traces",
+        otlpMetricsUrl: "http://localhost:4318/v1/metrics",
         mode: "desktop",
         port: 4888,
         cwd: process.cwd(),
@@ -209,6 +231,7 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const baseDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-cli-config-dirs-" });
+      const customCwd = path.join(baseDir, "nested", "project");
 
       const resolved = yield* resolveServerConfig(
         {
@@ -216,6 +239,7 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
           port: Option.some(4888),
           host: Option.none(),
           baseDir: Option.some(baseDir),
+          cwd: Option.some(customCwd),
           devUrl: Option.some(new URL("http://127.0.0.1:5173")),
           noBrowser: Option.none(),
           authToken: Option.none(),
@@ -234,6 +258,7 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
       );
 
       for (const directory of [
+        customCwd,
         resolved.stateDir,
         resolved.logsDir,
         resolved.providerLogsDir,
@@ -241,9 +266,11 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         resolved.attachmentsDir,
         resolved.worktreesDir,
         path.dirname(resolved.serverLogPath),
+        path.dirname(resolved.serverTracePath),
       ]) {
         expect(yield* fs.exists(directory)).toBe(true);
       }
+      expect(resolved.cwd).toBe(path.resolve(customCwd));
     }),
   );
 
@@ -270,6 +297,7 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
           port: Option.some(8788),
           host: Option.some("127.0.0.1"),
           baseDir: Option.none(),
+          cwd: Option.none(),
           devUrl: Option.some(new URL("http://127.0.0.1:4173")),
           noBrowser: Option.none(),
           authToken: Option.some("flag-token"),
@@ -300,6 +328,7 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
 
       expect(resolved).toEqual({
         logLevel: "Debug",
+        ...defaultObservabilityConfig,
         mode: "web",
         port: 8788,
         cwd: process.cwd(),
@@ -312,6 +341,70 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         authToken: "flag-token",
         autoBootstrapProjectFromCwd: true,
         logWebSocketEvents: true,
+      });
+    }),
+  );
+
+  it.effect("falls back to persisted observability settings when env vars are absent", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const baseDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-cli-config-settings-" });
+      const derivedPaths = yield* deriveServerPaths(baseDir, undefined);
+      yield* fs.makeDirectory(path.dirname(derivedPaths.settingsPath), { recursive: true });
+      yield* fs.writeFileString(
+        derivedPaths.settingsPath,
+        `${JSON.stringify({
+          observability: {
+            otlpTracesUrl: "http://localhost:4318/v1/traces",
+            otlpMetricsUrl: "http://localhost:4318/v1/metrics",
+          },
+        })}\n`,
+      );
+
+      const resolved = yield* resolveServerConfig(
+        {
+          mode: Option.some("desktop"),
+          port: Option.some(4888),
+          host: Option.none(),
+          baseDir: Option.some(baseDir),
+          cwd: Option.none(),
+          devUrl: Option.none(),
+          noBrowser: Option.none(),
+          authToken: Option.none(),
+          bootstrapFd: Option.none(),
+          autoBootstrapProjectFromCwd: Option.none(),
+          logWebSocketEvents: Option.none(),
+        },
+        Option.none(),
+      ).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            ConfigProvider.layer(ConfigProvider.fromEnv({ env: {} })),
+            NetService.layer,
+          ),
+        ),
+      );
+
+      expect(resolved.otlpTracesUrl).toBe("http://localhost:4318/v1/traces");
+      expect(resolved.otlpMetricsUrl).toBe("http://localhost:4318/v1/metrics");
+      expect(resolved).toEqual({
+        logLevel: "Info",
+        ...defaultObservabilityConfig,
+        otlpTracesUrl: "http://localhost:4318/v1/traces",
+        otlpMetricsUrl: "http://localhost:4318/v1/metrics",
+        mode: "desktop",
+        port: 4888,
+        cwd: process.cwd(),
+        baseDir,
+        ...derivedPaths,
+        host: "127.0.0.1",
+        staticDir: resolved.staticDir,
+        devUrl: undefined,
+        noBrowser: true,
+        authToken: undefined,
+        autoBootstrapProjectFromCwd: false,
+        logWebSocketEvents: false,
       });
     }),
   );
