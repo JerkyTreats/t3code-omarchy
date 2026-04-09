@@ -29,14 +29,14 @@ interface ChatHeaderProps {
   terminalToggleShortcutLabel: string | null;
   diffToggleShortcutLabel: string | null;
   gitCwd: string | null;
-  gitOpen: boolean;
+  gitOpen?: boolean;
   diffOpen: boolean;
   onRunProjectScript: (script: ProjectScript) => void;
   onAddProjectScript: (input: NewProjectScriptInput) => Promise<void>;
   onUpdateProjectScript: (scriptId: string, input: NewProjectScriptInput) => Promise<void>;
   onDeleteProjectScript: (scriptId: string) => Promise<void>;
   onToggleTerminal: () => void;
-  onToggleGit: () => void;
+  onToggleGit?: () => void;
   onToggleDiff: () => void;
 }
 
@@ -55,14 +55,14 @@ export const ChatHeader = memo(function ChatHeader({
   terminalToggleShortcutLabel,
   diffToggleShortcutLabel,
   gitCwd,
-  gitOpen,
+  gitOpen = false,
   diffOpen,
   onRunProjectScript,
   onAddProjectScript,
   onUpdateProjectScript,
   onDeleteProjectScript,
   onToggleTerminal,
-  onToggleGit,
+  onToggleGit = () => undefined,
   onToggleDiff,
 }: ChatHeaderProps) {
   return (

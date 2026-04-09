@@ -15,7 +15,7 @@ export interface TerminalLinkMatch {
 
 const URL_PATTERN = /https?:\/\/[^\s"'`<>]+/g;
 const FILE_PATH_PATTERN =
-  /(?:~\/|\.{1,2}\/|\/|[A-Za-z]:\\|\\\\)[^\s"'`<>]+|[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)+(?::\d+){0,2}/g;
+  /(?:~\/|\.{1,2}\/|\/|[A-Za-z]:[\\/]|\\\\)[^\s"'`<>]+|[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)+(?::\d+){0,2}/g;
 const TRAILING_PUNCTUATION_PATTERN = /[.,;!?]+$/;
 
 function trimClosingDelimiters(value: string): string {
@@ -184,5 +184,5 @@ export function preferredTerminalEditor(): EditorIdType {
     return stored;
   }
 
-  return EDITORS.find((editor) => editor.command)?.id ?? EDITORS[0]?.id ?? "cursor";
+  return EDITORS.find((editor) => editor.commands !== null)?.id ?? EDITORS[0]?.id ?? "cursor";
 }

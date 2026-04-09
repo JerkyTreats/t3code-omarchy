@@ -83,9 +83,10 @@ export function resolveSyncFromTargetDisabledReason(input: {
 }
 
 export function resolvePrimaryWorkspaceNeedsAttention(gitStatus: GitStatusResult | null): boolean {
+  const merge = gitStatus?.merge;
   return (
-    (gitStatus?.merge.conflictedFiles.length ?? 0) > 0 ||
-    gitStatus?.merge.inProgress === true ||
+    (merge?.conflictedFiles.length ?? 0) > 0 ||
+    merge?.inProgress === true ||
     gitStatus?.hasWorkingTreeChanges === true
   );
 }

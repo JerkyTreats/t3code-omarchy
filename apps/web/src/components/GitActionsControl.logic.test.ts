@@ -12,6 +12,9 @@ import {
 
 function status(overrides: Partial<GitStatusResult> = {}): GitStatusResult {
   return {
+    isRepo: true,
+    hasOriginRemote: true,
+    isDefaultBranch: false,
     branch: "feature/test",
     hasWorkingTreeChanges: false,
     workingTree: {
@@ -878,9 +881,27 @@ describe("buildGitActionProgressStages", () => {
       forcePushOnly: true,
       pushTarget: "origin/feature/test",
     });
-    assert.deepEqual(stages, ["Pushing to origin/feature/test...", "Creating PR..."]);
+    assert.deepEqual(stages, [
+      "Pushing to origin/feature/test...",
+      "Preparing PR...",
+      "Generating PR content...",
+      "Creating GitHub pull request...",
+    ]);
   });
 
+  it("shows only PR progress when create-pr can skip the push", () => {
+    const stages = buildGitActionProgressStages({
+      action: "create_pr",
+      hasCustomCommitMessage: false,
+      hasWorkingTreeChanges: false,
+      shouldPushBeforePr: false,
+    });
+    assert.deepEqual(stages, [
+      "Preparing PR...",
+      "Generating PR content...",
+      "Creating GitHub pull request...",
+    ]);
+  });
   it("includes commit stages for commit+push when working tree is dirty", () => {
     const stages = buildGitActionProgressStages({
       action: "commit_push",
@@ -892,6 +913,22 @@ describe("buildGitActionProgressStages", () => {
       "Generating commit message...",
       "Committing...",
       "Pushing to origin/feature/test...",
+    ]);
+  });
+
+  it("includes granular PR stages for commit+push+PR actions", () => {
+    const stages = buildGitActionProgressStages({
+      action: "commit_push_pr",
+      hasCustomCommitMessage: true,
+      hasWorkingTreeChanges: true,
+      pushTarget: "origin/feature/test",
+    });
+    assert.deepEqual(stages, [
+      "Committing...",
+      "Pushing to origin/feature/test...",
+      "Preparing PR...",
+      "Generating PR content...",
+      "Creating GitHub pull request...",
     ]);
   });
 });

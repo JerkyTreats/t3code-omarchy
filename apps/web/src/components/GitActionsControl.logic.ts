@@ -31,7 +31,11 @@ export interface DefaultBranchActionDialogCopy {
   continueLabel: string;
 }
 
-export type DefaultBranchConfirmableAction = "commit_push" | "commit_push_pr";
+export type DefaultBranchConfirmableAction =
+  | "push"
+  | "create_pr"
+  | "commit_push"
+  | "commit_push_pr";
 
 const SHORT_SHA_LENGTH = 7;
 const TOAST_DESCRIPTION_MAX = 72;
@@ -59,16 +63,29 @@ export function buildGitActionProgressStages(input: {
   pushTarget?: string;
   featureBranch?: boolean;
   targetBranch?: string;
+  shouldPushBeforePr?: boolean;
 }): string[] {
   const branchStages = input.featureBranch ? ["Preparing feature branch..."] : [];
   const shouldIncludeCommitStages =
     !input.forcePushOnly && (input.action === "commit" || input.hasWorkingTreeChanges);
+  const pushStage = input.pushTarget ? `Pushing to ${input.pushTarget}...` : "Pushing...";
+  const prStages = [
+    "Preparing PR...",
+    "Generating PR content...",
+    "Creating GitHub pull request...",
+  ];
+
+  if (input.action === "push") {
+    return [pushStage];
+  }
+  if (input.action === "create_pr") {
+    return input.shouldPushBeforePr ? [pushStage, ...prStages] : prStages;
+  }
   const commitStages = !shouldIncludeCommitStages
     ? []
     : input.hasCustomCommitMessage
       ? ["Committing..."]
       : ["Generating commit message...", "Committing..."];
-  const pushStage = input.pushTarget ? `Pushing to ${input.pushTarget}...` : "Pushing...";
 
   if (input.action === "promote") {
     const targetLabel = input.targetBranch ? ` into ${input.targetBranch}` : "";
@@ -86,7 +103,7 @@ export function buildGitActionProgressStages(input: {
   if (input.action === "commit_push") {
     return [...branchStages, ...commitStages, pushStage];
   }
-  return [...branchStages, ...commitStages, pushStage, "Creating PR..."];
+  return [...branchStages, ...commitStages, pushStage, ...prStages];
 }
 
 const withDescription = (title: string, description: string | undefined) =>
@@ -96,17 +113,18 @@ export function summarizeGitResult(result: GitRunStackedActionResult): {
   title: string;
   description?: string;
 } {
+  const promote = result.promote;
   // Handle promote action first
-  if (result.promote.status === "promoted") {
-    const targetBranch = result.promote.targetBranch ?? "target";
-    const description = result.promote.branchDeleted
-      ? `${result.promote.sourceBranch ?? "Feature branch"} deleted`
+  if (promote?.status === "promoted") {
+    const targetBranch = promote.targetBranch ?? "target";
+    const description = promote.branchDeleted
+      ? `${promote.sourceBranch ?? "Feature branch"} deleted`
       : undefined;
     return withDescription(`Promoted to ${targetBranch}`, description);
   }
 
-  if (result.promote.status === "conflicts") {
-    const fileCount = result.promote.conflictedFiles?.length ?? 0;
+  if (promote?.status === "conflicts") {
+    const fileCount = promote.conflictedFiles?.length ?? 0;
     return {
       title: "Merge conflicts",
       description: `${fileCount} file${fileCount === 1 ? "" : "s"} need resolution`,

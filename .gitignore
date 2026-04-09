@@ -12,6 +12,7 @@ packages/*/dist
 build/
 .logs/
 release/
+release-mock/
 .t3
 .idea/
 apps/web/.playwright
@@ -20,3 +21,4 @@ apps/web/src/components/__screenshots__
 .vitest-*
 __screenshots__/
 .tanstack
+squashfs-root/

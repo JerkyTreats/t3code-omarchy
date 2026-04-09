@@ -6,11 +6,12 @@
  *
  * @module ServerConfig
  */
-import { Effect, FileSystem, Layer, Path, ServiceMap } from "effect";
+import { Effect, FileSystem, Layer, LogLevel, Path, Schema, ServiceMap } from "effect";
 
 export const DEFAULT_PORT = 3773;
 
-export type RuntimeMode = "web" | "desktop";
+export const RuntimeMode = Schema.Literals(["web", "desktop"]);
+export type RuntimeMode = typeof RuntimeMode.Type;
 
 /**
  * ServerDerivedPaths - Derived paths from the base directory.
@@ -24,6 +25,7 @@ export interface ServerDerivedPaths {
   readonly attachmentsDir: string;
   readonly logsDir: string;
   readonly serverLogPath: string;
+  readonly serverTracePath: string;
   readonly providerLogsDir: string;
   readonly providerEventLogPath: string;
   readonly terminalLogsDir: string;
@@ -34,6 +36,16 @@ export interface ServerDerivedPaths {
  * ServerConfigShape - Process/runtime configuration required by the server.
  */
 export interface ServerConfigShape extends ServerDerivedPaths {
+  readonly logLevel: LogLevel.LogLevel;
+  readonly traceMinLevel: LogLevel.LogLevel;
+  readonly traceTimingEnabled: boolean;
+  readonly traceBatchWindowMs: number;
+  readonly traceMaxBytes: number;
+  readonly traceMaxFiles: number;
+  readonly otlpTracesUrl: string | undefined;
+  readonly otlpMetricsUrl: string | undefined;
+  readonly otlpExportIntervalMs: number;
+  readonly otlpServiceName: string;
   readonly mode: RuntimeMode;
   readonly port: number;
   readonly host: string | undefined;
@@ -66,6 +78,7 @@ export const deriveServerPaths = Effect.fn(function* (
     attachmentsDir,
     logsDir,
     serverLogPath: join(logsDir, "server.log"),
+    serverTracePath: join(logsDir, "server.trace.ndjson"),
     providerLogsDir,
     providerEventLogPath: join(providerLogsDir, "events.log"),
     terminalLogsDir: join(logsDir, "terminals"),
@@ -73,30 +86,24 @@ export const deriveServerPaths = Effect.fn(function* (
   };
 });
 
-export const deriveServerPathsFromStateDir = Effect.fn(function* (
-  stateDir: ServerDerivedPaths["stateDir"],
-): Effect.fn.Return<ServerDerivedPaths & { readonly baseDir: string }, never, Path.Path> {
-  const { dirname, join, resolve } = yield* Path.Path;
-  const resolvedStateDir = resolve(stateDir);
-  const baseDir = dirname(resolvedStateDir);
-  const logsDir = join(resolvedStateDir, "logs");
-  const providerLogsDir = join(logsDir, "provider");
+export const ensureServerDirectories = Effect.fn(function* (derivedPaths: ServerDerivedPaths) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
 
-  return {
-    baseDir,
-    stateDir: resolvedStateDir,
-    dbPath: join(resolvedStateDir, "state.sqlite"),
-    keybindingsConfigPath: join(resolvedStateDir, "keybindings.json"),
-    settingsPath: join(resolvedStateDir, "settings.json"),
-    worktreesDir: join(baseDir, "worktrees"),
-    attachmentsDir: join(resolvedStateDir, "attachments"),
-    logsDir,
-    serverLogPath: join(logsDir, "server.log"),
-    providerLogsDir,
-    providerEventLogPath: join(providerLogsDir, "events.log"),
-    terminalLogsDir: join(logsDir, "terminals"),
-    anonymousIdPath: join(resolvedStateDir, "anonymous-id"),
-  };
+  yield* Effect.all(
+    [
+      fs.makeDirectory(derivedPaths.stateDir, { recursive: true }),
+      fs.makeDirectory(derivedPaths.logsDir, { recursive: true }),
+      fs.makeDirectory(derivedPaths.providerLogsDir, { recursive: true }),
+      fs.makeDirectory(derivedPaths.terminalLogsDir, { recursive: true }),
+      fs.makeDirectory(derivedPaths.attachmentsDir, { recursive: true }),
+      fs.makeDirectory(derivedPaths.worktreesDir, { recursive: true }),
+      fs.makeDirectory(path.dirname(derivedPaths.keybindingsConfigPath), { recursive: true }),
+      fs.makeDirectory(path.dirname(derivedPaths.settingsPath), { recursive: true }),
+      fs.makeDirectory(path.dirname(derivedPaths.anonymousIdPath), { recursive: true }),
+    ],
+    { concurrency: "unbounded" },
+  );
 });
 
 /**
@@ -117,12 +124,19 @@ export class ServerConfig extends ServiceMap.Service<ServerConfig, ServerConfigS
             ? baseDirOrPrefix
             : yield* fs.makeTempDirectoryScoped({ prefix: baseDirOrPrefix.prefix });
         const derivedPaths = yield* deriveServerPaths(baseDir, devUrl);
-
-        yield* fs.makeDirectory(derivedPaths.stateDir, { recursive: true });
-        yield* fs.makeDirectory(derivedPaths.logsDir, { recursive: true });
-        yield* fs.makeDirectory(derivedPaths.attachmentsDir, { recursive: true });
+        yield* ensureServerDirectories(derivedPaths);
 
         return {
+          logLevel: "Error",
+          traceMinLevel: "Info",
+          traceTimingEnabled: true,
+          traceBatchWindowMs: 200,
+          traceMaxBytes: 10 * 1024 * 1024,
+          traceMaxFiles: 10,
+          otlpTracesUrl: undefined,
+          otlpMetricsUrl: undefined,
+          otlpExportIntervalMs: 10_000,
+          otlpServiceName: "t3-server",
           cwd,
           baseDir,
           ...derivedPaths,

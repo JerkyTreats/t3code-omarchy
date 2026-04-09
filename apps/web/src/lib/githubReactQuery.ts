@@ -1,7 +1,11 @@
 import type { GitHubIssueListState } from "@t3tools/contracts";
 import { mutationOptions, queryOptions, type QueryClient } from "@tanstack/react-query";
 
-import { ensureNativeApi } from "~/nativeApi";
+import {
+  ensureCurrentNativeApiFeature,
+  ensureNativeApi,
+  hasCurrentNativeApiFeature,
+} from "~/nativeApi";
 
 const GITHUB_STATUS_STALE_TIME_MS = 10_000;
 const GITHUB_ISSUES_STALE_TIME_MS = 15_000;
@@ -22,8 +26,10 @@ export function githubStatusQueryOptions(cwd: string | null) {
     queryKey: githubQueryKeys.status(cwd),
     queryFn: async () => {
       const api = ensureNativeApi();
+      ensureCurrentNativeApiFeature("github.status");
       return api.github.status({ cwd, hostname: "github.com" });
     },
+    enabled: cwd !== null && hasCurrentNativeApiFeature("github.status"),
     staleTime: GITHUB_STATUS_STALE_TIME_MS,
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
@@ -40,13 +46,17 @@ export function githubIssuesQueryOptions(input: {
     queryKey: githubQueryKeys.issues(input.cwd, input.state, input.limit),
     queryFn: async () => {
       const api = ensureNativeApi();
+      ensureCurrentNativeApiFeature("github.listIssues");
       return api.github.listIssues({
         cwd: input.cwd,
         state: input.state,
         limit: input.limit,
       });
     },
-    enabled: (input.enabled ?? true) && input.cwd !== null,
+    enabled:
+      (input.enabled ?? true) &&
+      input.cwd !== null &&
+      hasCurrentNativeApiFeature("github.listIssues"),
     staleTime: GITHUB_ISSUES_STALE_TIME_MS,
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
@@ -61,6 +71,7 @@ export function githubLoginMutationOptions(input: {
     mutationKey: ["github", "mutation", "login", input.cwd] as const,
     mutationFn: async () => {
       const api = ensureNativeApi();
+      ensureCurrentNativeApiFeature("github.login");
       return api.github.login({
         cwd: input.cwd,
         hostname: "github.com",
@@ -81,6 +92,7 @@ export function githubCloseIssueMutationOptions(input: {
     mutationKey: ["github", "mutation", "close-issue", input.cwd] as const,
     mutationFn: async ({ issueNumber, repo }: { issueNumber: number; repo?: string }) => {
       const api = ensureNativeApi();
+      ensureCurrentNativeApiFeature("github.closeIssue");
       return api.github.closeIssue({
         cwd: input.cwd,
         issueNumber,
@@ -109,6 +121,7 @@ export function githubCreateIssueMutationOptions(input: {
       repo?: string;
     }) => {
       const api = ensureNativeApi();
+      ensureCurrentNativeApiFeature("github.createIssue");
       return api.github.createIssue({
         cwd: input.cwd,
         title,
@@ -130,6 +143,7 @@ export function githubReopenIssueMutationOptions(input: {
     mutationKey: ["github", "mutation", "reopen-issue", input.cwd] as const,
     mutationFn: async ({ issueNumber, repo }: { issueNumber: number; repo?: string }) => {
       const api = ensureNativeApi();
+      ensureCurrentNativeApiFeature("github.reopenIssue");
       return api.github.reopenIssue({
         cwd: input.cwd,
         issueNumber,

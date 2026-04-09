@@ -1,12 +1,10 @@
 import type {
   GitAbortMergeInput,
   GitAbortMergeResult,
-  GitCheckoutInput,
   GitActionProgressEvent,
+  GitCheckoutInput,
+  GitCheckoutResult,
   GitCreateBranchInput,
-  GitPreparePullRequestThreadInput,
-  GitPreparePullRequestThreadResult,
-  GitPullRequestRefInput,
   GitCreateWorktreeInput,
   GitCreateWorktreeResult,
   GitInitInput,
@@ -14,16 +12,20 @@ import type {
   GitListBranchesResult,
   GitMergeBranchesInput,
   GitMergeBranchesResult,
-  GitRepositoryContextInput,
-  GitRepositoryContextResult,
+  GitPreparePullRequestThreadInput,
+  GitPreparePullRequestThreadResult,
   GitPullInput,
+  GitPullRequestRefInput,
   GitPullResult,
   GitRemoveWorktreeInput,
+  GitRepositoryContextInput,
+  GitRepositoryContextResult,
   GitResolvePullRequestResult,
   GitRunStackedActionInput,
   GitRunStackedActionResult,
   GitStatusInput,
   GitStatusResult,
+  GitCreateBranchResult,
 } from "./git";
 import type {
   GitHubCreateIssueInput,
@@ -74,6 +76,7 @@ export interface ContextMenuItem<T extends string = string> {
   id: T;
   label: string;
   destructive?: boolean;
+  disabled?: boolean;
 }
 
 export type DesktopUpdateStatus =
@@ -117,6 +120,11 @@ export interface DesktopUpdateActionResult {
   state: DesktopUpdateState;
 }
 
+export interface DesktopUpdateCheckResult {
+  checked: boolean;
+  state: DesktopUpdateState;
+}
+
 export interface DesktopScreenshotCapture {
   name: string;
   mimeType: string;
@@ -146,6 +154,7 @@ export interface DesktopBridge {
   onMenuAction: (listener: (action: string) => void) => () => void;
   onSystemTheme: (listener: (theme: DesktopSystemTheme | null) => void) => () => void;
   getUpdateState: () => Promise<DesktopUpdateState>;
+  checkForUpdate: () => Promise<DesktopUpdateCheckResult>;
   downloadUpdate: () => Promise<DesktopUpdateActionResult>;
   installUpdate: () => Promise<DesktopUpdateActionResult>;
   onUpdateState: (listener: (state: DesktopUpdateState) => void) => () => void;
@@ -157,12 +166,12 @@ export interface NativeApi {
     confirm: (message: string) => Promise<boolean>;
   };
   terminal: {
-    open: (input: TerminalOpenInput) => Promise<TerminalSessionSnapshot>;
-    write: (input: TerminalWriteInput) => Promise<void>;
-    resize: (input: TerminalResizeInput) => Promise<void>;
-    clear: (input: TerminalClearInput) => Promise<void>;
-    restart: (input: TerminalRestartInput) => Promise<TerminalSessionSnapshot>;
-    close: (input: TerminalCloseInput) => Promise<void>;
+    open: (input: typeof TerminalOpenInput.Encoded) => Promise<TerminalSessionSnapshot>;
+    write: (input: typeof TerminalWriteInput.Encoded) => Promise<void>;
+    resize: (input: typeof TerminalResizeInput.Encoded) => Promise<void>;
+    clear: (input: typeof TerminalClearInput.Encoded) => Promise<void>;
+    restart: (input: typeof TerminalRestartInput.Encoded) => Promise<TerminalSessionSnapshot>;
+    close: (input: typeof TerminalCloseInput.Encoded) => Promise<void>;
     onEvent: (callback: (event: TerminalEvent) => void) => () => void;
   };
   projects: {
@@ -174,23 +183,29 @@ export interface NativeApi {
     openExternal: (url: string) => Promise<void>;
   };
   git: {
-    // Existing branch/worktree API
     listBranches: (input: GitListBranchesInput) => Promise<GitListBranchesResult>;
     createWorktree: (input: GitCreateWorktreeInput) => Promise<GitCreateWorktreeResult>;
     removeWorktree: (input: GitRemoveWorktreeInput) => Promise<void>;
-    createBranch: (input: GitCreateBranchInput) => Promise<void>;
+    createBranch: (input: GitCreateBranchInput) => Promise<GitCreateBranchResult>;
     mergeBranches: (input: GitMergeBranchesInput) => Promise<GitMergeBranchesResult>;
     abortMerge: (input: GitAbortMergeInput) => Promise<GitAbortMergeResult>;
-    checkout: (input: GitCheckoutInput) => Promise<void>;
+    checkout: (input: GitCheckoutInput) => Promise<GitCheckoutResult>;
     init: (input: GitInitInput) => Promise<void>;
     resolvePullRequest: (input: GitPullRequestRefInput) => Promise<GitResolvePullRequestResult>;
     preparePullRequestThread: (
       input: GitPreparePullRequestThreadInput,
     ) => Promise<GitPreparePullRequestThreadResult>;
     repositoryContext: (input: GitRepositoryContextInput) => Promise<GitRepositoryContextResult>;
-    // Stacked action API
     pull: (input: GitPullInput) => Promise<GitPullResult>;
     status: (input: GitStatusInput) => Promise<GitStatusResult>;
+    refreshStatus: (input: GitStatusInput) => Promise<GitStatusResult>;
+    onStatus: (
+      input: GitStatusInput,
+      callback: (status: GitStatusResult) => void,
+      options?: {
+        onResubscribe?: () => void;
+      },
+    ) => () => void;
     runStackedAction: (input: GitRunStackedActionInput) => Promise<GitRunStackedActionResult>;
     onActionProgress: (callback: (event: GitActionProgressEvent) => void) => () => void;
   };
@@ -223,6 +238,11 @@ export interface NativeApi {
       input: OrchestrationGetFullThreadDiffInput,
     ) => Promise<OrchestrationGetFullThreadDiffResult>;
     replayEvents: (fromSequenceExclusive: number) => Promise<OrchestrationEvent[]>;
-    onDomainEvent: (callback: (event: OrchestrationEvent) => void) => () => void;
+    onDomainEvent: (
+      callback: (event: OrchestrationEvent) => void,
+      options?: {
+        onResubscribe?: () => void;
+      },
+    ) => () => void;
   };
 }

@@ -1,31 +1,33 @@
 /**
  * GitManager - Effect service contract for stacked Git workflows.
  *
- * Owns user-facing Git workflow behavior by composing lower-level Git and
- * external tool services.
- * Product-specific policy, guardrails, repository context shaping, progress
- * events, and stacked flows should concentrate here rather than in GitCore.
+ * Orchestrates status inspection and commit/push/PR flows by composing
+ * lower-level Git and external tool services.
  *
  * @module GitManager
  */
 import {
+  GitAbortMergeInput,
+  GitAbortMergeResult,
   GitActionProgressEvent,
+  GitMergeBranchesInput,
+  GitMergeBranchesResult,
   GitPreparePullRequestThreadInput,
   GitPreparePullRequestThreadResult,
-  GitPullInput,
-  GitPullResult,
   GitPullRequestRefInput,
   GitRepositoryContextInput,
   GitRepositoryContextResult,
   GitResolvePullRequestResult,
   GitRunStackedActionInput,
   GitRunStackedActionResult,
+  GitStatusLocalResult,
+  GitStatusRemoteResult,
   GitStatusInput,
   GitStatusResult,
 } from "@t3tools/contracts";
 import { ServiceMap } from "effect";
 import type { Effect } from "effect";
-import type { GitManagerServiceError } from "../Errors.ts";
+import type { GitManagerServiceError } from "@t3tools/contracts";
 
 export interface GitActionProgressReporter {
   readonly publish: (event: GitActionProgressEvent) => Effect.Effect<void, never>;
@@ -38,9 +40,6 @@ export interface GitRunStackedActionOptions {
 
 /**
  * GitManagerShape - Service API for high-level Git workflow actions.
- *
- * This is the preferred browser-facing seam for Git features that need
- * workflow policy or product semantics.
  */
 export interface GitManagerShape {
   /**
@@ -51,16 +50,33 @@ export interface GitManagerShape {
   ) => Effect.Effect<GitStatusResult, GitManagerServiceError>;
 
   /**
-   * Pull the current branch using workflow policy.
+   * Read local repository status without remote hosting enrichment.
    */
-  readonly pull: (input: GitPullInput) => Effect.Effect<GitPullResult, GitManagerServiceError>;
+  readonly localStatus: (
+    input: GitStatusInput,
+  ) => Effect.Effect<GitStatusLocalResult, GitManagerServiceError>;
 
   /**
-   * Read repository context for browser-facing Git workflows.
+   * Read remote tracking / PR status for a repository.
    */
-  readonly repositoryContext: (
-    input: GitRepositoryContextInput,
-  ) => Effect.Effect<GitRepositoryContextResult, GitManagerServiceError>;
+  readonly remoteStatus: (
+    input: GitStatusInput,
+  ) => Effect.Effect<GitStatusRemoteResult | null, GitManagerServiceError>;
+
+  /**
+   * Clear any cached local status snapshot for a repository.
+   */
+  readonly invalidateLocalStatus: (cwd: string) => Effect.Effect<void, never>;
+
+  /**
+   * Clear any cached remote status snapshot for a repository.
+   */
+  readonly invalidateRemoteStatus: (cwd: string) => Effect.Effect<void, never>;
+
+  /**
+   * Clear any cached status snapshot for a repository so the next read is fresh.
+   */
+  readonly invalidateStatus: (cwd: string) => Effect.Effect<void, never>;
 
   /**
    * Resolve a pull request by URL/number against the current repository.
@@ -77,13 +93,34 @@ export interface GitManagerShape {
   ) => Effect.Effect<GitPreparePullRequestThreadResult, GitManagerServiceError>;
 
   /**
-   * Run a stacked Git action (`commit`, `commit_push`, `commit_push_pr`).
+   * Run a Git action (`commit`, `push`, `create_pr`, `commit_push`, `commit_push_pr`).
    * When `featureBranch` is set, creates and checks out a feature branch first.
    */
   readonly runStackedAction: (
     input: GitRunStackedActionInput,
     options?: GitRunStackedActionOptions,
   ) => Effect.Effect<GitRunStackedActionResult, GitManagerServiceError>;
+
+  /**
+   * Merge a source branch into a target branch within the current workspace.
+   */
+  readonly mergeBranches: (
+    input: GitMergeBranchesInput,
+  ) => Effect.Effect<GitMergeBranchesResult, GitManagerServiceError>;
+
+  /**
+   * Abort an in-progress merge in the current workspace.
+   */
+  readonly abortMerge: (
+    input: GitAbortMergeInput,
+  ) => Effect.Effect<GitAbortMergeResult, GitManagerServiceError>;
+
+  /**
+   * Resolve repository context metadata for the current workspace.
+   */
+  readonly repositoryContext: (
+    input: GitRepositoryContextInput,
+  ) => Effect.Effect<GitRepositoryContextResult, GitManagerServiceError>;
 }
 
 /**

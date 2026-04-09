@@ -5,7 +5,7 @@
  */
 import { Schema } from "effect";
 
-import { TextGenerationError } from "./Errors.ts";
+import { TextGenerationError } from "@t3tools/contracts";
 
 import { existsSync } from "node:fs";
 import { join } from "node:path";
@@ -51,6 +51,27 @@ export function sanitizePrTitle(raw: string): string {
     return singleLine;
   }
   return "Update project changes";
+}
+
+/** Normalise a raw thread title to a compact single-line sidebar-safe label. */
+export function sanitizeThreadTitle(raw: string): string {
+  const normalized = raw
+    .trim()
+    .split(/\r?\n/g)[0]
+    ?.trim()
+    .replace(/^['"`]+|['"`]+$/g, "")
+    .trim()
+    .replace(/\s+/g, " ");
+
+  if (!normalized || normalized.trim().length === 0) {
+    return "New thread";
+  }
+
+  if (normalized.length <= 50) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, 47).trimEnd()}...`;
 }
 
 /** CLI name to human-readable label, e.g. "codex" → "Codex CLI (`codex`)" */
