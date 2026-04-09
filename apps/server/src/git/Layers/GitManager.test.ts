@@ -624,10 +624,11 @@ function runStackedAction(
   manager: GitManagerShape,
   input: {
     cwd: string;
-    action: "commit" | "push" | "create_pr" | "commit_push" | "commit_push_pr";
+    action: "commit" | "push" | "create_pr" | "commit_push" | "commit_push_pr" | "promote";
     actionId?: string;
     commitMessage?: string;
     featureBranch?: boolean;
+    targetBranch?: string;
     filePaths?: readonly string[];
   },
   options?: Parameters<GitManagerShape["runStackedAction"]>[1],
@@ -2876,6 +2877,116 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
           }),
         ]),
       );
+    }),
+  );
+
+  it.effect("promote merges to target, pushes, and deletes the source branch", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("t3code-git-manager-");
+      const remoteDir = yield* createBareRemote();
+      yield* initRepo(repoDir);
+      yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "main"]);
+      yield* runGit(repoDir, ["checkout", "-b", "feature/promote-success"]);
+      fs.writeFileSync(path.join(repoDir, "feature.txt"), "feature branch content\n");
+      yield* runGit(repoDir, ["add", "feature.txt"]);
+      yield* runGit(repoDir, ["commit", "-m", "Feature branch content"]);
+      const featureHead = (yield* runGit(repoDir, ["rev-parse", "HEAD"])).stdout.trim();
+
+      const { manager } = yield* makeManager();
+
+      const result = yield* runStackedAction(manager, {
+        cwd: repoDir,
+        action: "promote",
+        targetBranch: "main",
+      });
+
+      expect(result.commit.status).toBe("skipped_not_requested");
+      expect(result.push.status).toBe("pushed");
+      expect(result.promote).toMatchObject({
+        status: "promoted",
+        sourceBranch: "feature/promote-success",
+        targetBranch: "main",
+        branchDeleted: true,
+      });
+      expect(result.toast).toEqual({
+        title: "Promoted to main",
+        description: "feature/promote-success deleted",
+        cta: { kind: "none" },
+      });
+
+      expect((yield* runGit(repoDir, ["branch", "--show-current"])).stdout.trim()).toBe("main");
+      expect(
+        (yield* runGit(
+          repoDir,
+          ["show-ref", "--verify", "--quiet", "refs/heads/feature/promote-success"],
+          true,
+        )).code,
+      ).toBe(1);
+      expect((yield* runGit(remoteDir, ["show", "main:feature.txt"])).stdout).toBe(
+        "feature branch content\n",
+      );
+
+      const backupBranches = (yield* runGit(remoteDir, [
+        "for-each-ref",
+        "--format=%(refname:short)",
+        "refs/heads/t3code/promote-backup",
+      ])).stdout
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
+      expect(backupBranches).toHaveLength(1);
+      expect(backupBranches[0]).toMatch(
+        /^t3code\/promote-backup\/feature\/promote-success\/[0-9a-f]{8}$/,
+      );
+      expect((yield* runGit(remoteDir, ["rev-parse", backupBranches[0]!])).stdout.trim()).toBe(
+        featureHead,
+      );
+    }),
+  );
+
+  it.effect("promote reports conflicts and leaves merge state for manual resolution", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("t3code-git-manager-");
+      const remoteDir = yield* createBareRemote();
+      yield* initRepo(repoDir);
+      yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "main"]);
+      yield* runGit(repoDir, ["checkout", "-b", "feature/promote-conflict"]);
+      fs.writeFileSync(path.join(repoDir, "README.md"), "feature change\n");
+      yield* runGit(repoDir, ["add", "README.md"]);
+      yield* runGit(repoDir, ["commit", "-m", "Feature change"]);
+
+      yield* runGit(repoDir, ["checkout", "main"]);
+      fs.writeFileSync(path.join(repoDir, "README.md"), "main change\n");
+      yield* runGit(repoDir, ["add", "README.md"]);
+      yield* runGit(repoDir, ["commit", "-m", "Main change"]);
+      yield* runGit(repoDir, ["push"]);
+      yield* runGit(repoDir, ["checkout", "feature/promote-conflict"]);
+
+      const { manager } = yield* makeManager();
+
+      const result = yield* runStackedAction(manager, {
+        cwd: repoDir,
+        action: "promote",
+        targetBranch: "main",
+      });
+
+      expect(result.push.status).toBe("skipped_not_requested");
+      expect(result.promote).toEqual({
+        status: "conflicts",
+        sourceBranch: "feature/promote-conflict",
+        targetBranch: "main",
+        conflictedFiles: ["README.md"],
+      });
+      expect(result.toast).toEqual({
+        title: "Merge conflicts",
+        description: "1 file need resolution",
+        cta: { kind: "none" },
+      });
+
+      expect((yield* runGit(repoDir, ["branch", "--show-current"])).stdout.trim()).toBe("main");
+      expect((yield* runGit(repoDir, ["status", "--short"])).stdout).toContain("UU README.md");
     }),
   );
 
