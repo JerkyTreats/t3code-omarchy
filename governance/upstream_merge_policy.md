@@ -44,12 +44,26 @@ Treat these as protected fork features during every upstream sync:
 
 - fork first GitHub identity resolution for repo, issue, and panel context
 - draft autonomy for composer text, screenshots, attachments, and local thread state
+- composer chrome layout including access control placement, screenshot control placement, and rich draft affordances
 - Git panel isolation from active draft ownership and prompt state
-- plan sidebar progress affordances and other fork specific status cues
+- plan sidebar progress affordances and other fork specific status cues, including showing plan progress such as `1/4` when a plan exists instead of a generic working label
 - local branch, worktree, and promotion workflow behavior
 - Omarchy specific desktop and screenshot integration behavior
+- Omarchy system theme behavior derived from local desktop theme state
+- screenshot capture and attach flows tied to Omarchy tooling and desktop capability checks
 
 Do not remove, replace, silently degrade, or route around these features without an intentional fork decision that is recorded in the merge notes.
+
+## Fork Protected Areas
+
+Use this list as a concrete review aid during upstream sync and merge work.
+
+- composer chrome and layout in `apps/web/src/components/ChatView.tsx`, including floating access control placement, screenshot placement, and rich draft controls
+- sidebar status cues for plan aware progress in the thread and activity surfaces, including fractional progress such as `1/4` when plan data exists
+- Omarchy system theme behavior and any browser or desktop adapters that project desktop theme state into the app
+- screenshot capability detection, screenshot capture, and screenshot attach flows across desktop, web, and composer state
+- fork first GitHub repo identity resolution in `apps/server/src/git/Layers/GitHubCli.ts` so fork operations resolve to the fork remote instead of upstream
+- Git panel promote semantics in `apps/server/src/git/Layers/GitManager.ts` and related web UI, including backup branch creation, merge to target branch, push of target branch, and source branch cleanup
 
 ## Upstream Intake Classes
 
