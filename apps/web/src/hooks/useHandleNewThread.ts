@@ -40,8 +40,9 @@ export function useHandleNewThread() {
         branch?: string | null;
         worktreePath?: string | null;
         envMode?: DraftThreadEnvMode;
+        beforeNavigate?: (threadId: ThreadId) => void;
       },
-    ): Promise<void> => {
+    ): Promise<ThreadId> => {
       const {
         clearProjectDraftThreadId,
         getDraftThread,
@@ -67,13 +68,15 @@ export function useHandleNewThread() {
             });
           }
           setProjectDraftThreadId(projectId, storedDraftThread.threadId);
+          options?.beforeNavigate?.(storedDraftThread.threadId);
           if (routeThreadId === storedDraftThread.threadId) {
-            return;
+            return storedDraftThread.threadId;
           }
           await navigate({
             to: "/$threadId",
             params: { threadId: storedDraftThread.threadId },
           });
+          return storedDraftThread.threadId;
         })();
       }
 
@@ -92,7 +95,8 @@ export function useHandleNewThread() {
           });
         }
         setProjectDraftThreadId(projectId, routeThreadId);
-        return Promise.resolve();
+        options?.beforeNavigate?.(routeThreadId);
+        return Promise.resolve(routeThreadId);
       }
 
       const threadId = newThreadId();
@@ -106,11 +110,13 @@ export function useHandleNewThread() {
           runtimeMode: DEFAULT_RUNTIME_MODE,
         });
         applyStickyState(threadId);
+        options?.beforeNavigate?.(threadId);
 
         await navigate({
           to: "/$threadId",
           params: { threadId },
         });
+        return threadId;
       })();
     },
     [navigate, routeThreadId],
