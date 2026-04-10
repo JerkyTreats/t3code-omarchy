@@ -685,6 +685,7 @@ export default function Sidebar() {
     })),
   );
   const markThreadUnread = useUiStateStore((store) => store.markThreadUnread);
+  const setProjectExpanded = useUiStateStore((store) => store.setProjectExpanded);
   const toggleProject = useUiStateStore((store) => store.toggleProject);
   const reorderProjects = useUiStateStore((store) => store.reorderProjects);
   const clearComposerDraftForThread = useComposerDraftStore((store) => store.clearDraftThread);
@@ -705,6 +706,10 @@ export default function Sidebar() {
   const routeThreadId = useParams({
     strict: false,
     select: (params) => (params.threadId ? ThreadId.makeUnsafe(params.threadId) : null),
+  });
+  const routeProjectId = useParams({
+    strict: false,
+    select: (params) => (params.projectId ? ProjectId.makeUnsafe(params.projectId) : null),
   });
   const keybindings = useServerKeybindings();
   const [addingProject, setAddingProject] = useState(false);
@@ -1423,6 +1428,17 @@ export default function Sidebar() {
     [],
   );
 
+  const openProjectOverview = useCallback(
+    (projectId: ProjectId) => {
+      setProjectExpanded(projectId, true);
+      void navigate({
+        to: "/projects/$projectId",
+        params: { projectId },
+      });
+    },
+    [navigate, setProjectExpanded],
+  );
+
   const visibleThreads = useMemo(
     () => sidebarThreads.filter((thread) => thread.archivedAt === null),
     [sidebarThreads],
@@ -1635,6 +1651,7 @@ export default function Sidebar() {
       shouldShowThreadPanel,
       isThreadListExpanded,
     } = renderedProject;
+    const isActiveProjectRoute = routeProjectId === project.id;
     return (
       <>
         <div className="group/project-header relative">
@@ -1642,8 +1659,8 @@ export default function Sidebar() {
             ref={isManualProjectSorting ? dragHandleProps?.setActivatorNodeRef : undefined}
             size="sm"
             className={`gap-2 px-2 py-1.5 text-left hover:bg-accent group-hover/project-header:bg-accent group-hover/project-header:text-sidebar-accent-foreground ${
-              isManualProjectSorting ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"
-            }`}
+              isActiveProjectRoute ? "bg-accent text-sidebar-accent-foreground" : ""
+            } ${isManualProjectSorting ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"}`}
             {...(isManualProjectSorting && dragHandleProps ? dragHandleProps.attributes : {})}
             {...(isManualProjectSorting && dragHandleProps ? dragHandleProps.listeners : {})}
             onPointerDownCapture={handleProjectTitlePointerDownCapture}
@@ -1658,28 +1675,38 @@ export default function Sidebar() {
               });
             }}
           >
-            {!project.expanded && projectStatus ? (
-              <span
-                aria-hidden="true"
-                title={projectStatus.label}
-                className={`-ml-0.5 relative inline-flex size-3.5 shrink-0 items-center justify-center ${projectStatus.colorClass}`}
-              >
-                <span className="absolute inset-0 flex items-center justify-center transition-opacity duration-150 group-hover/project-header:opacity-0">
-                  <span
-                    className={`size-[9px] rounded-full ${projectStatus.dotClass} ${
-                      projectStatus.pulse ? "animate-pulse" : ""
-                    }`}
-                  />
+            <span
+              aria-hidden="true"
+              className="-ml-0.5 inline-flex size-3.5 shrink-0 items-center justify-center"
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                toggleProject(project.id);
+              }}
+            >
+              {!project.expanded && projectStatus ? (
+                <span
+                  title={projectStatus.label}
+                  className={`relative inline-flex size-3.5 items-center justify-center ${projectStatus.colorClass}`}
+                >
+                  <span className="absolute inset-0 flex items-center justify-center transition-opacity duration-150 group-hover/project-header:opacity-0">
+                    <span
+                      className={`size-[9px] rounded-full ${projectStatus.dotClass} ${
+                        projectStatus.pulse ? "animate-pulse" : ""
+                      }`}
+                    />
+                  </span>
+                  <ChevronRightIcon className="absolute inset-0 m-auto size-3.5 text-muted-foreground/70 opacity-0 transition-opacity duration-150 group-hover/project-header:opacity-100" />
                 </span>
-                <ChevronRightIcon className="absolute inset-0 m-auto size-3.5 text-muted-foreground/70 opacity-0 transition-opacity duration-150 group-hover/project-header:opacity-100" />
-              </span>
-            ) : (
-              <ChevronRightIcon
-                className={`-ml-0.5 size-3.5 shrink-0 text-muted-foreground/70 transition-transform duration-150 ${
-                  project.expanded ? "rotate-90" : ""
-                }`}
-              />
-            )}
+              ) : (
+                <ChevronRightIcon
+                  className={`size-3.5 text-muted-foreground/70 transition-transform duration-150 ${
+                    project.expanded ? "rotate-90" : ""
+                  }`}
+                />
+              )}
+            </span>
             <ProjectFavicon cwd={project.cwd} />
             {renamingProjectId === project.id ? (
               <input
@@ -1885,21 +1912,31 @@ export default function Sidebar() {
       if (selectedThreadIds.size > 0) {
         clearSelection();
       }
-      toggleProject(projectId);
+      openProjectOverview(projectId);
     },
-    [clearSelection, selectedThreadIds.size, toggleProject],
+    [clearSelection, openProjectOverview, selectedThreadIds.size],
   );
 
   const handleProjectTitleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLButtonElement>, projectId: ProjectId) => {
-      if (event.key !== "Enter" && event.key !== " ") return;
-      event.preventDefault();
       if (dragInProgressRef.current) {
         return;
       }
-      toggleProject(projectId);
+      if (event.key === "ArrowRight") {
+        event.preventDefault();
+        setProjectExpanded(projectId, true);
+        return;
+      }
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        setProjectExpanded(projectId, false);
+        return;
+      }
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      openProjectOverview(projectId);
     },
-    [toggleProject],
+    [openProjectOverview, setProjectExpanded],
   );
 
   useEffect(() => {
