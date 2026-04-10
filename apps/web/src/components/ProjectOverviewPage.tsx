@@ -73,9 +73,7 @@ export function ProjectOverviewPage(props: { projectId: ProjectId }) {
   const navigate = useNavigate();
   const bootstrapComplete = useStore((store) => store.bootstrapComplete);
   const project = useProjectById(props.projectId);
-  const threads = useStore((store) =>
-    store.threads.filter((thread) => thread.projectId === props.projectId),
-  );
+  const allThreads = useStore((store) => store.threads);
   const { handleNewThread } = useHandleNewThread();
   const { deleteProjectScript, saveProjectScript, updateProjectScript } =
     useProjectScriptActions(project);
@@ -83,6 +81,11 @@ export function ProjectOverviewPage(props: { projectId: ProjectId }) {
   const availableEditors = useServerAvailableEditors();
   const gitStatusQuery = useGitStatus(project?.cwd ?? null);
   const repositoryContextQuery = useQuery(gitRepositoryContextQueryOptions(project?.cwd ?? null));
+
+  const threads = useMemo(
+    () => allThreads.filter((thread) => thread.projectId === props.projectId),
+    [allThreads, props.projectId],
+  );
 
   useEffect(() => {
     if (!bootstrapComplete) {
