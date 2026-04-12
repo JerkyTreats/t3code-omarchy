@@ -70,23 +70,23 @@
 :root {
   color-scheme: light;
   --radius: 0.625rem;
-  --background: #eceff4;
+  --background: #dde3eb;
   --foreground: #2e3440;
-  --card: color-mix(in srgb, #e5e9f0 72%, white);
+  --card: color-mix(in srgb, #d8dee9 78%, #f8fafc);
   --card-foreground: #2e3440;
-  --popover: color-mix(in srgb, #eceff4 86%, white);
+  --popover: color-mix(in srgb, #dde3eb 88%, white);
   --popover-foreground: #2e3440;
   --primary: #5e81ac;
   --primary-foreground: #eceff4;
-  --secondary: color-mix(in srgb, #d8dee9 76%, #eceff4);
+  --secondary: color-mix(in srgb, #cfd7e3 78%, #dde3eb);
   --secondary-foreground: #2e3440;
-  --muted: color-mix(in srgb, #d8dee9 62%, white);
-  --muted-foreground: #4c566a;
-  --accent: color-mix(in srgb, #88c0d0 18%, #eceff4);
+  --muted: color-mix(in srgb, #cfd7e3 70%, #eef2f7);
+  --muted-foreground: #3b4252;
+  --accent: color-mix(in srgb, #88c0d0 22%, #dde3eb);
   --accent-foreground: #2e3440;
   --destructive: #bf616a;
-  --border: color-mix(in srgb, #4c566a 16%, #eceff4);
-  --input: color-mix(in srgb, #4c566a 20%, #eceff4);
+  --border: color-mix(in srgb, #4c566a 32%, #dde3eb);
+  --input: color-mix(in srgb, #4c566a 34%, #dde3eb);
   --ring: #81a1c1;
   --destructive-foreground: color-mix(in srgb, #bf616a 82%, #2e3440);
   --info: #5e81ac;
@@ -95,11 +95,11 @@
   --success-foreground: color-mix(in srgb, #a3be8c 82%, #2e3440);
   --warning: #ebcb8b;
   --warning-foreground: color-mix(in srgb, #d08770 76%, #2e3440);
-  --sidebar: color-mix(in srgb, #e5e9f0 88%, white);
+  --sidebar: color-mix(in srgb, #cfd7e3 88%, #eef2f7);
   --sidebar-foreground: #2e3440;
-  --sidebar-accent: color-mix(in srgb, #81a1c1 15%, #e5e9f0);
+  --sidebar-accent: color-mix(in srgb, #81a1c1 18%, #cfd7e3);
   --sidebar-accent-foreground: #2e3440;
-  --sidebar-border: color-mix(in srgb, #4c566a 16%, #e5e9f0);
+  --sidebar-border: color-mix(in srgb, #4c566a 32%, #cfd7e3);
   --sidebar-ring: #81a1c1;
   --page-glow-top: color-mix(in srgb, #88c0d0 24%, transparent);
   --page-glow-bottom: color-mix(in srgb, #81a1c1 16%, transparent);
@@ -128,23 +128,23 @@
 
   @variant dark {
     color-scheme: dark;
-    --background: #2e3440;
+    --background: #232834;
     --foreground: #e5e9f0;
-    --card: color-mix(in srgb, #3b4252 86%, #2e3440);
+    --card: color-mix(in srgb, #313848 84%, #1b212b);
     --card-foreground: #e5e9f0;
-    --popover: color-mix(in srgb, #3b4252 92%, #2e3440);
+    --popover: color-mix(in srgb, #2b3240 92%, #1b212b);
     --popover-foreground: #e5e9f0;
     --primary: #88c0d0;
     --primary-foreground: #2e3440;
-    --secondary: color-mix(in srgb, #434c5e 78%, #2e3440);
+    --secondary: color-mix(in srgb, #3a4355 78%, #202632);
     --secondary-foreground: #e5e9f0;
-    --muted: color-mix(in srgb, #3b4252 92%, #2e3440);
-    --muted-foreground: #aeb8ca;
-    --accent: color-mix(in srgb, #88c0d0 18%, #3b4252);
+    --muted: color-mix(in srgb, #2d3442 92%, #1b212b);
+    --muted-foreground: #c4cedd;
+    --accent: color-mix(in srgb, #88c0d0 20%, #2f3645);
     --accent-foreground: #eceff4;
     --destructive: #bf616a;
-    --border: color-mix(in srgb, #4c566a 56%, #2e3440);
-    --input: color-mix(in srgb, #4c566a 68%, #2e3440);
+    --border: color-mix(in srgb, #4c566a 80%, #1e2430);
+    --input: color-mix(in srgb, #4c566a 86%, #1e2430);
     --ring: #81a1c1;
     --destructive-foreground: color-mix(in srgb, #bf616a 84%, #eceff4);
     --info: #81a1c1;
@@ -153,11 +153,11 @@
     --success-foreground: color-mix(in srgb, #a3be8c 82%, #eceff4);
     --warning: #ebcb8b;
     --warning-foreground: color-mix(in srgb, #ebcb8b 80%, #eceff4);
-    --sidebar: color-mix(in srgb, #2e3440 84%, #242933);
+    --sidebar: color-mix(in srgb, #1d2330 88%, #121721);
     --sidebar-foreground: #d8dee9;
-    --sidebar-accent: color-mix(in srgb, #88c0d0 14%, #3b4252);
+    --sidebar-accent: color-mix(in srgb, #88c0d0 18%, #27303d);
     --sidebar-accent-foreground: #eceff4;
-    --sidebar-border: color-mix(in srgb, #4c566a 70%, #2e3440);
+    --sidebar-border: color-mix(in srgb, #4c566a 86%, #151a24);
     --sidebar-ring: #88c0d0;
     --page-glow-top: color-mix(in srgb, #88c0d0 18%, transparent);
     --page-glow-bottom: color-mix(in srgb, #5e81ac 18%, transparent);
@@ -251,7 +251,7 @@
   );
   --muted-foreground: color-mix(
     in srgb,
-    var(--desktop-system-theme-foreground) 72%,
+    var(--desktop-system-theme-foreground) 78%,
     var(--desktop-system-theme-background)
   );
   --accent: color-mix(
@@ -274,17 +274,17 @@
   --sidebar-accent-foreground: var(--desktop-system-theme-foreground);
   --sidebar-border: color-mix(
     in srgb,
-    var(--desktop-system-theme-foreground) 14%,
+    var(--desktop-system-theme-foreground) 19%,
     var(--desktop-system-theme-background)
   );
   --border: color-mix(
     in srgb,
-    var(--desktop-system-theme-foreground) 12%,
+    var(--desktop-system-theme-foreground) 17%,
     var(--desktop-system-theme-background)
   );
   --input: color-mix(
     in srgb,
-    var(--desktop-system-theme-foreground) 16%,
+    var(--desktop-system-theme-foreground) 21%,
     var(--desktop-system-theme-background)
   );
   --destructive-foreground: color-mix(
@@ -359,7 +359,7 @@
   );
   --muted-foreground: color-mix(
     in srgb,
-    var(--desktop-system-theme-foreground) 74%,
+    var(--desktop-system-theme-foreground) 82%,
     var(--desktop-system-theme-background)
   );
   --accent: color-mix(
@@ -382,17 +382,17 @@
   --sidebar-accent-foreground: var(--desktop-system-theme-foreground);
   --sidebar-border: color-mix(
     in srgb,
-    var(--desktop-system-theme-foreground) 12%,
+    var(--desktop-system-theme-foreground) 17%,
     var(--desktop-system-theme-background)
   );
   --border: color-mix(
     in srgb,
-    var(--desktop-system-theme-foreground) 14%,
+    var(--desktop-system-theme-foreground) 20%,
     var(--desktop-system-theme-background)
   );
   --input: color-mix(
     in srgb,
-    var(--desktop-system-theme-foreground) 18%,
+    var(--desktop-system-theme-foreground) 24%,
     var(--desktop-system-theme-background)
   );
   --destructive-foreground: color-mix(
@@ -531,12 +531,12 @@ input {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--foreground) 16%, transparent);
+  background: color-mix(in srgb, var(--foreground) 20%, transparent);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, var(--foreground) 24%, transparent);
+  background: color-mix(in srgb, var(--foreground) 30%, transparent);
 }
 
 .turn-chip-strip {

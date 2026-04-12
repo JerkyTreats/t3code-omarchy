@@ -46,6 +46,7 @@ describe("hasUnseenCompletion", () => {
   it("returns true when a thread completed after its last visit", () => {
     expect(
       hasUnseenCompletion({
+        activePlanProgress: null,
         hasActionableProposedPlan: false,
         hasPendingApprovals: false,
         hasPendingUserInput: false,
@@ -396,6 +397,7 @@ describe("isContextMenuPointerDown", () => {
 
 describe("resolveThreadStatusPill", () => {
   const baseThread = {
+    activePlanProgress: null,
     hasActionableProposedPlan: false,
     hasPendingApprovals: false,
     hasPendingUserInput: false,
@@ -440,6 +442,21 @@ describe("resolveThreadStatusPill", () => {
         thread: baseThread,
       }),
     ).toMatchObject({ label: "Working", pulse: true });
+  });
+
+  it("shows active plan progress while a plan thread is running", () => {
+    expect(
+      resolveThreadStatusPill({
+        thread: {
+          ...baseThread,
+          activePlanProgress: {
+            completedAllSteps: false,
+            currentStepNumber: 3,
+            totalSteps: 5,
+          },
+        },
+      }),
+    ).toMatchObject({ label: "3/5", pulse: true });
   });
 
   it("shows plan ready when a settled plan turn has a proposed plan ready for follow-up", () => {

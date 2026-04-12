@@ -134,6 +134,11 @@ export interface SidebarThreadSummary {
   hasPendingApprovals: boolean;
   hasPendingUserInput: boolean;
   hasActionableProposedPlan: boolean;
+  activePlanProgress: {
+    completedAllSteps: boolean;
+    currentStepNumber: number;
+    totalSteps: number;
+  } | null;
 }
 
 export interface ThreadSession {

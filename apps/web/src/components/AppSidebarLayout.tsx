@@ -32,7 +32,7 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
       <Sidebar
         side="left"
         collapsible="offcanvas"
-        className="border-r border-border bg-card text-foreground"
+        className="border-r border-sidebar-border bg-sidebar text-sidebar-foreground"
         resizable={{
           minWidth: THREAD_SIDEBAR_MIN_WIDTH,
           shouldAcceptWidth: ({ nextWidth, wrapper }) =>

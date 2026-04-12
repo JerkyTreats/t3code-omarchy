@@ -14,6 +14,7 @@ import {
 import { resolveModelSlugForProvider } from "@t3tools/shared/model";
 import { create } from "zustand";
 import {
+  deriveActivePlanProgressState,
   findLatestProposedPlan,
   hasActionableProposedPlan,
   derivePendingApprovals,
@@ -231,6 +232,10 @@ function buildSidebarThreadSummary(thread: Thread): SidebarThreadSummary {
     hasActionableProposedPlan: hasActionableProposedPlan(
       findLatestProposedPlan(thread.proposedPlans, thread.latestTurn?.turnId ?? null),
     ),
+    activePlanProgress: deriveActivePlanProgressState(
+      thread.activities,
+      thread.latestTurn?.turnId ?? undefined,
+    ),
   };
 }
 
@@ -254,7 +259,10 @@ function sidebarThreadSummariesEqual(
     left.latestUserMessageAt === right.latestUserMessageAt &&
     left.hasPendingApprovals === right.hasPendingApprovals &&
     left.hasPendingUserInput === right.hasPendingUserInput &&
-    left.hasActionableProposedPlan === right.hasActionableProposedPlan
+    left.hasActionableProposedPlan === right.hasActionableProposedPlan &&
+    left.activePlanProgress?.completedAllSteps === right.activePlanProgress?.completedAllSteps &&
+    left.activePlanProgress?.currentStepNumber === right.activePlanProgress?.currentStepNumber &&
+    left.activePlanProgress?.totalSteps === right.activePlanProgress?.totalSteps
   );
 }
 

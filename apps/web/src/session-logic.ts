@@ -75,6 +75,12 @@ export interface ActivePlanState {
   }>;
 }
 
+export interface ActivePlanProgressState {
+  completedAllSteps: boolean;
+  currentStepNumber: number;
+  totalSteps: number;
+}
+
 export interface LatestProposedPlanState {
   id: OrchestrationProposedPlanId;
   createdAt: string;
@@ -426,6 +432,45 @@ export function deriveActivePlanState(
       ? { explanation: payload.explanation as string | null }
       : {}),
     steps,
+  };
+}
+
+export function deriveActivePlanProgressState(
+  activities: ReadonlyArray<OrchestrationThreadActivity>,
+  latestTurnId: TurnId | undefined,
+): ActivePlanProgressState | null {
+  const activePlan = deriveActivePlanState(activities, latestTurnId);
+  if (!activePlan) {
+    return null;
+  }
+
+  let completedCount = 0;
+  let currentStepNumber = -1;
+  let totalSteps = 0;
+
+  for (const step of activePlan.steps) {
+    totalSteps += 1;
+    if (step.status === "completed") {
+      completedCount += 1;
+      continue;
+    }
+    if (step.status === "inProgress" && currentStepNumber < 0) {
+      currentStepNumber = totalSteps;
+    }
+  }
+
+  if (completedCount >= totalSteps) {
+    return {
+      completedAllSteps: true,
+      currentStepNumber: totalSteps,
+      totalSteps,
+    };
+  }
+
+  return {
+    completedAllSteps: false,
+    currentStepNumber: currentStepNumber > 0 ? currentStepNumber : completedCount + 1,
+    totalSteps,
   };
 }
 

@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 import {
   deriveCompletionDividerBeforeEntryId,
   deriveActiveWorkStartedAt,
+  deriveActivePlanProgressState,
   deriveActivePlanState,
   PROVIDER_OPTIONS,
   derivePendingApprovals,
@@ -412,6 +413,37 @@ describe("deriveActivePlanState", () => {
       turnId: "turn-1",
       explanation: "Newest plan",
       steps: [{ step: "Ship it", status: "inProgress" }],
+    });
+  });
+});
+
+describe("deriveActivePlanProgressState", () => {
+  it("tracks the in-progress step number for the active plan", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "plan-progress",
+        createdAt: "2026-02-23T00:00:02.000Z",
+        kind: "turn.plan.updated",
+        summary: "Plan updated",
+        tone: "info",
+        turnId: "turn-1",
+        payload: {
+          explanation: "Refined plan",
+          plan: [
+            { step: "Read docs", status: "completed" },
+            { step: "Sketch design", status: "completed" },
+            { step: "Implement wiring", status: "inProgress" },
+            { step: "Add tests", status: "pending" },
+            { step: "Run verification", status: "pending" },
+          ],
+        },
+      }),
+    ];
+
+    expect(deriveActivePlanProgressState(activities, TurnId.makeUnsafe("turn-1"))).toEqual({
+      completedAllSteps: false,
+      currentStepNumber: 3,
+      totalSteps: 5,
     });
   });
 });

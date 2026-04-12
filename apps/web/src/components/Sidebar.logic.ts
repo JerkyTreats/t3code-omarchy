@@ -27,7 +27,8 @@ export interface ThreadStatusPill {
     | "Completed"
     | "Pending Approval"
     | "Awaiting Input"
-    | "Plan Ready";
+    | "Plan Ready"
+    | `${number}/${number}`;
   colorClass: string;
   dotClass: string;
   pulse: boolean;
@@ -44,6 +45,7 @@ const THREAD_STATUS_PRIORITY: Record<ThreadStatusPill["label"], number> = {
 
 type ThreadStatusInput = Pick<
   SidebarThreadSummary,
+  | "activePlanProgress"
   | "hasActionableProposedPlan"
   | "hasPendingApprovals"
   | "hasPendingUserInput"
@@ -332,6 +334,16 @@ export function resolveThreadStatusPill(input: {
   }
 
   if (thread.session?.status === "running") {
+    if (thread.activePlanProgress) {
+      return {
+        label: thread.activePlanProgress.completedAllSteps
+          ? `${thread.activePlanProgress.totalSteps}/${thread.activePlanProgress.totalSteps}`
+          : `${thread.activePlanProgress.currentStepNumber}/${thread.activePlanProgress.totalSteps}`,
+        colorClass: "text-sky-600 dark:text-sky-300/80",
+        dotClass: "bg-sky-500 dark:bg-sky-300/80",
+        pulse: true,
+      };
+    }
     return {
       label: "Working",
       colorClass: "text-sky-600 dark:text-sky-300/80",
@@ -382,10 +394,12 @@ export function resolveProjectStatusIndicator(
 
   for (const status of statuses) {
     if (status === null) continue;
-    if (
-      highestPriorityStatus === null ||
-      THREAD_STATUS_PRIORITY[status.label] > THREAD_STATUS_PRIORITY[highestPriorityStatus.label]
-    ) {
+    const statusPriority = THREAD_STATUS_PRIORITY[status.label] ?? 0;
+    const currentPriority =
+      highestPriorityStatus === null
+        ? -1
+        : (THREAD_STATUS_PRIORITY[highestPriorityStatus.label] ?? 0);
+    if (highestPriorityStatus === null || statusPriority > currentPriority) {
       highestPriorityStatus = status;
     }
   }
