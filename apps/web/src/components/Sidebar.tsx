@@ -1434,6 +1434,7 @@ export default function Sidebar() {
       void navigate({
         to: "/projects/$projectId",
         params: { projectId },
+        search: { view: "management" },
       });
     },
     [navigate, setProjectExpanded],

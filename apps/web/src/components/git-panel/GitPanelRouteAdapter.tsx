@@ -56,6 +56,7 @@ export function GitPanelRouteAdapter(props: GitPanelRouteAdapterProps) {
     <Suspense fallback={<DiffPanelLoadingState label="Loading Git panel..." />}>
       <GitPanel
         activeThreadId={props.threadId}
+        panelVariant="sidepanel"
         repoCwd={gitPanelContext.repoCwd}
         repoRoot={gitPanelContext.repoRoot}
         workspaceCwd={gitPanelContext.workspaceCwd}
@@ -96,7 +97,7 @@ export function GitPanelRouteAdapter(props: GitPanelRouteAdapterProps) {
       <Sidebar
         side="right"
         collapsible="offcanvas"
-        className="border-l border-border bg-card text-foreground"
+        className="border-l border-sidebar-border bg-sidebar text-sidebar-foreground"
         resizable={{
           minWidth: GIT_PANEL_INLINE_SIDEBAR_MIN_WIDTH,
           storageKey: GIT_PANEL_INLINE_SIDEBAR_WIDTH_STORAGE_KEY,

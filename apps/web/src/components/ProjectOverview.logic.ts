@@ -1,11 +1,11 @@
-import type {
-  GitRepositoryContextResult,
-  GitStatusResult,
-  OrchestrationThreadActivity,
-} from "@t3tools/contracts";
+import type { GitRepositoryContextResult, GitStatusResult } from "@t3tools/contracts";
 
-import { deriveWorkLogEntries, formatDuration } from "../session-logic";
+import { deriveWorkLogEntries } from "../session-logic";
 import { type Thread } from "../types";
+import {
+  deriveProjectInferenceRollup,
+  type ProjectInferenceRollup,
+} from "./ProjectInference.logic";
 
 export interface ProjectOverviewLinkedThread {
   id: Thread["id"];
@@ -27,15 +27,6 @@ export interface ProjectOverviewRecentWorkEntry {
   tone: "info" | "tool" | "error" | "thinking";
 }
 
-export interface ProjectInferenceRollup {
-  totalDurationMs: number;
-  recentDurationMs: number;
-  totalTurns: number;
-  recentTurns: number;
-  totalLabel: string;
-  recentLabel: string;
-}
-
 export interface ProjectRepoSummary {
   statusLabel: string;
   branchLabel: string;
@@ -54,19 +45,6 @@ export interface ProjectOverviewSnapshot {
   repoSummary: ProjectRepoSummary;
 }
 
-function activityOrder(
-  left: OrchestrationThreadActivity,
-  right: OrchestrationThreadActivity,
-): number {
-  const leftSequence = left.sequence ?? Number.MAX_SAFE_INTEGER;
-  const rightSequence = right.sequence ?? Number.MAX_SAFE_INTEGER;
-  return (
-    left.createdAt.localeCompare(right.createdAt) ||
-    leftSequence - rightSequence ||
-    left.id.localeCompare(right.id)
-  );
-}
-
 function latestThreadActivityAt(thread: Thread): string {
   return (
     thread.latestTurn?.completedAt ??
@@ -74,65 +52,6 @@ function latestThreadActivityAt(thread: Thread): string {
     thread.updatedAt ??
     thread.createdAt
   );
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
-}
-
-function asFiniteNumber(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
-function deriveInferenceRollup(
-  threads: ReadonlyArray<Thread>,
-  nowIso: string,
-): ProjectInferenceRollup {
-  const cutoffMs = new Date(nowIso).getTime() - 7 * 24 * 60 * 60 * 1000;
-  const latestUsageByTurnKey = new Map<
-    string,
-    {
-      durationMs: number;
-      createdAt: string;
-    }
-  >();
-
-  for (const activity of threads.flatMap((thread) => thread.activities).toSorted(activityOrder)) {
-    if (activity.kind !== "context-window.updated") {
-      continue;
-    }
-    const payload = asRecord(activity.payload);
-    const durationMs = asFiniteNumber(payload?.durationMs);
-    if (durationMs === null || durationMs <= 0) {
-      continue;
-    }
-    const key = activity.turnId ?? activity.id;
-    latestUsageByTurnKey.set(key, {
-      durationMs,
-      createdAt: activity.createdAt,
-    });
-  }
-
-  let totalDurationMs = 0;
-  let recentDurationMs = 0;
-  let recentTurns = 0;
-
-  for (const usage of latestUsageByTurnKey.values()) {
-    totalDurationMs += usage.durationMs;
-    if (new Date(usage.createdAt).getTime() >= cutoffMs) {
-      recentDurationMs += usage.durationMs;
-      recentTurns += 1;
-    }
-  }
-
-  return {
-    totalDurationMs,
-    recentDurationMs,
-    totalTurns: latestUsageByTurnKey.size,
-    recentTurns,
-    totalLabel: formatDuration(totalDurationMs),
-    recentLabel: formatDuration(recentDurationMs),
-  };
 }
 
 function deriveRecentWork(
@@ -230,7 +149,7 @@ export function buildProjectOverviewSnapshot(input: {
     archivedThreadCount: linkedThreads.filter((thread) => thread.archivedAt !== null).length,
     linkedThreads,
     recentWork: deriveRecentWork(input.threads, input.recentWorkLimit ?? 6),
-    inference: deriveInferenceRollup(input.threads, nowIso),
+    inference: deriveProjectInferenceRollup(input.threads, nowIso),
     branches,
     worktreeCount: linkedThreads.filter((thread) => thread.worktreePath !== null).length,
     repoSummary: buildRepoSummary({

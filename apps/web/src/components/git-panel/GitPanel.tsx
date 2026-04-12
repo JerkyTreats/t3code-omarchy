@@ -4,6 +4,7 @@ import {
   DEFAULT_RUNTIME_MODE,
   type GitHubIssue,
   type GitMergeBranchesResult,
+  type ProjectId,
   ThreadId,
 } from "@t3tools/contracts";
 import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -27,7 +28,6 @@ import { deriveWorkspaceStatusInfo, resolveDefaultMergeSourceBranch } from "./Gi
 import { resolveEffectiveEnvMode } from "../BranchToolbar.logic";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
-import { ScrollArea } from "~/components/ui/scroll-area";
 import { toastManager } from "~/components/ui/toast";
 import {
   githubCreateIssueMutationOptions,
@@ -77,6 +77,7 @@ import { GitCommitDialog } from "./GitCommitDialog";
 import { GitDefaultBranchDialog } from "./GitDefaultBranchDialog";
 import { GitPromoteDialog } from "./GitPromoteDialog";
 import { GitPanelSection } from "./GitPanelSection";
+import { ProjectPanel } from "../ProjectPanel";
 import { useGitPanelGitHubActions } from "./useGitPanelGitHubActions";
 import { useGitPanelMergeActions } from "./useGitPanelMergeActions";
 import {
@@ -87,10 +88,12 @@ import { useGitPanelThreadRouting } from "./useGitPanelThreadRouting";
 import { useGitPanelWorkspaceActions } from "./useGitPanelWorkspaceActions";
 
 interface GitPanelProps {
+  activeProjectId?: ProjectId | null;
   workspaceCwd: string | null;
   repoCwd: string | null;
   repoRoot: string | null;
   activeThreadId: ThreadId | null;
+  panelVariant?: "page" | "sidepanel";
 }
 
 // =============================================================================
@@ -110,10 +113,12 @@ function Kbd({ children }: { children: ReactNode }) {
 // =============================================================================
 
 export default function GitPanel({
+  activeProjectId: activeProjectIdOverride = null,
   workspaceCwd,
   repoCwd,
   repoRoot,
   activeThreadId,
+  panelVariant = "page",
 }: GitPanelProps) {
   const supportsGitMerge = supportsCurrentNativeApiGitMerge();
   const supportsGitHub = supportsCurrentNativeApiGitHub();
@@ -136,7 +141,11 @@ export default function GitPanel({
   const setProjectDraftThreadId = useComposerDraftStore((store) => store.setProjectDraftThreadId);
   const setDraftThreadContext = useComposerDraftStore((store) => store.setDraftThreadContext);
   const setPrompt = useComposerDraftStore((store) => store.setPrompt);
-  const activeProjectId = activeServerThread?.projectId ?? activeDraftThread?.projectId ?? null;
+  const activeProjectId =
+    activeProjectIdOverride ??
+    activeServerThread?.projectId ??
+    activeDraftThread?.projectId ??
+    null;
   const hasServerThread = activeServerThread !== null;
   const activeThreadBranch = activeServerThread?.branch ?? activeDraftThread?.branch ?? null;
   const activeWorktreePath =
@@ -901,323 +910,322 @@ export default function GitPanel({
 
   return (
     <>
-      <div className="flex h-full min-h-0 flex-col bg-card text-foreground">
-        {/* Header */}
-        <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2.5">
-          <div className="flex items-center gap-2">
-            <GitHubIcon className="size-4" />
-            <span className="text-sm font-medium">Git</span>
-            {githubStatusQuery.data?.repo?.nameWithOwner && (
-              <span className="text-xs text-muted-foreground">
-                {githubStatusQuery.data.repo.nameWithOwner}
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-1">
-            {githubStatusQuery.data?.authenticated ? (
-              <Badge variant="success" size="sm">
-                <GitStatusDot level="success" className="mr-0.5" />
-                gh
-              </Badge>
-            ) : githubStatusQuery.data?.installed ? (
-              <Badge variant="warning" size="sm">
-                Auth needed
-              </Badge>
-            ) : (
-              <Badge variant="outline" size="sm">
-                No gh
-              </Badge>
-            )}
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              onClick={() => {
-                void invalidateGitQueries(queryClient);
-                void invalidateGitHubQueries(queryClient);
-              }}
-              aria-label="Refresh"
-            >
-              <RefreshCcwIcon
-                className={cn(
-                  "size-3.5",
-                  (githubStatusQuery.isFetching || githubIssuesQuery.isFetching) && "animate-spin",
-                )}
-              />
-            </Button>
-          </div>
-        </div>
-
-        <ScrollArea className="min-h-0 flex-1">
-          <div className="space-y-4 p-4">
-            {/* ============================================================ */}
-            {/* PRIMARY ACTION ZONE - Only for primary workspace */}
-            {/* ============================================================ */}
-            {!isRepo ? (
+      <ProjectPanel
+        variant={panelVariant}
+        header={
+          <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2.5">
+            <div className="flex items-center gap-2">
+              <GitHubIcon className="size-4" />
+              <span className="text-sm font-medium">Git</span>
+              {githubStatusQuery.data?.repo?.nameWithOwner && (
+                <span className="text-xs text-muted-foreground">
+                  {githubStatusQuery.data.repo.nameWithOwner}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1">
+              {githubStatusQuery.data?.authenticated ? (
+                <Badge variant="success" size="sm">
+                  <GitStatusDot level="success" className="mr-0.5" />
+                  gh
+                </Badge>
+              ) : githubStatusQuery.data?.installed ? (
+                <Badge variant="warning" size="sm">
+                  Auth needed
+                </Badge>
+              ) : (
+                <Badge variant="outline" size="sm">
+                  No gh
+                </Badge>
+              )}
               <Button
-                variant="default"
-                size="sm"
-                disabled={initMutation.isPending}
-                onClick={() => initMutation.mutate()}
-                className="w-full"
+                variant="ghost"
+                size="icon-xs"
+                onClick={() => {
+                  void invalidateGitQueries(queryClient);
+                  void invalidateGitHubQueries(queryClient);
+                }}
+                aria-label="Refresh"
               >
-                {initMutation.isPending ? "Initializing..." : "Initialize Git"}
+                <RefreshCcwIcon
+                  className={cn(
+                    "size-3.5",
+                    (githubStatusQuery.isFetching || githubIssuesQuery.isFetching) &&
+                      "animate-spin",
+                  )}
+                />
               </Button>
-            ) : isPrimaryWorkspace ? (
-              <div className="space-y-2">
-                <Button
-                  variant="default"
-                  size="default"
-                  disabled={!commitPushAvailable}
-                  onClick={() => {
-                    void runGitActionWithToast({ action: "commit_push" });
-                  }}
-                  className="w-full justify-between"
-                >
-                  <span className="flex items-center gap-2">
-                    <CloudUploadIcon className="size-4" />
-                    Commit &amp; Push
-                  </span>
-                  <Kbd>⌘⇧P</Kbd>
-                </Button>
+            </div>
+          </div>
+        }
+      >
+        {/* ============================================================ */}
+        {/* PRIMARY ACTION ZONE - Only for primary workspace */}
+        {/* ============================================================ */}
+        {!isRepo ? (
+          <Button
+            variant="default"
+            size="sm"
+            disabled={initMutation.isPending}
+            onClick={() => initMutation.mutate()}
+            className="w-full"
+          >
+            {initMutation.isPending ? "Initializing..." : "Initialize Git"}
+          </Button>
+        ) : isPrimaryWorkspace ? (
+          <div className="space-y-2">
+            <Button
+              variant="default"
+              size="default"
+              disabled={!commitPushAvailable}
+              onClick={() => {
+                void runGitActionWithToast({ action: "commit_push" });
+              }}
+              className="w-full justify-between"
+            >
+              <span className="flex items-center gap-2">
+                <CloudUploadIcon className="size-4" />
+                Commit &amp; Push
+              </span>
+              <Kbd>⌘⇧P</Kbd>
+            </Button>
 
-                {commitPushDisabledReason && (
-                  <p className="text-center text-xs text-muted-foreground">
-                    {commitPushDisabledReason}
-                  </p>
-                )}
+            {commitPushDisabledReason && (
+              <p className="text-center text-xs text-muted-foreground">
+                {commitPushDisabledReason}
+              </p>
+            )}
 
-                {/* Secondary actions row */}
-                <div className="grid grid-cols-4 gap-1.5">
-                  <Button
-                    variant="outline"
-                    size="xs"
-                    disabled={!commitItem || commitItem.disabled}
-                    onClick={() => {
-                      if (commitItem) openDialogForMenuItem(commitItem);
-                    }}
-                    className="justify-center"
-                  >
-                    <GitCommitIcon className="size-3.5" />
-                    Commit
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="xs"
-                    disabled={!pullEnabled}
-                    onClick={pullLatest}
-                    className="justify-center"
-                  >
-                    <RefreshCcwIcon className="size-3.5" />
-                    Pull
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="xs"
-                    disabled={
-                      !activeTargetBranch ||
-                      isDefaultBranch ||
-                      isGitActionRunning ||
-                      !gitStatusForActions ||
-                      activeWorkspaceHasConflicts
-                    }
-                    onClick={() => setIsPromoteDialogOpen(true)}
-                    className="justify-center"
-                  >
-                    <GitMergeIcon className="size-3.5" />
-                    Promote
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="xs"
-                    disabled={!prItem || prItem.disabled}
-                    onClick={() => {
-                      if (prItem) openDialogForMenuItem(prItem);
-                    }}
-                    className="justify-center"
-                  >
-                    <GitPullRequestIcon className="size-3.5" />
-                    {prItem?.kind === "open_pr" ? "View PR" : "PR"}
-                  </Button>
-                </div>
-
-                {/* Status hints */}
-                {gitStatusForActions?.branch === null && (
-                  <p className="text-center text-xs text-warning-foreground">
-                    Detached HEAD — checkout a branch
-                  </p>
-                )}
-                {isGitStatusOutOfSync && (
-                  <p className="text-center text-xs text-muted-foreground">Syncing...</p>
-                )}
-                {gitStatusError && (
-                  <p className="text-center text-xs text-destructive-foreground">
-                    {gitStatusError.message}
-                  </p>
-                )}
-              </div>
-            ) : null}
-
-            {/* ============================================================ */}
-            {/* WORKSPACE SECTION */}
-            {/* ============================================================ */}
-            {isRepo && (
-              <GitWorkspaceSection
-                workspaceCwd={workspaceCwd}
-                repoCwd={repoCwd}
-                activeProjectId={activeProjectId}
-                activeThreadId={activeThreadId}
-                activeThreadBranch={activeThreadBranch}
-                activeWorkspaceBranch={activeWorkspaceBranch}
-                activeWorkspaceBranchMeta={activeWorkspaceBranchMeta}
-                activeTargetBranch={activeTargetBranch}
-                gitStatus={gitStatusForActions}
-                primaryWorkspaceStatus={primaryWorkspaceStatus}
-                primaryWorkspaceStatusErrorMessage={primaryWorkspaceStatusError?.message ?? null}
-                isPrimaryWorkspace={isPrimaryWorkspace}
-                hasConflicts={activeWorkspaceHasConflicts}
-                mergeInProgress={activeWorkspaceMerge.inProgress}
-                isGitActionRunning={isGitActionRunning}
-                isMerging={isMergeRunning}
-                isCreatingWorktree={createWorktreeMutation.isPending}
-                isRemovingWorktree={removeWorktreeMutation.isPending}
-                statusInfo={statusInfo}
-                onOpenWorkspace={() => openPathInEditor(workspaceCwd)}
-                onCreateDedicatedWorkspace={createDedicatedWorkspace}
-                onOpenCommitDialog={() => {
-                  if (commitItem) {
-                    openDialogForMenuItem(commitItem);
-                  }
+            {/* Secondary actions row */}
+            <div className="grid grid-cols-4 gap-1.5">
+              <Button
+                variant="outline"
+                size="xs"
+                disabled={!commitItem || commitItem.disabled}
+                onClick={() => {
+                  if (commitItem) openDialogForMenuItem(commitItem);
                 }}
-                onSyncFromTarget={() => {
-                  if (activeTargetBranch) {
-                    void runMergeFromBranch(activeTargetBranch);
-                  }
+                className="justify-center"
+              >
+                <GitCommitIcon className="size-3.5" />
+                Commit
+              </Button>
+              <Button
+                variant="outline"
+                size="xs"
+                disabled={!pullEnabled}
+                onClick={pullLatest}
+                className="justify-center"
+              >
+                <RefreshCcwIcon className="size-3.5" />
+                Pull
+              </Button>
+              <Button
+                variant="outline"
+                size="xs"
+                disabled={
+                  !activeTargetBranch ||
+                  isDefaultBranch ||
+                  isGitActionRunning ||
+                  !gitStatusForActions ||
+                  activeWorkspaceHasConflicts
+                }
+                onClick={() => setIsPromoteDialogOpen(true)}
+                className="justify-center"
+              >
+                <GitMergeIcon className="size-3.5" />
+                Promote
+              </Button>
+              <Button
+                variant="outline"
+                size="xs"
+                disabled={!prItem || prItem.disabled}
+                onClick={() => {
+                  if (prItem) openDialogForMenuItem(prItem);
                 }}
-                onCloseWorkspace={() => closeDedicatedWorkspace(false)}
-                onDiscardAndCloseWorkspace={() => closeDedicatedWorkspace(true)}
-                onPreparePrimaryCheckout={openPrimaryWorkspaceResolutionDraft}
-              />
+                className="justify-center"
+              >
+                <GitPullRequestIcon className="size-3.5" />
+                {prItem?.kind === "open_pr" ? "View PR" : "PR"}
+              </Button>
+            </div>
+
+            {/* Status hints */}
+            {gitStatusForActions?.branch === null && (
+              <p className="text-center text-xs text-warning-foreground">
+                Detached HEAD — checkout a branch
+              </p>
             )}
-
-            {/* ============================================================ */}
-            {/* SYNC SECTION - Pull changes INTO this workspace */}
-            {/* ============================================================ */}
-            {isRepo && localBranches.length > 1 && supportsGitMerge && (
-              <GitSyncSection
-                localBranches={localBranches}
-                activeWorkspaceBranch={activeWorkspaceBranch}
-                mergeSourceBranch={mergeSourceBranch}
-                onMergeSourceBranchChange={setMergeSourceBranch}
-                gitStatus={gitStatusForActions}
-                mergeState={activeWorkspaceMerge}
-                hasConflicts={activeWorkspaceHasConflicts}
-                isMergeRunning={isMergeRunning}
-                isAbortMergeRunning={isAbortMergeRunning}
-                activeThreadId={activeThreadId}
-                lastMergeResult={lastMergeResult}
-                defaultOpen={mergeExpanded}
-                onRunLocalMerge={runLocalMerge}
-                onCreateResolveConflictDraft={createResolveConflictDraft}
-                onAbortActiveMerge={abortActiveMerge}
-              />
+            {isGitStatusOutOfSync && (
+              <p className="text-center text-xs text-muted-foreground">Syncing...</p>
             )}
-
-            {isRepo && localBranches.length > 1 && !supportsGitMerge && (
-              <GitPanelSection title="Sync" collapsible defaultOpen={mergeExpanded}>
-                <div className="rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
-                  Merge and conflict workflows stay fork owned. The current upstream RPC transport
-                  does not expose that adapter yet.
-                </div>
-              </GitPanelSection>
-            )}
-
-            {/* ============================================================ */}
-            {/* GITHUB AUTH SECTION */}
-            {/* ============================================================ */}
-            {supportsGitHub ? (
-              <>
-                <GitHubAuthSection
-                  accountLogin={githubStatusQuery.data?.accountLogin ?? null}
-                  installed={githubStatusQuery.data?.installed === true}
-                  authenticated={isGitHubAuthenticated}
-                  isFetching={githubStatusQuery.isFetching}
-                  isAuthenticating={loginMutation.isPending}
-                  githubRepoUrl={githubRepoUrl}
-                  errorMessage={loginMutation.error?.message ?? null}
-                  onAuthAction={runAuthAction}
-                  onOpenRepo={() => {
-                    if (githubRepoUrl) {
-                      void openExternalUrl(githubRepoUrl);
-                    }
-                  }}
-                />
-
-                <GitHubLinkedIssueSection
-                  visible={activeThreadIssueLink !== null}
-                  issueLink={activeThreadIssueLink}
-                  activePr={gitStatusForActions?.pr ?? null}
-                  canMarkIssueResolved={canMarkIssueResolved}
-                  isClosingIssue={closeIssueMutation.isPending}
-                  isReopeningIssue={reopenIssueMutation.isPending}
-                  onOpenIssue={(url) => {
-                    void openExternalUrl(url);
-                  }}
-                  onOpenPullRequest={(url) => {
-                    void openExternalUrl(url);
-                  }}
-                  onCloseIssue={() => {
-                    void updateActiveIssueState("closed");
-                  }}
-                  onReopenIssue={() => {
-                    void updateActiveIssueState("open");
-                  }}
-                />
-
-                <GitHubIssuesSection
-                  visible={
-                    githubStatusQuery.data?.authenticated === true &&
-                    githubStatusQuery.data?.repo !== null
-                  }
-                  canCreateIssue={!issuesDisabled}
-                  issueState={issueState}
-                  onCreateIssue={() => {
-                    createIssueMutation.reset();
-                    setIsCreateIssueDialogOpen(true);
-                  }}
-                  onIssueStateChange={setIssueState}
-                  isCreatingIssue={createIssueMutation.isPending}
-                  isLoading={githubIssuesQuery.isLoading}
-                  isFetching={githubIssuesQuery.isFetching}
-                  issuesDisabled={issuesDisabled}
-                  errorMessage={githubIssuesQuery.error?.message ?? null}
-                  issues={githubIssuesQuery.data?.issues ?? []}
-                  workflowsByIssueNumber={issueWorkflowsByNumber}
-                  onOpenIssue={(url) => {
-                    void openExternalUrl(url);
-                  }}
-                  onContinueIssueThread={(threadId) => {
-                    void navigateToThread(threadId);
-                  }}
-                  onOpenPullRequest={(url) => {
-                    void openExternalUrl(url);
-                  }}
-                  onResolveIssue={(issue) => {
-                    void startIssueWorkspaceThread(issue);
-                  }}
-                  resolvingIssueNumber={resolvingIssueNumber}
-                />
-              </>
-            ) : (
-              <GitPanelSection title="GitHub">
-                <div className="rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
-                  GitHub issue and auth flows remain fork owned. The current upstream RPC transport
-                  does not expose that adapter yet.
-                </div>
-              </GitPanelSection>
+            {gitStatusError && (
+              <p className="text-center text-xs text-destructive-foreground">
+                {gitStatusError.message}
+              </p>
             )}
           </div>
-        </ScrollArea>
-      </div>
+        ) : null}
+
+        {/* ============================================================ */}
+        {/* WORKSPACE SECTION */}
+        {/* ============================================================ */}
+        {isRepo && (
+          <GitWorkspaceSection
+            workspaceCwd={workspaceCwd}
+            repoCwd={repoCwd}
+            activeProjectId={activeProjectId}
+            activeThreadId={activeThreadId}
+            activeThreadBranch={activeThreadBranch}
+            activeWorkspaceBranch={activeWorkspaceBranch}
+            activeWorkspaceBranchMeta={activeWorkspaceBranchMeta}
+            activeTargetBranch={activeTargetBranch}
+            gitStatus={gitStatusForActions}
+            primaryWorkspaceStatus={primaryWorkspaceStatus}
+            primaryWorkspaceStatusErrorMessage={primaryWorkspaceStatusError?.message ?? null}
+            isPrimaryWorkspace={isPrimaryWorkspace}
+            hasConflicts={activeWorkspaceHasConflicts}
+            mergeInProgress={activeWorkspaceMerge.inProgress}
+            isGitActionRunning={isGitActionRunning}
+            isMerging={isMergeRunning}
+            isCreatingWorktree={createWorktreeMutation.isPending}
+            isRemovingWorktree={removeWorktreeMutation.isPending}
+            statusInfo={statusInfo}
+            onOpenWorkspace={() => openPathInEditor(workspaceCwd)}
+            onCreateDedicatedWorkspace={createDedicatedWorkspace}
+            onOpenCommitDialog={() => {
+              if (commitItem) {
+                openDialogForMenuItem(commitItem);
+              }
+            }}
+            onSyncFromTarget={() => {
+              if (activeTargetBranch) {
+                void runMergeFromBranch(activeTargetBranch);
+              }
+            }}
+            onCloseWorkspace={() => closeDedicatedWorkspace(false)}
+            onDiscardAndCloseWorkspace={() => closeDedicatedWorkspace(true)}
+            onPreparePrimaryCheckout={openPrimaryWorkspaceResolutionDraft}
+          />
+        )}
+
+        {/* ============================================================ */}
+        {/* SYNC SECTION - Pull changes INTO this workspace */}
+        {/* ============================================================ */}
+        {isRepo && localBranches.length > 1 && supportsGitMerge && (
+          <GitSyncSection
+            localBranches={localBranches}
+            activeWorkspaceBranch={activeWorkspaceBranch}
+            mergeSourceBranch={mergeSourceBranch}
+            onMergeSourceBranchChange={setMergeSourceBranch}
+            gitStatus={gitStatusForActions}
+            mergeState={activeWorkspaceMerge}
+            hasConflicts={activeWorkspaceHasConflicts}
+            isMergeRunning={isMergeRunning}
+            isAbortMergeRunning={isAbortMergeRunning}
+            activeThreadId={activeThreadId}
+            lastMergeResult={lastMergeResult}
+            defaultOpen={mergeExpanded}
+            onRunLocalMerge={runLocalMerge}
+            onCreateResolveConflictDraft={createResolveConflictDraft}
+            onAbortActiveMerge={abortActiveMerge}
+          />
+        )}
+
+        {isRepo && localBranches.length > 1 && !supportsGitMerge && (
+          <GitPanelSection title="Sync" collapsible defaultOpen={mergeExpanded}>
+            <div className="rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+              Merge and conflict workflows stay fork owned. The current upstream RPC transport does
+              not expose that adapter yet.
+            </div>
+          </GitPanelSection>
+        )}
+
+        {/* ============================================================ */}
+        {/* GITHUB AUTH SECTION */}
+        {/* ============================================================ */}
+        {supportsGitHub ? (
+          <>
+            <GitHubAuthSection
+              accountLogin={githubStatusQuery.data?.accountLogin ?? null}
+              installed={githubStatusQuery.data?.installed === true}
+              authenticated={isGitHubAuthenticated}
+              isFetching={githubStatusQuery.isFetching}
+              isAuthenticating={loginMutation.isPending}
+              githubRepoUrl={githubRepoUrl}
+              errorMessage={loginMutation.error?.message ?? null}
+              onAuthAction={runAuthAction}
+              onOpenRepo={() => {
+                if (githubRepoUrl) {
+                  void openExternalUrl(githubRepoUrl);
+                }
+              }}
+            />
+
+            <GitHubLinkedIssueSection
+              visible={activeThreadIssueLink !== null}
+              issueLink={activeThreadIssueLink}
+              activePr={gitStatusForActions?.pr ?? null}
+              canMarkIssueResolved={canMarkIssueResolved}
+              isClosingIssue={closeIssueMutation.isPending}
+              isReopeningIssue={reopenIssueMutation.isPending}
+              onOpenIssue={(url) => {
+                void openExternalUrl(url);
+              }}
+              onOpenPullRequest={(url) => {
+                void openExternalUrl(url);
+              }}
+              onCloseIssue={() => {
+                void updateActiveIssueState("closed");
+              }}
+              onReopenIssue={() => {
+                void updateActiveIssueState("open");
+              }}
+            />
+
+            <GitHubIssuesSection
+              visible={
+                githubStatusQuery.data?.authenticated === true &&
+                githubStatusQuery.data?.repo !== null
+              }
+              canCreateIssue={!issuesDisabled}
+              issueState={issueState}
+              onCreateIssue={() => {
+                createIssueMutation.reset();
+                setIsCreateIssueDialogOpen(true);
+              }}
+              onIssueStateChange={setIssueState}
+              isCreatingIssue={createIssueMutation.isPending}
+              isLoading={githubIssuesQuery.isLoading}
+              isFetching={githubIssuesQuery.isFetching}
+              issuesDisabled={issuesDisabled}
+              errorMessage={githubIssuesQuery.error?.message ?? null}
+              issues={githubIssuesQuery.data?.issues ?? []}
+              workflowsByIssueNumber={issueWorkflowsByNumber}
+              onOpenIssue={(url) => {
+                void openExternalUrl(url);
+              }}
+              onContinueIssueThread={(threadId) => {
+                void navigateToThread(threadId);
+              }}
+              onOpenPullRequest={(url) => {
+                void openExternalUrl(url);
+              }}
+              onResolveIssue={(issue) => {
+                void startIssueWorkspaceThread(issue);
+              }}
+              resolvingIssueNumber={resolvingIssueNumber}
+            />
+          </>
+        ) : (
+          <GitPanelSection title="GitHub">
+            <div className="rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+              GitHub issue and auth flows remain fork owned. The current upstream RPC transport does
+              not expose that adapter yet.
+            </div>
+          </GitPanelSection>
+        )}
+      </ProjectPanel>
 
       <GitHubCreateIssueDialog
         open={isCreateIssueDialogOpen}
