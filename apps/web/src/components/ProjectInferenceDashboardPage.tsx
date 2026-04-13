@@ -36,6 +36,18 @@ function MetricCard(props: { label: string; value: string; detail: string }) {
   );
 }
 
+function formatInputDetail(
+  inputTokens: number,
+  cachedInputTokens: number,
+  recentInputTokens: number,
+) {
+  const cachedDetail =
+    cachedInputTokens > 0
+      ? `${formatExactTokens(cachedInputTokens)} cached where reported`
+      : "cached input not separately reported";
+  return `${formatExactTokens(inputTokens)} cumulative input tokens, ${formatExactTokens(recentInputTokens)} in the last 7 days, ${cachedDetail}`;
+}
+
 export function ProjectInferenceDashboardPage(props: { projectId: ProjectId }) {
   const { handleNewThread } = useHandleNewThread();
   const keybindings = useServerKeybindings();
@@ -133,38 +145,60 @@ export function ProjectInferenceDashboardPage(props: { projectId: ProjectId }) {
                 <span>Inference dashboard</span>
               </div>
               <p className="text-sm text-muted-foreground">
-                Project-wide token burn, throughput, and thread ranking in one contained view.
+                Project-wide processed token burn and thread ranking in one contained view.
               </p>
             </div>
             <Badge className="border-border bg-muted/70 text-muted-foreground hover:bg-muted/80">
-              {formatContextWindowTokens(dashboard.recentTotalBurnTokens)} in the last 7 days
+              {formatContextWindowTokens(dashboard.recentTotalBurnTokens)} burn in the last 7 days
             </Badge>
           </div>
         }
         contentClassName="space-y-5 p-4"
       >
         <ProjectPanelSection title="Overview">
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <MetricCard
-              label="Lifetime total burn"
-              value={formatContextWindowTokens(dashboard.lifetimeTotalBurnTokens)}
-              detail={`${formatExactTokens(dashboard.lifetimeTotalBurnTokens)} total processed tokens`}
-            />
-            <MetricCard
-              label="Tracked turns"
-              value={`${dashboard.trackedTurns}`}
-              detail={`${dashboard.recentTrackedTurns} turns updated in the last 7 days`}
-            />
-            <MetricCard
-              label="Input tokens"
-              value={formatContextWindowTokens(dashboard.lifetimeInputTokens)}
-              detail={`${formatExactTokens(dashboard.lifetimeInputTokens)} cumulative input tokens`}
-            />
-            <MetricCard
-              label="Output tokens"
-              value={formatContextWindowTokens(dashboard.lifetimeOutputTokens)}
-              detail={`${formatExactTokens(dashboard.lifetimeOutputTokens)} cumulative output tokens`}
-            />
+          <div className="space-y-3">
+            <p className="max-w-4xl text-sm text-muted-foreground">
+              Burn uses provider-reported processed token totals when available. That includes
+              repeated context, cache reads, and other model work across a turn, so it will run much
+              higher than final prompt plus response sizes.
+            </p>
+
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <MetricCard
+                label="Lifetime total burn"
+                value={formatContextWindowTokens(dashboard.lifetimeTotalBurnTokens)}
+                detail={`${formatExactTokens(dashboard.lifetimeTotalBurnTokens)} total processed tokens from tracked turns`}
+              />
+              <MetricCard
+                label="7 day burn"
+                value={formatContextWindowTokens(dashboard.recentTotalBurnTokens)}
+                detail={`${formatExactTokens(dashboard.recentTotalBurnTokens)} processed tokens in the last 7 days`}
+              />
+              <MetricCard
+                label="Projected 30 day burn"
+                value={formatContextWindowTokens(dashboard.projectedMonthlyBurnTokens)}
+                detail={`${formatExactTokens(dashboard.projectedMonthlyBurnTokens)} processed tokens projected from the recent 7 day pace`}
+              />
+              <MetricCard
+                label="Input tokens"
+                value={formatContextWindowTokens(dashboard.lifetimeInputTokens)}
+                detail={formatInputDetail(
+                  dashboard.lifetimeInputTokens,
+                  dashboard.lifetimeCachedInputTokens,
+                  dashboard.recentInputTokens,
+                )}
+              />
+              <MetricCard
+                label="Output tokens"
+                value={formatContextWindowTokens(dashboard.lifetimeOutputTokens)}
+                detail={`${formatExactTokens(dashboard.lifetimeOutputTokens)} cumulative output tokens, ${formatExactTokens(dashboard.recentOutputTokens)} in the last 7 days`}
+              />
+              <MetricCard
+                label="Tracked turns"
+                value={`${dashboard.trackedTurns}`}
+                detail={`${dashboard.recentTrackedTurns} turns updated in the last 7 days`}
+              />
+            </div>
           </div>
         </ProjectPanelSection>
 
@@ -182,8 +216,8 @@ export function ProjectInferenceDashboardPage(props: { projectId: ProjectId }) {
                 Thread burn by total tokens
               </h2>
               <p className="text-sm text-muted-foreground">
-                Compare the heaviest threads across this project and spot where runtime and output
-                accumulate fastest.
+                Compare the heaviest threads across this project and spot where processed token burn
+                is accumulating fastest.
               </p>
             </div>
 
@@ -244,8 +278,17 @@ export function ProjectInferenceDashboardPage(props: { projectId: ProjectId }) {
                           <div className="flex flex-wrap gap-3 text-xs text-muted-foreground/75">
                             <span>{entry.trackedTurns} tracked turns</span>
                             <span>{formatDuration(entry.totalDurationMs)} total runtime</span>
-                            <span>{formatContextWindowTokens(entry.inputTokens)} input</span>
+                            <span>{formatContextWindowTokens(entry.totalInputTokens)} input</span>
+                            {entry.cachedInputTokens > 0 ? (
+                              <span>
+                                {formatContextWindowTokens(entry.cachedInputTokens)} cached
+                              </span>
+                            ) : null}
                             <span>{formatContextWindowTokens(entry.outputTokens)} output</span>
+                            <span>
+                              {formatContextWindowTokens(entry.averageProcessedTokensPerTurn)} avg
+                              burn per turn
+                            </span>
                           </div>
                         </div>
                       </div>

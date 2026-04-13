@@ -18,17 +18,25 @@ export interface ProjectInferenceLeaderboardEntry {
   archivedAt: string | null;
   latestActivityAt: string;
   totalProcessedTokens: number;
-  inputTokens: number;
+  totalInputTokens: number;
+  cachedInputTokens: number;
   outputTokens: number;
   totalDurationMs: number;
   trackedTurns: number;
+  averageProcessedTokensPerTurn: number;
 }
 
 export interface ProjectInferenceDashboardSnapshot {
   lifetimeTotalBurnTokens: number;
   lifetimeInputTokens: number;
+  lifetimeCachedInputTokens: number;
   lifetimeOutputTokens: number;
   recentTotalBurnTokens: number;
+  recentInputTokens: number;
+  recentCachedInputTokens: number;
+  recentOutputTokens: number;
+  projectedMonthlyBurnTokens: number;
+  averageBurnPerTrackedTurn: number;
   trackedTurns: number;
   recentTrackedTurns: number;
   leaderboard: ProjectInferenceLeaderboardEntry[];
@@ -38,6 +46,7 @@ interface LatestTurnUsageSnapshot {
   createdAt: string;
   durationMs: number;
   inputTokens: number;
+  cachedInputTokens: number;
   outputTokens: number;
   totalProcessedTokens: number;
 }
@@ -78,19 +87,16 @@ function resolveProcessedTokens(payload: Record<string, unknown>): number {
     return totalProcessedTokens;
   }
 
+  // Cross-provider burn accounting is only reliable from totalProcessedTokens when present.
+  // Without it, fall back to the closest per-snapshot estimate we have.
   const inputTokens = asFiniteNumber(payload.inputTokens) ?? 0;
   const cachedInputTokens = asFiniteNumber(payload.cachedInputTokens) ?? 0;
   const outputTokens = asFiniteNumber(payload.outputTokens) ?? 0;
   const reasoningOutputTokens = asFiniteNumber(payload.reasoningOutputTokens) ?? 0;
   const usedTokens = asFiniteNumber(payload.usedTokens) ?? 0;
+  const componentTotal = inputTokens + cachedInputTokens + outputTokens + reasoningOutputTokens;
 
-  return (
-    inputTokens +
-    cachedInputTokens +
-    outputTokens +
-    reasoningOutputTokens +
-    (inputTokens + cachedInputTokens + outputTokens + reasoningOutputTokens > 0 ? 0 : usedTokens)
-  );
+  return componentTotal > 0 ? Math.max(componentTotal, usedTokens) : usedTokens;
 }
 
 function collectLatestTurnUsageSnapshots(
@@ -118,6 +124,7 @@ function collectLatestTurnUsageSnapshots(
         createdAt: activity.createdAt,
         durationMs,
         inputTokens: asFiniteNumber(payload.inputTokens) ?? 0,
+        cachedInputTokens: asFiniteNumber(payload.cachedInputTokens) ?? 0,
         outputTokens: asFiniteNumber(payload.outputTokens) ?? 0,
         totalProcessedTokens: processedTokens,
       });
@@ -171,31 +178,41 @@ export function buildProjectInferenceDashboardSnapshot(input: {
   const leaderboard: ProjectInferenceLeaderboardEntry[] = [];
   let lifetimeTotalBurnTokens = 0;
   let lifetimeInputTokens = 0;
+  let lifetimeCachedInputTokens = 0;
   let lifetimeOutputTokens = 0;
   let recentTotalBurnTokens = 0;
+  let recentInputTokens = 0;
+  let recentCachedInputTokens = 0;
+  let recentOutputTokens = 0;
   let trackedTurns = 0;
   let recentTrackedTurns = 0;
 
   for (const thread of input.threads) {
     const usageByTurnKey = latestUsageByThreadId.get(thread.id) ?? new Map();
     let totalProcessedTokens = 0;
-    let inputTokens = 0;
+    let totalInputTokens = 0;
+    let cachedInputTokens = 0;
     let outputTokens = 0;
     let totalDurationMs = 0;
 
     for (const usage of usageByTurnKey.values()) {
       totalProcessedTokens += usage.totalProcessedTokens;
-      inputTokens += usage.inputTokens;
+      totalInputTokens += usage.inputTokens + usage.cachedInputTokens;
+      cachedInputTokens += usage.cachedInputTokens;
       outputTokens += usage.outputTokens;
       totalDurationMs += usage.durationMs;
       trackedTurns += 1;
       lifetimeTotalBurnTokens += usage.totalProcessedTokens;
-      lifetimeInputTokens += usage.inputTokens;
+      lifetimeInputTokens += usage.inputTokens + usage.cachedInputTokens;
+      lifetimeCachedInputTokens += usage.cachedInputTokens;
       lifetimeOutputTokens += usage.outputTokens;
 
       if (new Date(usage.createdAt).getTime() >= cutoffMs) {
         recentTrackedTurns += 1;
         recentTotalBurnTokens += usage.totalProcessedTokens;
+        recentInputTokens += usage.inputTokens + usage.cachedInputTokens;
+        recentCachedInputTokens += usage.cachedInputTokens;
+        recentOutputTokens += usage.outputTokens;
       }
     }
 
@@ -205,10 +222,13 @@ export function buildProjectInferenceDashboardSnapshot(input: {
       archivedAt: thread.archivedAt ?? null,
       latestActivityAt: latestThreadActivityAt(thread),
       totalProcessedTokens,
-      inputTokens,
+      totalInputTokens,
+      cachedInputTokens,
       outputTokens,
       totalDurationMs,
       trackedTurns: usageByTurnKey.size,
+      averageProcessedTokensPerTurn:
+        usageByTurnKey.size > 0 ? Math.round(totalProcessedTokens / usageByTurnKey.size) : 0,
     });
   }
 
@@ -222,8 +242,16 @@ export function buildProjectInferenceDashboardSnapshot(input: {
   return {
     lifetimeTotalBurnTokens,
     lifetimeInputTokens,
+    lifetimeCachedInputTokens,
     lifetimeOutputTokens,
     recentTotalBurnTokens,
+    recentInputTokens,
+    recentCachedInputTokens,
+    recentOutputTokens,
+    projectedMonthlyBurnTokens:
+      recentTotalBurnTokens > 0 ? Math.round((recentTotalBurnTokens / 7) * 30) : 0,
+    averageBurnPerTrackedTurn:
+      trackedTurns > 0 ? Math.round(lifetimeTotalBurnTokens / trackedTurns) : 0,
     trackedTurns,
     recentTrackedTurns,
     leaderboard,

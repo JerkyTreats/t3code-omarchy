@@ -133,10 +133,17 @@ function normalizeCodexTokenUsage(value: unknown): ThreadTokenUsageSnapshot | un
   }
 
   const maxTokens = asNumber(usage?.model_context_window) ?? asNumber(usage?.modelContextWindow);
-  const inputTokens = asNumber(lastUsage?.input_tokens) ?? asNumber(lastUsage?.inputTokens);
-  const cachedInputTokens =
+  const totalInputTokens = asNumber(totalUsage?.input_tokens) ?? asNumber(totalUsage?.inputTokens);
+  const totalCachedInputTokens =
+    asNumber(totalUsage?.cached_input_tokens) ?? asNumber(totalUsage?.cachedInputTokens);
+  const totalOutputTokens =
+    asNumber(totalUsage?.output_tokens) ?? asNumber(totalUsage?.outputTokens);
+  const totalReasoningOutputTokens =
+    asNumber(totalUsage?.reasoning_output_tokens) ?? asNumber(totalUsage?.reasoningOutputTokens);
+  const lastInputTokens = asNumber(lastUsage?.input_tokens) ?? asNumber(lastUsage?.inputTokens);
+  const lastCachedInputTokens =
     asNumber(lastUsage?.cached_input_tokens) ?? asNumber(lastUsage?.cachedInputTokens);
-  const outputTokens = asNumber(lastUsage?.output_tokens) ?? asNumber(lastUsage?.outputTokens);
+  const lastOutputTokens = asNumber(lastUsage?.output_tokens) ?? asNumber(lastUsage?.outputTokens);
   const reasoningOutputTokens =
     asNumber(lastUsage?.reasoning_output_tokens) ?? asNumber(lastUsage?.reasoningOutputTokens);
 
@@ -146,14 +153,22 @@ function normalizeCodexTokenUsage(value: unknown): ThreadTokenUsageSnapshot | un
       ? { totalProcessedTokens }
       : {}),
     ...(maxTokens !== undefined ? { maxTokens } : {}),
-    ...(inputTokens !== undefined ? { inputTokens } : {}),
-    ...(cachedInputTokens !== undefined ? { cachedInputTokens } : {}),
-    ...(outputTokens !== undefined ? { outputTokens } : {}),
-    ...(reasoningOutputTokens !== undefined ? { reasoningOutputTokens } : {}),
-    ...(usedTokens !== undefined ? { lastUsedTokens: usedTokens } : {}),
-    ...(inputTokens !== undefined ? { lastInputTokens: inputTokens } : {}),
-    ...(cachedInputTokens !== undefined ? { lastCachedInputTokens: cachedInputTokens } : {}),
-    ...(outputTokens !== undefined ? { lastOutputTokens: outputTokens } : {}),
+    ...((totalInputTokens ?? lastInputTokens) !== undefined
+      ? { inputTokens: totalInputTokens ?? lastInputTokens }
+      : {}),
+    ...((totalCachedInputTokens ?? lastCachedInputTokens) !== undefined
+      ? { cachedInputTokens: totalCachedInputTokens ?? lastCachedInputTokens }
+      : {}),
+    ...((totalOutputTokens ?? lastOutputTokens) !== undefined
+      ? { outputTokens: totalOutputTokens ?? lastOutputTokens }
+      : {}),
+    ...((totalReasoningOutputTokens ?? reasoningOutputTokens) !== undefined
+      ? { reasoningOutputTokens: totalReasoningOutputTokens ?? reasoningOutputTokens }
+      : {}),
+    lastUsedTokens: usedTokens,
+    ...(lastInputTokens !== undefined ? { lastInputTokens } : {}),
+    ...(lastCachedInputTokens !== undefined ? { lastCachedInputTokens } : {}),
+    ...(lastOutputTokens !== undefined ? { lastOutputTokens } : {}),
     ...(reasoningOutputTokens !== undefined
       ? { lastReasoningOutputTokens: reasoningOutputTokens }
       : {}),

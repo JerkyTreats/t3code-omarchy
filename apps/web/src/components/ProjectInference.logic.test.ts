@@ -137,21 +137,33 @@ describe("buildProjectInferenceDashboardSnapshot", () => {
 
     expect(snapshot.lifetimeTotalBurnTokens).toBe(4_900);
     expect(snapshot.lifetimeInputTokens).toBe(3_700);
+    expect(snapshot.lifetimeCachedInputTokens).toBe(0);
     expect(snapshot.lifetimeOutputTokens).toBe(450);
-    expect(snapshot.recentTotalBurnTokens).toBe(4_000);
+    expect(snapshot.recentTotalBurnTokens).toBe(2_500);
+    expect(snapshot.recentInputTokens).toBe(2_000);
+    expect(snapshot.recentCachedInputTokens).toBe(0);
+    expect(snapshot.recentOutputTokens).toBe(220);
+    expect(snapshot.projectedMonthlyBurnTokens).toBe(10_714);
+    expect(snapshot.averageBurnPerTrackedTurn).toBe(1_633);
     expect(snapshot.trackedTurns).toBe(3);
-    expect(snapshot.recentTrackedTurns).toBe(2);
+    expect(snapshot.recentTrackedTurns).toBe(1);
     expect(snapshot.leaderboard.map((entry) => entry.threadId)).toEqual(["thread-1", "thread-2"]);
     expect(snapshot.leaderboard[0]).toMatchObject({
       totalProcessedTokens: 4_000,
       trackedTurns: 2,
-      inputTokens: 3_000,
+      totalInputTokens: 3_000,
+      cachedInputTokens: 0,
       outputTokens: 360,
+      averageProcessedTokensPerTurn: 2_000,
     });
     expect(snapshot.leaderboard[1]).toMatchObject({
       archivedAt: "2026-03-11T11:00:00.000Z",
       totalProcessedTokens: 900,
       trackedTurns: 1,
+      totalInputTokens: 700,
+      cachedInputTokens: 0,
+      outputTokens: 90,
+      averageProcessedTokensPerTurn: 900,
     });
   });
 });

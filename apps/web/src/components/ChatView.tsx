@@ -4168,39 +4168,12 @@ export default function ChatView({ threadId }: ChatViewProps) {
                           ))}
                         </div>
                       )}
-                    {(!isComposerApprovalState || richDraftMode) && !activePendingApproval ? (
-                      <div className="mb-2 flex items-start justify-between gap-2 pr-20 sm:pr-24">
-                        {richDraftMode ? (
-                          <ComposerRichDraftToolbar
-                            disabled={isConnecting || isComposerApprovalState}
-                            onApplyFormat={onApplyRichDraftFormat}
-                          />
-                        ) : (
-                          <div />
-                        )}
-
-                        {!isComposerApprovalState ? (
-                          <div className="flex shrink-0 items-center gap-1.5">
-                            {activePlan || sidebarProposedPlan || planSidebarOpen ? (
-                              <Button
-                                variant="ghost"
-                                className={cn(
-                                  "shrink-0 whitespace-nowrap px-2",
-                                  planSidebarOpen
-                                    ? "text-blue-400 hover:text-blue-300"
-                                    : "text-muted-foreground/70 hover:text-foreground/80",
-                                )}
-                                size="sm"
-                                type="button"
-                                onClick={togglePlanSidebar}
-                                title={planSidebarOpen ? "Hide plan sidebar" : "Show plan sidebar"}
-                              >
-                                <ListTodoIcon />
-                                <span className="sr-only lg:not-sr-only">Plan</span>
-                              </Button>
-                            ) : null}
-                          </div>
-                        ) : null}
+                    {richDraftMode && !isComposerApprovalState && !activePendingApproval ? (
+                      <div className="mb-2 pr-20 sm:pr-24">
+                        <ComposerRichDraftToolbar
+                          disabled={isConnecting || isComposerApprovalState}
+                          onApplyFormat={onApplyRichDraftFormat}
+                        />
                       </div>
                     ) : null}
                     <div className="pr-20 sm:pr-24">

@@ -310,9 +310,10 @@ function normalizeClaudeTokenUsage(
       ? record.total_tokens
       : undefined;
   const inputTokens =
-    (typeof record.input_tokens === "number" && Number.isFinite(record.input_tokens)
+    typeof record.input_tokens === "number" && Number.isFinite(record.input_tokens)
       ? record.input_tokens
-      : 0) +
+      : 0;
+  const cachedInputTokens =
     (typeof record.cache_creation_input_tokens === "number" &&
     Number.isFinite(record.cache_creation_input_tokens)
       ? record.cache_creation_input_tokens
@@ -325,7 +326,7 @@ function normalizeClaudeTokenUsage(
     typeof record.output_tokens === "number" && Number.isFinite(record.output_tokens)
       ? record.output_tokens
       : 0;
-  const derivedUsedTokens = inputTokens + outputTokens;
+  const derivedUsedTokens = inputTokens + cachedInputTokens + outputTokens;
   const usedTokens = directUsedTokens ?? (derivedUsedTokens > 0 ? derivedUsedTokens : undefined);
   if (usedTokens === undefined || usedTokens <= 0) {
     return undefined;
@@ -335,6 +336,7 @@ function normalizeClaudeTokenUsage(
     usedTokens,
     lastUsedTokens: usedTokens,
     ...(inputTokens > 0 ? { inputTokens } : {}),
+    ...(cachedInputTokens > 0 ? { cachedInputTokens } : {}),
     ...(outputTokens > 0 ? { outputTokens } : {}),
     ...(typeof contextWindow === "number" && Number.isFinite(contextWindow) && contextWindow > 0
       ? { maxTokens: contextWindow }
@@ -1354,6 +1356,15 @@ const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
             : {}),
           ...(accumulatedSnapshot && accumulatedSnapshot.usedTokens > lastGoodUsage.usedTokens
             ? { totalProcessedTokens: accumulatedSnapshot.usedTokens }
+            : {}),
+          ...(accumulatedSnapshot?.inputTokens !== undefined
+            ? { inputTokens: accumulatedSnapshot.inputTokens }
+            : {}),
+          ...(accumulatedSnapshot?.cachedInputTokens !== undefined
+            ? { cachedInputTokens: accumulatedSnapshot.cachedInputTokens }
+            : {}),
+          ...(accumulatedSnapshot?.outputTokens !== undefined
+            ? { outputTokens: accumulatedSnapshot.outputTokens }
             : {}),
         }
       : accumulatedSnapshot;
