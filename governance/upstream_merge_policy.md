@@ -65,6 +65,16 @@ Use this list as a concrete review aid during upstream sync and merge work.
 - fork first GitHub repo identity resolution in `apps/server/src/git/Layers/GitHubCli.ts` so fork operations resolve to the fork remote instead of upstream
 - Git panel promote semantics in `apps/server/src/git/Layers/GitManager.ts` and related web UI, including backup branch creation, merge to target branch, push of target branch, and source branch cleanup
 
+## Patch Guide
+
+`patch.md` is the authoritative current state guide for fork owned features.
+
+It must stay complete and current for the fork owned behavior described there.
+
+When upstream differs from `patch.md`, preserve `patch.md` unless the fork intentionally changes direction.
+
+When code changes intentionally modify a fork owned feature, update `patch.md` in the same change.
+
 ## Upstream Intake Classes
 
 Classify each meaningful upstream change into one of these outcomes:
@@ -91,12 +101,14 @@ Classify each meaningful upstream change into one of these outcomes:
 
 Before an upstream sync, merge, or divergence update is ready for review or merge, complete this gate:
 
+- review the relevant `patch.md` entries for the affected fork features
 - identify the protected fork features touched by the incoming upstream change
 - classify each meaningful change as `adopt`, `adapt`, or `reject`
 - state the fork seam or owner module where reconciliation happens
 - verify that no protected fork feature silently falls back to generic upstream behavior
 - verify that active drafts, screenshots, attachments, and local Git context remain intact across the affected flows
 - verify that fork specific sidebar, panel, and workflow affordances still render and behave as expected
+- update `patch.md` when the current fork behavior, owner modules, or verification expectations changed
 - record the protected fork features reviewed in the pull request, merge notes, or commit body
 
 If this gate is not completed, the upstream merge is not ready.
@@ -121,10 +133,12 @@ If this gate is not completed, the upstream merge is not ready.
 
 ## Operational Process
 
-- Review upstream regularly.
-- Use the external watch workflow to surface new upstream changes.
+- Review upstream releases regularly.
+- Use the external watch workflow to surface new upstream releases.
+- Review `patch.md` before each upstream sync and keep it current as fork behavior evolves.
 - For each upstream sync, record the adopted, adapted, and rejected changes in the pull request or commit body.
 - For each upstream sync, explicitly record which protected fork features were checked and whether any were intentionally changed.
+- For each change that modifies a fork owned feature, update `patch.md` in the same change.
 - Call out compatibility impact for desktop IPC, WebSocket contracts, persisted browser state, server side state, and user visible workflow.
 - When adapting a shared domain, note where the authoritative fork seam lives so later merges have one clear reconciliation point.
 - Before considering an upstream sync complete, ensure `bun fmt`, `bun lint`, and `bun typecheck` all pass.
