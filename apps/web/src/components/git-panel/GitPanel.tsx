@@ -66,6 +66,7 @@ import {
 } from "~/nativeApi";
 import { useComposerDraftStore } from "~/composerDraftStore";
 import { useStore } from "~/store";
+import { useTerminalStateStore } from "~/terminalStateStore";
 import { GitHubAuthSection } from "./GitHubAuthSection";
 import { GitHubCreateIssueDialog } from "./GitHubCreateIssueDialog";
 import { GitHubLinkedIssueSection } from "./GitHubLinkedIssueSection";
@@ -128,6 +129,11 @@ export default function GitPanel({
   const threads = useStore((store) => store.threads);
   const setThreadBranchAction = useStore((store) => store.setThreadBranch);
   const syncServerReadModel = useStore((store) => store.syncServerReadModel);
+  const clearComposerDraftForThread = useComposerDraftStore((store) => store.clearDraftThread);
+  const clearProjectDraftThreadById = useComposerDraftStore(
+    (store) => store.clearProjectDraftThreadById,
+  );
+  const clearTerminalState = useTerminalStateStore((store) => store.clearTerminalState);
   const activeServerThread = useMemo(
     () => threads.find((thread) => thread.id === activeThreadId) ?? null,
     [activeThreadId, threads],
@@ -407,6 +413,41 @@ export default function GitPanel({
       }
     },
     [activeThreadId, navigate],
+  );
+  const deleteActiveThreadAfterTeardown = useCallback(
+    async (input?: { navigateHome?: boolean }) => {
+      const api = readNativeApi();
+      if (!api || !activeThreadId || !activeProjectId) {
+        return;
+      }
+
+      await api.orchestration.dispatchCommand({
+        type: "thread.delete",
+        commandId: newCommandId(),
+        threadId: activeThreadId,
+      });
+      clearComposerDraftForThread(activeThreadId);
+      clearProjectDraftThreadById(activeProjectId, activeThreadId);
+      clearTerminalState(activeThreadId);
+
+      if (input?.navigateHome !== false) {
+        await navigate({ to: "/", replace: true });
+      }
+
+      const snapshot = await api.orchestration.getSnapshot().catch(() => null);
+      if (snapshot) {
+        syncServerReadModel(snapshot);
+      }
+    },
+    [
+      activeProjectId,
+      activeThreadId,
+      clearComposerDraftForThread,
+      clearProjectDraftThreadById,
+      clearTerminalState,
+      navigate,
+      syncServerReadModel,
+    ],
   );
   const syncActiveIssueLinkState = useCallback(
     async (nextState: "open" | "closed") => {
@@ -696,10 +737,16 @@ export default function GitPanel({
   }, [queryClient]);
   const { createDedicatedWorkspace, closeDedicatedWorkspace, openPrimaryWorkspaceResolutionDraft } =
     useGitPanelWorkspaceActions({
+      clearActiveThreadTerminalState: () => {
+        if (activeThreadId) {
+          clearTerminalState(activeThreadId);
+        }
+      },
       activeServerThreadSessionStatus: activeServerThread?.session?.status ?? null,
       activeThreadBranch,
       activeThreadId,
       activeWorkspaceBranch,
+      deleteActiveThreadAfterTeardown,
       focusDraftThread,
       focusPrimaryWorkspaceDraft,
       invalidateQueries,

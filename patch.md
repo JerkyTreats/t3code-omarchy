@@ -172,6 +172,8 @@ Git panel flows must not take ownership of the active composer draft or silently
 - Git panel actions operate on thread, branch, and worktree context without consuming draft text or attachments.
 - Draft state remains intact while Git panel operations run.
 - Git related thread routing keeps fork specific draft ownership semantics.
+- Worktree discard completes active worktree thread teardown before primary workspace draft routing runs, so teardown does not race draft routing.
+- Worktree discard never silently claims or clears unrelated composer content while switching back to the primary workspace.
 
 ### Owner Modules
 
@@ -188,6 +190,7 @@ Git panel flows must not take ownership of the active composer draft or silently
 
 - Opening and using Git panel flows does not clear the active draft.
 - Branch and worktree routing preserves the expected draft thread state.
+- Discarding a dedicated worktree returns the user to a stable primary workspace draft without losing unrelated draft content.
 
 ## F6 Fork First GitHub Identity Resolution
 
@@ -227,6 +230,9 @@ Local Git workflow semantics favor fork safety and explicit promotion behavior o
 - Promotion creates a backup branch under `t3code/promote-backup` before destructive follow through.
 - Promotion merges source into target, pushes the target branch, and cleans up the source branch when the flow succeeds and cleanup is safe.
 - Worktree preparation preserves fork upstream tracking behavior and local branch safety checks.
+- Worktree close and discard use a shared lifecycle substrate for runtime stop, terminal teardown, worktree removal, query invalidation, and thread state cleanup.
+- Worktree close releases the thread back to the primary checkout without deleting the thread.
+- Worktree discard fully tears down the dedicated workspace, including thread cleanup, so failed worktrees can be thrown away cleanly.
 - Local workflow guidance stays explicit about promotion and merge behavior.
 
 ### Owner Modules
@@ -244,6 +250,7 @@ Local Git workflow semantics favor fork safety and explicit promotion behavior o
 - Promotion creates the backup branch and finishes with the expected target branch state.
 - Source branch cleanup happens only after the guarded success path.
 - Worktree flows preserve fork upstream tracking expectations.
+- Closing and discarding a dedicated worktree leave no stale runtime or terminal state behind.
 
 ## F8 Plan Aware Sidebar And Activity Status Cues
 

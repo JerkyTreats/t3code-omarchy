@@ -11,6 +11,7 @@ import { newCommandId } from "../lib/utils";
 import { readNativeApi } from "../nativeApi";
 import { useStore } from "../store";
 import { useTerminalStateStore } from "../terminalStateStore";
+import { stopThreadRuntimeAndTerminal } from "../worktreeLifecycle";
 import { formatWorktreePathForDisplay, getOrphanedWorktreePathForThread } from "../worktreeCleanup";
 import { toastManager } from "../components/ui/toast";
 import { useSettings } from "./useSettings";
@@ -93,22 +94,13 @@ export function useThreadActions() {
           ].join("\n"),
         ));
 
-      if (thread.session && thread.session.status !== "closed") {
-        await api.orchestration
-          .dispatchCommand({
-            type: "thread.session.stop",
-            commandId: newCommandId(),
-            threadId,
-            createdAt: new Date().toISOString(),
-          })
-          .catch(() => undefined);
-      }
-
-      try {
-        await api.terminal.close({ threadId, deleteHistory: true });
-      } catch {
-        // Terminal may already be closed.
-      }
+      await stopThreadRuntimeAndTerminal({
+        api,
+        clearTerminalState: () => clearTerminalState(threadId),
+        deleteTerminalHistory: true,
+        sessionStatus: thread.session?.status ?? null,
+        threadId,
+      });
 
       const deletedThreadIds = opts.deletedThreadIds ?? new Set<ThreadId>();
       const shouldNavigateToFallback = routeThreadId === threadId;
@@ -125,7 +117,6 @@ export function useThreadActions() {
       });
       clearComposerDraftForThread(threadId);
       clearProjectDraftThreadById(thread.projectId, thread.id);
-      clearTerminalState(threadId);
 
       if (shouldNavigateToFallback) {
         if (fallbackThreadId) {

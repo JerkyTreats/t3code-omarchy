@@ -2,16 +2,18 @@ import type { GitCreateWorktreeResult, GitStatusResult, ThreadId } from "@t3tool
 import { useCallback } from "react";
 import { toastManager } from "~/components/ui/toast";
 import { buildTemporaryWorktreeBranchName } from "~/gitWorktree";
-import { newCommandId } from "~/lib/utils";
 import { readNativeApi } from "~/nativeApi";
+import { discardDedicatedWorktree, releaseDedicatedWorktree } from "~/worktreeLifecycle";
 import { formatWorktreePathForDisplay } from "~/worktreeCleanup";
 import { buildPrimaryWorkspaceResolutionPrompt } from "./GitPanel.logic";
 
 interface UseGitPanelWorkspaceActionsInput {
+  clearActiveThreadTerminalState: () => void;
   activeServerThreadSessionStatus: string | null;
   activeThreadBranch: string | null;
   activeThreadId: ThreadId | null;
   activeWorkspaceBranch: string | null;
+  deleteActiveThreadAfterTeardown: (input?: { navigateHome?: boolean }) => Promise<void>;
   focusDraftThread: (branch: string, worktreePath: string) => Promise<void>;
   focusPrimaryWorkspaceDraft: () => Promise<ThreadId | null>;
   invalidateQueries: () => Promise<void>;
@@ -36,10 +38,12 @@ interface UseGitPanelWorkspaceActionsInput {
 }
 
 export function useGitPanelWorkspaceActions({
+  clearActiveThreadTerminalState,
   activeServerThreadSessionStatus,
   activeThreadBranch,
   activeThreadId,
   activeWorkspaceBranch,
+  deleteActiveThreadAfterTeardown,
   focusDraftThread,
   focusPrimaryWorkspaceDraft,
   invalidateQueries,
@@ -102,10 +106,11 @@ export function useGitPanelWorkspaceActions({
       if (discardChanges) {
         const confirmed = await api.dialogs.confirm(
           [
-            "Discard uncommitted changes and close this workspace?",
+            "Discard this dedicated workspace?",
             formatWorktreePathForDisplay(repoWorkspaceCwd),
             "",
-            "Committed branch history will be kept.",
+            "Uncommitted changes will be lost and this thread will be removed.",
+            "Committed branch history will still be kept.",
           ].join("\n"),
         );
         if (!confirmed) {
@@ -113,49 +118,52 @@ export function useGitPanelWorkspaceActions({
         }
       }
 
-      if (activeServerThreadSessionStatus && activeServerThreadSessionStatus !== "closed") {
-        await api.orchestration
-          .dispatchCommand({
-            type: "thread.session.stop",
-            commandId: newCommandId(),
-            threadId: activeThreadId,
-            createdAt: new Date().toISOString(),
-          })
-          .catch(() => undefined);
-      }
-
       try {
-        await removeWorktree({
-          cwd: repoCwd,
-          path: repoWorkspaceCwd,
-          force: discardChanges,
-        });
-
-        let nextPrimaryBranch = activeThreadBranch ?? activeWorkspaceBranch ?? null;
-        let branchActivatedInPrimary = false;
-        if (nextPrimaryBranch) {
-          try {
-            await api.git.checkout({ cwd: repoRoot, branch: nextPrimaryBranch });
-            branchActivatedInPrimary = true;
-          } catch {
-            const fallbackPrimaryStatus = await api.git.status({ cwd: repoRoot }).catch(() => null);
-            nextPrimaryBranch = fallbackPrimaryStatus?.branch ?? nextPrimaryBranch;
-          }
+        if (discardChanges) {
+          await discardDedicatedWorktree({
+            api,
+            clearTerminalState: clearActiveThreadTerminalState,
+            deleteThreadAfterTeardown: () =>
+              deleteActiveThreadAfterTeardown({ navigateHome: false }),
+            invalidateQueries,
+            removeWorktree,
+            repoCwd,
+            sessionStatus: activeServerThreadSessionStatus,
+            threadId: activeThreadId,
+            worktreePath: repoWorkspaceCwd,
+          });
+          await focusPrimaryWorkspaceDraft();
+          toastManager.add({
+            type: "success",
+            title: "Workspace discarded",
+            description: "The dedicated workspace and thread were removed.",
+            data: threadToastData,
+          });
+          return;
         }
 
-        await invalidateQueries();
-        await persistThreadWorkspaceContext(
-          activeThreadBranch ?? activeWorkspaceBranch ?? null,
-          null,
-        );
+        const releaseResult = await releaseDedicatedWorktree({
+          api,
+          clearTerminalState: clearActiveThreadTerminalState,
+          desiredBranch: activeThreadBranch ?? activeWorkspaceBranch ?? null,
+          invalidateQueries,
+          persistThreadWorkspaceContext,
+          removeWorktree,
+          repoCwd,
+          repoRoot,
+          sessionStatus: activeServerThreadSessionStatus,
+          threadId: activeThreadId,
+          worktreePath: repoWorkspaceCwd,
+        });
         toastManager.add({
-          type: branchActivatedInPrimary || !activeThreadBranch ? "success" : "warning",
-          title: discardChanges ? "Workspace discarded" : "Workspace closed",
+          type:
+            releaseResult.branchActivatedInPrimary || !activeThreadBranch ? "success" : "warning",
+          title: "Workspace closed",
           description:
-            branchActivatedInPrimary && nextPrimaryBranch
-              ? `Branch ${nextPrimaryBranch} is active in the primary checkout.`
+            releaseResult.branchActivatedInPrimary && releaseResult.nextPrimaryBranch
+              ? `Branch ${releaseResult.nextPrimaryBranch} is active in the primary checkout.`
               : activeThreadBranch
-                ? `Branch ${activeThreadBranch} is released. Clean the primary checkout before switching to it.`
+                ? `Branch ${activeThreadBranch} was released. Clean the primary checkout before switching back to it.`
                 : "The primary checkout is active again.",
           data: threadToastData,
         });
@@ -173,6 +181,9 @@ export function useGitPanelWorkspaceActions({
       activeThreadBranch,
       activeThreadId,
       activeWorkspaceBranch,
+      clearActiveThreadTerminalState,
+      deleteActiveThreadAfterTeardown,
+      focusPrimaryWorkspaceDraft,
       invalidateQueries,
       isPrimaryWorkspace,
       persistThreadWorkspaceContext,
