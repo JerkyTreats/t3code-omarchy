@@ -1,7 +1,11 @@
 import { ThreadId, type NativeApi } from "@t3tools/contracts";
 import { QueryClient } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { checkpointDiffQueryOptions, providerQueryKeys } from "./providerReactQuery";
+import {
+  checkpointDiffQueryOptions,
+  checkpointFileQueryOptions,
+  providerQueryKeys,
+} from "./providerReactQuery";
 import * as nativeApi from "../nativeApi";
 
 const threadId = ThreadId.makeUnsafe("thread-id");
@@ -9,11 +13,13 @@ const threadId = ThreadId.makeUnsafe("thread-id");
 function mockNativeApi(input: {
   getTurnDiff: ReturnType<typeof vi.fn>;
   getFullThreadDiff: ReturnType<typeof vi.fn>;
+  getCheckpointFile?: ReturnType<typeof vi.fn>;
 }) {
   vi.spyOn(nativeApi, "ensureNativeApi").mockReturnValue({
     orchestration: {
       getTurnDiff: input.getTurnDiff,
       getFullThreadDiff: input.getFullThreadDiff,
+      getCheckpointFile: input.getCheckpointFile ?? vi.fn(),
     },
   } as unknown as NativeApi);
 }
@@ -39,6 +45,24 @@ describe("providerQueryKeys.checkpointDiff", () => {
       providerQueryKeys.checkpointDiff({
         ...baseInput,
         cacheScope: "turn:new-turn",
+      }),
+    );
+  });
+});
+
+describe("providerQueryKeys.checkpointFile", () => {
+  it("includes turn count and path", () => {
+    expect(
+      providerQueryKeys.checkpointFile({
+        threadId,
+        turnCount: 1,
+        relativePath: "docs/a.md",
+      }),
+    ).not.toEqual(
+      providerQueryKeys.checkpointFile({
+        threadId,
+        turnCount: 2,
+        relativePath: "docs/a.md",
       }),
     );
   });
@@ -157,5 +181,38 @@ describe("checkpointDiffQueryOptions", () => {
     expect(typeof checkpointDelay).toBe("number");
     expect(typeof genericDelay).toBe("number");
     expect((checkpointDelay ?? 0) > (genericDelay ?? 0)).toBe(true);
+  });
+});
+
+describe("checkpointFileQueryOptions", () => {
+  it("forwards checkpoint file reads to the provider API", async () => {
+    const getTurnDiff = vi.fn().mockResolvedValue({ diff: "patch" });
+    const getFullThreadDiff = vi.fn().mockResolvedValue({ diff: "patch" });
+    const getCheckpointFile = vi.fn().mockResolvedValue({
+      kind: "text",
+      path: "docs/guide.md",
+      text: "# hi\n",
+      mimeType: "text/markdown",
+      byteSize: 5,
+      language: "markdown",
+      lineEnding: "lf",
+      isMarkdown: true,
+    });
+    mockNativeApi({ getTurnDiff, getFullThreadDiff, getCheckpointFile });
+
+    const options = checkpointFileQueryOptions({
+      threadId,
+      turnCount: 3,
+      relativePath: "docs/guide.md",
+    });
+
+    const queryClient = new QueryClient();
+    await queryClient.fetchQuery(options);
+
+    expect(getCheckpointFile).toHaveBeenCalledWith({
+      threadId,
+      turnCount: 3,
+      relativePath: "docs/guide.md",
+    });
   });
 });

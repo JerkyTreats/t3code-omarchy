@@ -1,0 +1,633 @@
+import { CheckIcon, CopyIcon, ExternalLinkIcon, TriangleAlertIcon } from "lucide-react";
+import {
+  Children,
+  Suspense,
+  isValidElement,
+  use,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import ReactMarkdown, { type Components } from "react-markdown";
+import rehypeRaw from "rehype-raw";
+import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
+import remarkGfm from "remark-gfm";
+import { useQuery } from "@tanstack/react-query";
+
+import { readNativeApi } from "~/nativeApi";
+import { checkpointFileQueryOptions } from "~/lib/providerReactQuery";
+import { resolveDiffThemeName, type DiffThemeName } from "~/lib/diffRendering";
+import { useTheme } from "~/hooks/useTheme";
+import { cn } from "~/lib/utils";
+import { useCheckpointAssetResolver } from "./useCheckpointAssetResolver";
+import { DocumentOutlineRail, type DocumentOutlineItem } from "./DocumentOutlineRail";
+import { CheckpointImageLightbox } from "./CheckpointImageLightbox";
+import {
+  createHighlightCacheKey,
+  estimateHighlightedSize,
+  extractFenceLanguage,
+  getHighlighterPromise,
+  highlightedCodeCache,
+} from "~/lib/codeHighlighting";
+
+function nodeToPlainText(node: ReactNode): string {
+  if (typeof node === "string" || typeof node === "number") {
+    return String(node);
+  }
+  if (Array.isArray(node)) {
+    return node.map((child) => nodeToPlainText(child)).join("");
+  }
+  if (isValidElement<{ children?: ReactNode }>(node)) {
+    return nodeToPlainText(node.props.children);
+  }
+  return "";
+}
+
+function extractCodeBlock(
+  children: ReactNode,
+): { className: string | undefined; code: string } | null {
+  const childNodes = Children.toArray(children);
+  if (childNodes.length !== 1) {
+    return null;
+  }
+
+  const onlyChild = childNodes[0];
+  if (
+    !isValidElement<{ className?: string; children?: ReactNode }>(onlyChild) ||
+    onlyChild.type !== "code"
+  ) {
+    return null;
+  }
+
+  return {
+    className: onlyChild.props.className,
+    code: nodeToPlainText(onlyChild.props.children),
+  };
+}
+
+function createSlugger() {
+  const counts = new Map<string, number>();
+  return (value: string) => {
+    const normalized = value
+      .toLowerCase()
+      .trim()
+      .replace(/[`*_~]/g, "")
+      .replace(/[^a-z0-9\s-]/g, "")
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
+    const base = normalized.length > 0 ? normalized : "section";
+    const count = counts.get(base) ?? 0;
+    counts.set(base, count + 1);
+    return count === 0 ? base : `${base}-${count}`;
+  };
+}
+
+function parseOutline(markdown: string): DocumentOutlineItem[] {
+  const outline: DocumentOutlineItem[] = [];
+  const slug = createSlugger();
+  let inFence = false;
+
+  for (const line of markdown.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith("```")) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) {
+      continue;
+    }
+    const match = /^(#{1,6})\s+(.+?)\s*$/.exec(line);
+    if (!match) {
+      continue;
+    }
+    const text = match[2]?.trim() ?? "";
+    if (text.length === 0) {
+      continue;
+    }
+    outline.push({
+      id: slug(text),
+      text,
+      depth: match[1]?.length ?? 1,
+    });
+  }
+
+  return outline;
+}
+
+function DocumentCodeBlock(props: {
+  code: string;
+  className: string | undefined;
+  themeName: DiffThemeName;
+}) {
+  const [copied, setCopied] = useState(false);
+  const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const language = extractFenceLanguage(props.className);
+  const cacheKey = createHighlightCacheKey(props.code, language, props.themeName);
+  const cachedMarkup = highlightedCodeCache.get(cacheKey);
+
+  useEffect(
+    () => () => {
+      if (copiedTimerRef.current != null) {
+        clearTimeout(copiedTimerRef.current);
+      }
+    },
+    [],
+  );
+
+  const onCopy = () => {
+    if (!navigator.clipboard) {
+      return;
+    }
+    void navigator.clipboard.writeText(props.code).then(() => {
+      if (copiedTimerRef.current != null) {
+        clearTimeout(copiedTimerRef.current);
+      }
+      setCopied(true);
+      copiedTimerRef.current = setTimeout(() => {
+        setCopied(false);
+        copiedTimerRef.current = null;
+      }, 1200);
+    });
+  };
+
+  if (cachedMarkup != null) {
+    return (
+      <div className="document-code-block">
+        <button
+          type="button"
+          className="document-code-copy"
+          onClick={onCopy}
+          aria-label={copied ? "Copied" : "Copy code"}
+        >
+          {copied ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}
+        </button>
+        <div dangerouslySetInnerHTML={{ __html: cachedMarkup }} />
+      </div>
+    );
+  }
+
+  const highlighter = use(getHighlighterPromise(language));
+  const highlightedHtml = useMemo(() => {
+    try {
+      return highlighter.codeToHtml(props.code, {
+        lang: language,
+        theme: props.themeName,
+      });
+    } catch {
+      return highlighter.codeToHtml(props.code, {
+        lang: "text",
+        theme: props.themeName,
+      });
+    }
+  }, [highlighter, language, props.code, props.themeName]);
+
+  highlightedCodeCache.set(
+    cacheKey,
+    highlightedHtml,
+    estimateHighlightedSize(highlightedHtml, props.code),
+  );
+
+  return (
+    <div className="document-code-block">
+      <button
+        type="button"
+        className="document-code-copy"
+        onClick={onCopy}
+        aria-label={copied ? "Copied" : "Copy code"}
+      >
+        {copied ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}
+      </button>
+      <div dangerouslySetInnerHTML={{ __html: highlightedHtml }} />
+    </div>
+  );
+}
+
+function MermaidBlock(props: { code: string }) {
+  const { resolvedTheme } = useTheme();
+  const renderId = useId().replace(/:/g, "-");
+  const [svg, setSvg] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [showSource, setShowSource] = useState(false);
+
+  useEffect(() => {
+    let disposed = false;
+    setSvg(null);
+    setError(null);
+
+    void import("mermaid").then(async ({ default: mermaid }) => {
+      mermaid.initialize({
+        startOnLoad: false,
+        securityLevel: "strict",
+        theme: resolvedTheme === "dark" ? "dark" : "neutral",
+      });
+      try {
+        const result = await mermaid.render(renderId, props.code);
+        if (!disposed) {
+          setSvg(result.svg);
+        }
+      } catch (nextError) {
+        if (!disposed) {
+          setError(nextError instanceof Error ? nextError.message : "Failed to render Mermaid.");
+        }
+      }
+    });
+
+    return () => {
+      disposed = true;
+    };
+  }, [props.code, renderId, resolvedTheme]);
+
+  return (
+    <div className="document-mermaid-block">
+      {svg ? <div dangerouslySetInnerHTML={{ __html: svg }} /> : null}
+      {error ? (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/8 p-3 text-sm text-amber-200">
+          <div className="flex items-center gap-2 font-medium">
+            <TriangleAlertIcon className="size-4" />
+            Mermaid render failed
+          </div>
+          <p className="mt-1 text-amber-100/80">{error}</p>
+          <button
+            type="button"
+            className="mt-2 text-xs underline underline-offset-4"
+            onClick={() => setShowSource((current) => !current)}
+          >
+            {showSource ? "Hide source" : "Show source"}
+          </button>
+          {showSource ? (
+            <pre className="mt-3 overflow-auto rounded-lg border border-border/60 bg-background/70 p-3 text-xs">
+              {props.code}
+            </pre>
+          ) : null}
+        </div>
+      ) : null}
+      {!svg && !error ? (
+        <div className="rounded-xl border border-border/60 bg-card/40 p-4 text-sm text-muted-foreground">
+          Rendering Mermaid diagram...
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ResolvedCheckpointImage(props: {
+  threadId: string;
+  turnCount: number;
+  relativePath: string;
+  alt: string;
+  onOpen: (src: string, alt: string) => void;
+}) {
+  const assetQuery = useQuery(
+    checkpointFileQueryOptions({
+      threadId: props.threadId as never,
+      turnCount: props.turnCount,
+      relativePath: props.relativePath,
+    }),
+  );
+
+  if (assetQuery.isLoading) {
+    return <div className="document-image-placeholder">Loading image...</div>;
+  }
+
+  if (assetQuery.data?.kind !== "image") {
+    return <div className="document-image-placeholder">Image unavailable.</div>;
+  }
+
+  const imageData = assetQuery.data;
+  if (!imageData || imageData.kind !== "image") {
+    return <div className="document-image-placeholder">Image unavailable.</div>;
+  }
+
+  return (
+    <figure className="document-image-figure">
+      <button
+        type="button"
+        className="w-full"
+        onClick={() => props.onOpen(imageData.dataUrl, props.alt)}
+      >
+        <img
+          src={imageData.dataUrl}
+          alt={props.alt}
+          className="document-image"
+          loading="lazy"
+          referrerPolicy="no-referrer"
+        />
+      </button>
+      {props.alt.length > 0 ? (
+        <figcaption className="document-image-caption">{props.alt}</figcaption>
+      ) : null}
+    </figure>
+  );
+}
+
+export function DocumentMarkdownRenderer(props: {
+  threadId: string;
+  turnCount: number;
+  filePath: string;
+  markdown: string;
+  onNavigateToPath: (relativePath: string, hash?: string) => void;
+  onOpenFileInEditor: (relativePath: string) => void;
+}) {
+  const { resolvedTheme } = useTheme();
+  const themeName = resolveDiffThemeName(resolvedTheme);
+  const { resolveDocumentLink } = useCheckpointAssetResolver({ filePath: props.filePath });
+  const outline = useMemo(() => parseOutline(props.markdown), [props.markdown]);
+  const headingSlug = useMemo(() => createSlugger(), []);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
+  const [activeHeadingId, setActiveHeadingId] = useState<string | null>(outline[0]?.id ?? null);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) {
+      return;
+    }
+
+    const headings = Array.from(
+      container.querySelectorAll<HTMLElement>("[data-document-heading-id]"),
+    );
+    if (headings.length === 0) {
+      setActiveHeadingId(null);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((entry) => entry.isIntersecting)
+          .toSorted((left, right) => left.boundingClientRect.top - right.boundingClientRect.top)[0];
+        const headingId =
+          visible?.target instanceof HTMLElement ? visible.target.dataset.documentHeadingId : null;
+        if (headingId) {
+          setActiveHeadingId(headingId);
+        }
+      },
+      {
+        root: container,
+        rootMargin: "0px 0px -70% 0px",
+        threshold: [0, 1],
+      },
+    );
+
+    for (const heading of headings) {
+      observer.observe(heading);
+    }
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [outline, props.markdown]);
+
+  const markdownComponents = useMemo<Components>(
+    () => ({
+      a({ href, children, ...linkProps }) {
+        const resolved = resolveDocumentLink(href);
+        if (!resolved) {
+          return (
+            <a {...linkProps} href={href}>
+              {children}
+            </a>
+          );
+        }
+
+        if (resolved.kind === "hash") {
+          return (
+            <a
+              {...linkProps}
+              href={href}
+              onClick={(event) => {
+                event.preventDefault();
+                const target = containerRef.current?.querySelector<HTMLElement>(
+                  `[data-document-heading-id='${resolved.hash ?? ""}']`,
+                );
+                target?.scrollIntoView({ block: "start", behavior: "smooth" });
+              }}
+            >
+              {children}
+            </a>
+          );
+        }
+
+        if (resolved.kind === "external") {
+          return (
+            <a
+              {...linkProps}
+              href={href}
+              onClick={(event) => {
+                event.preventDefault();
+                const api = readNativeApi();
+                if (api) {
+                  void api.shell.openExternal(resolved.href);
+                }
+              }}
+            >
+              <span>{children}</span>
+              <ExternalLinkIcon className="ml-1 inline size-3.5 align-text-bottom" />
+            </a>
+          );
+        }
+
+        return (
+          <a
+            {...linkProps}
+            href={href}
+            onClick={(event) => {
+              event.preventDefault();
+              props.onNavigateToPath(resolved.relativePath ?? props.filePath, resolved.hash);
+            }}
+          >
+            {children}
+          </a>
+        );
+      },
+      img({ src, alt = "" }) {
+        const resolved = resolveDocumentLink(src);
+        if (!resolved || resolved.kind === "external") {
+          return (
+            <figure className="document-image-figure">
+              <button
+                type="button"
+                className="w-full"
+                onClick={() => {
+                  if (src) {
+                    setLightbox({ src, alt });
+                  }
+                }}
+              >
+                <img
+                  src={src}
+                  alt={alt}
+                  className="document-image"
+                  loading="lazy"
+                  referrerPolicy="no-referrer"
+                />
+              </button>
+              {alt.length > 0 ? (
+                <figcaption className="document-image-caption">{alt}</figcaption>
+              ) : null}
+            </figure>
+          );
+        }
+        return (
+          <ResolvedCheckpointImage
+            threadId={props.threadId}
+            turnCount={props.turnCount}
+            relativePath={resolved.relativePath ?? props.filePath}
+            alt={alt}
+            onOpen={(nextSrc, nextAlt) => setLightbox({ src: nextSrc, alt: nextAlt })}
+          />
+        );
+      },
+      pre({ children }) {
+        const codeBlock = extractCodeBlock(children);
+        if (!codeBlock) {
+          return <pre>{children}</pre>;
+        }
+        if (extractFenceLanguage(codeBlock.className) === "mermaid") {
+          return <MermaidBlock code={codeBlock.code} />;
+        }
+        return (
+          <Suspense fallback={<pre>{children}</pre>}>
+            <DocumentCodeBlock
+              code={codeBlock.code}
+              className={codeBlock.className}
+              themeName={themeName}
+            />
+          </Suspense>
+        );
+      },
+      h1({ children, ...headingProps }) {
+        const text = nodeToPlainText(children);
+        const id = headingSlug(text);
+        return (
+          <h1 {...headingProps} id={id} data-document-heading-id={id}>
+            <a href={`#${id}`} className="document-heading-anchor">
+              {children}
+            </a>
+          </h1>
+        );
+      },
+      h2({ children, ...headingProps }) {
+        const text = nodeToPlainText(children);
+        const id = headingSlug(text);
+        return (
+          <h2 {...headingProps} id={id} data-document-heading-id={id}>
+            <a href={`#${id}`} className="document-heading-anchor">
+              {children}
+            </a>
+          </h2>
+        );
+      },
+      h3({ children, ...headingProps }) {
+        const text = nodeToPlainText(children);
+        const id = headingSlug(text);
+        return (
+          <h3 {...headingProps} id={id} data-document-heading-id={id}>
+            <a href={`#${id}`} className="document-heading-anchor">
+              {children}
+            </a>
+          </h3>
+        );
+      },
+      h4({ children, ...headingProps }) {
+        const text = nodeToPlainText(children);
+        const id = headingSlug(text);
+        return (
+          <h4 {...headingProps} id={id} data-document-heading-id={id}>
+            <a href={`#${id}`} className="document-heading-anchor">
+              {children}
+            </a>
+          </h4>
+        );
+      },
+      h5({ children, ...headingProps }) {
+        const text = nodeToPlainText(children);
+        const id = headingSlug(text);
+        return (
+          <h5 {...headingProps} id={id} data-document-heading-id={id}>
+            <a href={`#${id}`} className="document-heading-anchor">
+              {children}
+            </a>
+          </h5>
+        );
+      },
+      h6({ children, ...headingProps }) {
+        const text = nodeToPlainText(children);
+        const id = headingSlug(text);
+        return (
+          <h6 {...headingProps} id={id} data-document-heading-id={id}>
+            <a href={`#${id}`} className="document-heading-anchor">
+              {children}
+            </a>
+          </h6>
+        );
+      },
+    }),
+    [headingSlug, props, resolveDocumentLink, themeName],
+  );
+
+  const sanitizeSchema = useMemo(
+    () => ({
+      ...defaultSchema,
+      tagNames: [...(defaultSchema.tagNames ?? []), "details", "summary", "img"],
+      attributes: {
+        ...defaultSchema.attributes,
+        img: ["src", "alt", "title"],
+        a: ["href", "title"],
+      },
+    }),
+    [],
+  );
+
+  return (
+    <div className="document-preview-shell relative min-h-0 flex-1 overflow-hidden">
+      {lightbox ? (
+        <CheckpointImageLightbox
+          images={[{ src: lightbox.src, alt: lightbox.alt }]}
+          index={0}
+          onClose={() => setLightbox(null)}
+        />
+      ) : null}
+      <div className="document-preview-layout h-full min-h-0 overflow-auto" ref={containerRef}>
+        <div className="mx-auto grid min-h-full max-w-[1080px] grid-cols-1 gap-6 px-4 py-4 xl:grid-cols-[minmax(0,1fr)_220px]">
+          <article
+            className={cn(
+              "document-markdown min-w-0 rounded-[28px] border border-border/60 bg-card/55 p-5 shadow-[0_24px_80px_-48px_color-mix(in_srgb,var(--foreground)_42%,transparent)] backdrop-blur-md sm:p-7",
+            )}
+          >
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              rehypePlugins={[[rehypeRaw], [rehypeSanitize, sanitizeSchema]]}
+              components={markdownComponents}
+            >
+              {props.markdown}
+            </ReactMarkdown>
+            <div className="mt-8 border-t border-border/60 pt-4 text-xs text-muted-foreground/75">
+              <button
+                type="button"
+                className="underline underline-offset-4"
+                onClick={() => props.onOpenFileInEditor(props.filePath)}
+              >
+                Open source in editor
+              </button>
+            </div>
+          </article>
+          <DocumentOutlineRail
+            items={outline}
+            activeId={activeHeadingId}
+            onSelect={(id) => {
+              const target = containerRef.current?.querySelector<HTMLElement>(
+                `[data-document-heading-id='${id}']`,
+              );
+              target?.scrollIntoView({ block: "start", behavior: "smooth" });
+            }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}

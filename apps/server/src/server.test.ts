@@ -51,6 +51,10 @@ import {
   CheckpointDiffQuery,
   type CheckpointDiffQueryShape,
 } from "./checkpointing/Services/CheckpointDiffQuery.ts";
+import {
+  CheckpointFileQuery,
+  type CheckpointFileQueryShape,
+} from "./checkpointing/Services/CheckpointFileQuery.ts";
 import { GitCore, type GitCoreShape } from "./git/Services/GitCore.ts";
 import { GitHubCli, type GitHubCliShape } from "./git/Services/GitHubCli.ts";
 import { GitManager, type GitManagerShape } from "./git/Services/GitManager.ts";
@@ -269,6 +273,7 @@ const buildAppUnderTest = (options?: {
     orchestrationEngine?: Partial<OrchestrationEngineShape>;
     projectionSnapshotQuery?: Partial<ProjectionSnapshotQueryShape>;
     checkpointDiffQuery?: Partial<CheckpointDiffQueryShape>;
+    checkpointFileQuery?: Partial<CheckpointFileQueryShape>;
     browserTraceCollector?: Partial<BrowserTraceCollectorShape>;
     serverLifecycleEvents?: Partial<ServerLifecycleEventsShape>;
     serverRuntimeStartup?: Partial<ServerRuntimeStartupShape>;
@@ -399,6 +404,17 @@ const buildAppUnderTest = (options?: {
               diff: "",
             }),
           ...options?.layers?.checkpointDiffQuery,
+        }),
+      ),
+      Layer.provide(
+        Layer.mock(CheckpointFileQuery)({
+          getCheckpointFile: () =>
+            Effect.succeed({
+              kind: "missing" as const,
+              path: "README.md",
+              reason: "not-found" as const,
+            }),
+          ...options?.layers?.checkpointFileQuery,
         }),
       ),
       Layer.provide(

@@ -52,6 +52,8 @@ import {
   OrchestrationEvent,
   ORCHESTRATION_WS_METHODS,
   OrchestrationDispatchCommandError,
+  OrchestrationGetCheckpointFileError,
+  OrchestrationGetCheckpointFileInput,
   OrchestrationGetFullThreadDiffError,
   OrchestrationGetFullThreadDiffInput,
   OrchestrationGetSnapshotError,
@@ -383,6 +385,15 @@ export const WsOrchestrationGetFullThreadDiffRpc = Rpc.make(
   },
 );
 
+export const WsOrchestrationGetCheckpointFileRpc = Rpc.make(
+  ORCHESTRATION_WS_METHODS.getCheckpointFile,
+  {
+    payload: OrchestrationGetCheckpointFileInput,
+    success: OrchestrationRpcSchemas.getCheckpointFile.output,
+    error: OrchestrationGetCheckpointFileError,
+  },
+);
+
 export const WsOrchestrationReplayEventsRpc = Rpc.make(ORCHESTRATION_WS_METHODS.replayEvents, {
   payload: OrchestrationReplayEventsInput,
   success: OrchestrationRpcSchemas.replayEvents.output,
@@ -461,5 +472,6 @@ export const WsRpcGroup = RpcGroup.make(
   WsOrchestrationDispatchCommandRpc,
   WsOrchestrationGetTurnDiffRpc,
   WsOrchestrationGetFullThreadDiffRpc,
+  WsOrchestrationGetCheckpointFileRpc,
   WsOrchestrationReplayEventsRpc,
 );

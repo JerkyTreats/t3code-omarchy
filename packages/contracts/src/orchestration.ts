@@ -21,6 +21,7 @@ export const ORCHESTRATION_WS_METHODS = {
   dispatchCommand: "orchestration.dispatchCommand",
   getTurnDiff: "orchestration.getTurnDiff",
   getFullThreadDiff: "orchestration.getFullThreadDiff",
+  getCheckpointFile: "orchestration.getCheckpointFile",
   replayEvents: "orchestration.replayEvents",
 } as const;
 
@@ -1072,6 +1073,85 @@ export type OrchestrationGetFullThreadDiffInput = typeof OrchestrationGetFullThr
 export const OrchestrationGetFullThreadDiffResult = ThreadTurnDiff;
 export type OrchestrationGetFullThreadDiffResult = typeof OrchestrationGetFullThreadDiffResult.Type;
 
+const ORCHESTRATION_CHECKPOINT_FILE_PATH_MAX_CHARS = 512;
+const ORCHESTRATION_CHECKPOINT_FILE_MIME_MAX_CHARS = 160;
+const ORCHESTRATION_CHECKPOINT_FILE_LANGUAGE_MAX_CHARS = 64;
+const OrchestrationCheckpointFilePath = TrimmedNonEmptyString.check(
+  Schema.isMaxLength(ORCHESTRATION_CHECKPOINT_FILE_PATH_MAX_CHARS),
+);
+const OrchestrationCheckpointFileMimeType = TrimmedNonEmptyString.check(
+  Schema.isMaxLength(ORCHESTRATION_CHECKPOINT_FILE_MIME_MAX_CHARS),
+);
+const OrchestrationCheckpointFileLanguage = TrimmedNonEmptyString.check(
+  Schema.isMaxLength(ORCHESTRATION_CHECKPOINT_FILE_LANGUAGE_MAX_CHARS),
+);
+const OrchestrationCheckpointFileLineEnding = Schema.Literals(["lf", "crlf", "cr", "none"]);
+export type OrchestrationCheckpointFileLineEnding =
+  typeof OrchestrationCheckpointFileLineEnding.Type;
+const OrchestrationCheckpointFileMissingReason = Schema.Literals(["deleted", "not-found"]);
+export type OrchestrationCheckpointFileMissingReason =
+  typeof OrchestrationCheckpointFileMissingReason.Type;
+const OrchestrationCheckpointFileTooLargePreviewKind = Schema.Literals(["text", "image"]);
+export type OrchestrationCheckpointFileTooLargePreviewKind =
+  typeof OrchestrationCheckpointFileTooLargePreviewKind.Type;
+
+export const OrchestrationGetCheckpointFileInput = Schema.Struct({
+  threadId: ThreadId,
+  turnCount: NonNegativeInt,
+  relativePath: OrchestrationCheckpointFilePath,
+});
+export type OrchestrationGetCheckpointFileInput = typeof OrchestrationGetCheckpointFileInput.Type;
+
+const OrchestrationCheckpointTextFileResult = Schema.Struct({
+  kind: Schema.Literal("text"),
+  path: OrchestrationCheckpointFilePath,
+  text: Schema.String,
+  mimeType: OrchestrationCheckpointFileMimeType,
+  byteSize: NonNegativeInt,
+  language: OrchestrationCheckpointFileLanguage,
+  lineEnding: OrchestrationCheckpointFileLineEnding,
+  isMarkdown: Schema.Boolean,
+});
+
+const OrchestrationCheckpointImageFileResult = Schema.Struct({
+  kind: Schema.Literal("image"),
+  path: OrchestrationCheckpointFilePath,
+  dataUrl: TrimmedNonEmptyString,
+  mimeType: OrchestrationCheckpointFileMimeType,
+  byteSize: NonNegativeInt,
+});
+
+const OrchestrationCheckpointBinaryFileResult = Schema.Struct({
+  kind: Schema.Literal("binary"),
+  path: OrchestrationCheckpointFilePath,
+  mimeType: OrchestrationCheckpointFileMimeType,
+  byteSize: NonNegativeInt,
+});
+
+const OrchestrationCheckpointMissingFileResult = Schema.Struct({
+  kind: Schema.Literal("missing"),
+  path: OrchestrationCheckpointFilePath,
+  reason: OrchestrationCheckpointFileMissingReason,
+});
+
+const OrchestrationCheckpointTooLargeFileResult = Schema.Struct({
+  kind: Schema.Literal("too-large"),
+  path: OrchestrationCheckpointFilePath,
+  previewKind: OrchestrationCheckpointFileTooLargePreviewKind,
+  mimeType: OrchestrationCheckpointFileMimeType,
+  byteSize: NonNegativeInt,
+  maxPreviewBytes: NonNegativeInt,
+});
+
+export const OrchestrationGetCheckpointFileResult = Schema.Union([
+  OrchestrationCheckpointTextFileResult,
+  OrchestrationCheckpointImageFileResult,
+  OrchestrationCheckpointBinaryFileResult,
+  OrchestrationCheckpointMissingFileResult,
+  OrchestrationCheckpointTooLargeFileResult,
+]);
+export type OrchestrationGetCheckpointFileResult = typeof OrchestrationGetCheckpointFileResult.Type;
+
 export const OrchestrationReplayEventsInput = Schema.Struct({
   fromSequenceExclusive: NonNegativeInt,
 });
@@ -1096,6 +1176,10 @@ export const OrchestrationRpcSchemas = {
   getFullThreadDiff: {
     input: OrchestrationGetFullThreadDiffInput,
     output: OrchestrationGetFullThreadDiffResult,
+  },
+  getCheckpointFile: {
+    input: OrchestrationGetCheckpointFileInput,
+    output: OrchestrationGetCheckpointFileResult,
   },
   replayEvents: {
     input: OrchestrationReplayEventsInput,
@@ -1129,6 +1213,14 @@ export class OrchestrationGetTurnDiffError extends Schema.TaggedErrorClass<Orche
 
 export class OrchestrationGetFullThreadDiffError extends Schema.TaggedErrorClass<OrchestrationGetFullThreadDiffError>()(
   "OrchestrationGetFullThreadDiffError",
+  {
+    message: TrimmedNonEmptyString,
+    cause: Schema.optional(Schema.Defect),
+  },
+) {}
+
+export class OrchestrationGetCheckpointFileError extends Schema.TaggedErrorClass<OrchestrationGetCheckpointFileError>()(
+  "OrchestrationGetCheckpointFileError",
   {
     message: TrimmedNonEmptyString,
     cause: Schema.optional(Schema.Defect),

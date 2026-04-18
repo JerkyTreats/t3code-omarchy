@@ -6,6 +6,8 @@ import {
   DEFAULT_PROVIDER_INTERACTION_MODE,
   DEFAULT_RUNTIME_MODE,
   OrchestrationCommand,
+  OrchestrationGetCheckpointFileInput,
+  OrchestrationGetCheckpointFileResult,
   OrchestrationEvent,
   OrchestrationGetTurnDiffInput,
   OrchestrationLatestTurn,
@@ -22,6 +24,8 @@ import {
 } from "./orchestration";
 
 const decodeTurnDiffInput = Schema.decodeUnknownEffect(OrchestrationGetTurnDiffInput);
+const decodeCheckpointFileInput = Schema.decodeUnknownEffect(OrchestrationGetCheckpointFileInput);
+const decodeCheckpointFileResult = Schema.decodeUnknownEffect(OrchestrationGetCheckpointFileResult);
 const decodeThreadTurnDiff = Schema.decodeUnknownEffect(ThreadTurnDiff);
 const decodeProjectCreateCommand = Schema.decodeUnknownEffect(ProjectCreateCommand);
 const decodeProjectCreatedPayload = Schema.decodeUnknownEffect(ProjectCreatedPayload);
@@ -74,6 +78,34 @@ it.effect("rejects thread turn diff when fromTurnCount > toTurnCount", () =>
       }),
     );
     assert.strictEqual(result._tag, "Failure");
+  }),
+);
+
+it.effect("decodes checkpoint file input after trimming the path", () =>
+  Effect.gen(function* () {
+    const parsed = yield* decodeCheckpointFileInput({
+      threadId: "thread-1",
+      turnCount: 2,
+      relativePath: " docs/guide.md ",
+    });
+    assert.strictEqual(parsed.relativePath, "docs/guide.md");
+  }),
+);
+
+it.effect("accepts checkpoint text file results", () =>
+  Effect.gen(function* () {
+    const parsed = yield* decodeCheckpointFileResult({
+      kind: "text",
+      path: "docs/guide.md",
+      text: "# Guide\n",
+      mimeType: "text/markdown",
+      byteSize: 8,
+      language: "markdown",
+      lineEnding: "lf",
+      isMarkdown: true,
+    });
+    assert.strictEqual(parsed.kind, "text");
+    assert.strictEqual(parsed.lineEnding, "lf");
   }),
 );
 

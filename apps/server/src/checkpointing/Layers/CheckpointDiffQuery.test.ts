@@ -73,6 +73,9 @@ describe("CheckpointDiffQueryLive", () => {
           diffCheckpointsCalls.push({ fromCheckpointRef, toCheckpointRef, cwd });
           return "diff patch";
         }),
+      statCheckpointFile: () => Effect.succeed(null),
+      readCheckpointFileText: () => Effect.succeed(null),
+      readCheckpointFileBytes: () => Effect.succeed(null),
       deleteCheckpointRefs: () => Effect.void,
     };
 
@@ -127,6 +130,9 @@ describe("CheckpointDiffQueryLive", () => {
       hasCheckpointRef: () => Effect.succeed(true),
       restoreCheckpoint: () => Effect.succeed(true),
       diffCheckpoints: () => Effect.succeed(""),
+      statCheckpointFile: () => Effect.succeed(null),
+      readCheckpointFileText: () => Effect.succeed(null),
+      readCheckpointFileBytes: () => Effect.succeed(null),
       deleteCheckpointRefs: () => Effect.void,
     };
 

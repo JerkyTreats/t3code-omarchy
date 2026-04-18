@@ -39,6 +39,17 @@ export interface DeleteCheckpointRefsInput {
   readonly checkpointRefs: ReadonlyArray<CheckpointRef>;
 }
 
+export interface CheckpointFileInput {
+  readonly cwd: string;
+  readonly checkpointRef: CheckpointRef;
+  readonly relativePath: string;
+}
+
+export interface CheckpointFileStat {
+  readonly byteSize: number;
+  readonly mimeType: string;
+}
+
 /**
  * CheckpointStoreShape - Service API for checkpoint capture/restore and diff access.
  */
@@ -81,6 +92,27 @@ export interface CheckpointStoreShape {
   readonly diffCheckpoints: (
     input: DiffCheckpointsInput,
   ) => Effect.Effect<string, CheckpointStoreError>;
+
+  /**
+   * Read file metadata for a checkpoint scoped path.
+   */
+  readonly statCheckpointFile: (
+    input: CheckpointFileInput,
+  ) => Effect.Effect<CheckpointFileStat | null, CheckpointStoreError>;
+
+  /**
+   * Read a UTF8 text file from a checkpoint scoped path.
+   */
+  readonly readCheckpointFileText: (
+    input: CheckpointFileInput,
+  ) => Effect.Effect<string | null, CheckpointStoreError>;
+
+  /**
+   * Read raw file bytes from a checkpoint scoped path.
+   */
+  readonly readCheckpointFileBytes: (
+    input: CheckpointFileInput,
+  ) => Effect.Effect<Uint8Array | null, CheckpointStoreError>;
 
   /**
    * Delete the provided checkpoint refs.

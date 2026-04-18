@@ -14,6 +14,7 @@ describe("parseDiffRouteSearch", () => {
       diff: "1",
       diffTurnId: "turn-1",
       diffFilePath: "src/app.ts",
+      diffView: "preview",
     });
   });
 
@@ -26,6 +27,7 @@ describe("parseDiffRouteSearch", () => {
     ).toEqual({
       diff: "1",
       diffTurnId: "turn-1",
+      diffView: "diff",
     });
 
     expect(
@@ -36,6 +38,7 @@ describe("parseDiffRouteSearch", () => {
     ).toEqual({
       diff: "1",
       diffTurnId: "turn-1",
+      diffView: "diff",
     });
   });
 
@@ -57,6 +60,7 @@ describe("parseDiffRouteSearch", () => {
 
     expect(parsed).toEqual({
       diff: "1",
+      diffView: "diff",
     });
   });
 
@@ -69,6 +73,23 @@ describe("parseDiffRouteSearch", () => {
 
     expect(parsed).toEqual({
       diff: "1",
+      diffView: "diff",
+    });
+  });
+
+  it("preserves an explicit diff view", () => {
+    const parsed = parseDiffRouteSearch({
+      diff: "1",
+      diffTurnId: "turn-1",
+      diffFilePath: "docs/guide.md",
+      diffView: "diff",
+    });
+
+    expect(parsed).toEqual({
+      diff: "1",
+      diffTurnId: "turn-1",
+      diffFilePath: "docs/guide.md",
+      diffView: "diff",
     });
   });
 });

@@ -730,6 +730,274 @@ label:has(> select#reasoning-effort) select {
   text-align: left;
 }
 
+.document-markdown {
+  min-width: 0;
+  color: color-mix(in srgb, var(--foreground) 88%, transparent);
+  overflow-wrap: anywhere;
+}
+
+.document-markdown > :first-child {
+  margin-top: 0;
+}
+
+.document-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.document-markdown h1,
+.document-markdown h2,
+.document-markdown h3,
+.document-markdown h4,
+.document-markdown h5,
+.document-markdown h6 {
+  margin: 1.35rem 0 0.7rem;
+  color: var(--foreground);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  scroll-margin-top: 1rem;
+}
+
+.document-markdown h1 {
+  font-size: 2rem;
+  line-height: 1.05;
+}
+
+.document-markdown h2 {
+  font-size: 1.5rem;
+  line-height: 1.12;
+}
+
+.document-markdown h3 {
+  font-size: 1.2rem;
+  line-height: 1.2;
+}
+
+.document-markdown h4,
+.document-markdown h5,
+.document-markdown h6 {
+  font-size: 1rem;
+  line-height: 1.3;
+}
+
+.document-markdown p,
+.document-markdown ul,
+.document-markdown ol,
+.document-markdown blockquote,
+.document-markdown pre,
+.document-markdown table,
+.document-markdown details {
+  margin: 0.85rem 0;
+}
+
+.document-markdown ul,
+.document-markdown ol {
+  padding-left: 1.35rem;
+}
+
+.document-markdown li + li {
+  margin-top: 0.3rem;
+}
+
+.document-markdown a {
+  color: color-mix(in srgb, var(--foreground) 70%, var(--primary));
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 38%, transparent);
+  text-underline-offset: 0.18em;
+}
+
+.document-markdown blockquote {
+  border-left: 2px solid color-mix(in srgb, var(--border) 55%, var(--foreground));
+  padding-left: 0.95rem;
+  color: var(--muted-foreground);
+}
+
+.document-markdown :not(pre) > code {
+  border: 1px solid var(--border);
+  border-radius: 0.45rem;
+  background: color-mix(in srgb, var(--muted) 82%, var(--background));
+  padding: 0.14rem 0.4rem;
+  font-size: 0.78rem;
+  color: var(--foreground);
+}
+
+.document-markdown table {
+  width: 100%;
+  overflow: hidden;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--border);
+  border-radius: 0.95rem;
+}
+
+.document-markdown thead th {
+  position: sticky;
+  top: 0;
+  background: color-mix(in srgb, var(--card) 88%, var(--background));
+}
+
+.document-markdown th,
+.document-markdown td {
+  border-bottom: 1px solid var(--border);
+  padding: 0.55rem 0.7rem;
+  text-align: left;
+}
+
+.document-markdown tr:last-child td {
+  border-bottom: none;
+}
+
+.document-heading-anchor {
+  color: inherit;
+  text-decoration: none;
+}
+
+.document-heading-anchor:hover {
+  color: color-mix(in srgb, var(--foreground) 78%, var(--primary));
+}
+
+.document-code-block {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--muted) 74%, var(--background));
+}
+
+.document-code-block .shiki {
+  margin: 0 !important;
+  padding: 1rem 1rem 1rem 1.05rem !important;
+  background: color-mix(in srgb, var(--muted) 74%, var(--background)) !important;
+}
+
+.document-code-copy {
+  position: absolute;
+  right: 0.65rem;
+  top: 0.65rem;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 1.75rem;
+  width: 1.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--background) 85%, transparent);
+  color: var(--muted-foreground);
+  transition:
+    color 120ms ease,
+    border-color 120ms ease,
+    background-color 120ms ease;
+}
+
+.document-code-copy:hover {
+  color: var(--foreground);
+  border-color: color-mix(in srgb, var(--border) 60%, var(--foreground));
+}
+
+.document-mermaid-block {
+  overflow: auto;
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  border-radius: 1rem;
+  background:
+    radial-gradient(
+      circle at top left,
+      color-mix(in srgb, var(--primary) 14%, transparent),
+      transparent 32%
+    ),
+    color-mix(in srgb, var(--card) 70%, var(--background));
+  padding: 1rem;
+}
+
+.document-mermaid-block svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.document-image-figure {
+  margin: 1rem 0;
+}
+
+.document-image {
+  width: 100%;
+  max-height: 72vh;
+  border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+  border-radius: 1.15rem;
+  background: color-mix(in srgb, var(--card) 68%, var(--background));
+  object-fit: contain;
+  box-shadow: 0 22px 64px -42px color-mix(in srgb, var(--foreground) 42%, transparent);
+}
+
+.document-image-caption {
+  margin-top: 0.55rem;
+  text-align: center;
+  font-size: 0.78rem;
+  color: var(--muted-foreground);
+}
+
+.document-image-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 160px;
+  border: 1px dashed var(--border);
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--card) 42%, var(--background));
+  color: var(--muted-foreground);
+  font-size: 0.85rem;
+}
+
+.document-outline-item[data-active="true"] {
+  background: color-mix(in srgb, var(--accent) 70%, transparent);
+  color: var(--accent-foreground);
+}
+
+.source-file-preview {
+  min-height: 0;
+}
+
+.source-file-preview .shiki {
+  margin: 0 !important;
+  min-height: 100%;
+  padding: 0.9rem 0 0.9rem 0 !important;
+  background: color-mix(in srgb, var(--card) 72%, var(--background)) !important;
+}
+
+.source-file-preview .line {
+  display: block;
+  min-height: 1.45rem;
+  padding-left: 4rem;
+  padding-right: 1rem;
+  counter-increment: source-line;
+  white-space: pre;
+}
+
+.source-file-preview[data-wrap="true"] .line {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.source-file-preview .line::before {
+  content: counter(source-line);
+  position: absolute;
+  left: 0;
+  width: 3rem;
+  padding-left: 0.8rem;
+  text-align: right;
+  color: color-mix(in srgb, var(--muted-foreground) 78%, transparent);
+}
+
+.source-file-preview code {
+  counter-reset: source-line;
+}
+
+.source-file-preview pre {
+  position: relative;
+  margin: 0;
+  overflow: auto;
+  font-size: 0.84rem;
+  line-height: 1.45rem;
+}
+
 /* Diffs theme bridge (match diff surfaces to app palette) */
 .diff-panel-viewport {
   background: color-mix(in srgb, var(--background) 94%, var(--card));

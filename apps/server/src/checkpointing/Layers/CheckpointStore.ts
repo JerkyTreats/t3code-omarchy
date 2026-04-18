@@ -9,14 +9,20 @@
  *
  * @module CheckpointStoreLive
  */
+import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 
+import Mime from "@effect/platform-node/Mime";
 import { Effect, Layer, FileSystem, Path } from "effect";
 
 import { CheckpointInvariantError } from "../Errors.ts";
 import { GitCommandError } from "@t3tools/contracts";
 import { GitCore } from "../../git/Services/GitCore.ts";
-import { CheckpointStore, type CheckpointStoreShape } from "../Services/CheckpointStore.ts";
+import {
+  CheckpointStore,
+  type CheckpointStoreShape,
+  type CheckpointFileStat,
+} from "../Services/CheckpointStore.ts";
 import { CheckpointRef } from "@t3tools/contracts";
 
 const makeCheckpointStore = Effect.gen(function* () {
@@ -251,6 +257,129 @@ const makeCheckpointStore = Effect.gen(function* () {
     },
   );
 
+  const resolveCheckpointBlobSpec = (
+    cwd: string,
+    checkpointRef: CheckpointRef,
+    relativePath: string,
+  ): Effect.Effect<string | null, GitCommandError> =>
+    Effect.gen(function* () {
+      const commitOid = yield* resolveCheckpointCommit(cwd, checkpointRef);
+      if (!commitOid) {
+        return null;
+      }
+      const normalizedRelativePath = relativePath.replaceAll("\\", "/").trim();
+      if (normalizedRelativePath.length === 0) {
+        return null;
+      }
+      return `${commitOid}:${normalizedRelativePath}`;
+    });
+
+  const statCheckpointFile: CheckpointStoreShape["statCheckpointFile"] = Effect.fn(
+    "statCheckpointFile",
+  )(function* (input) {
+    const operation = "CheckpointStore.statCheckpointFile";
+    const blobSpec = yield* resolveCheckpointBlobSpec(
+      input.cwd,
+      input.checkpointRef,
+      input.relativePath,
+    );
+    if (!blobSpec) {
+      return null;
+    }
+
+    const result = yield* git.execute({
+      operation,
+      cwd: input.cwd,
+      args: ["cat-file", "-s", blobSpec],
+      allowNonZeroExit: true,
+    });
+    if (result.code !== 0) {
+      return null;
+    }
+
+    const byteSize = Number.parseInt(result.stdout.trim(), 10);
+    if (!Number.isFinite(byteSize) || byteSize < 0) {
+      return yield* new GitCommandError({
+        operation,
+        command: "git cat-file -s",
+        cwd: input.cwd,
+        detail: "git cat-file -s returned an invalid file size.",
+      });
+    }
+
+    const mimeType = Mime.getType(input.relativePath) ?? "application/octet-stream";
+    const stat: CheckpointFileStat = {
+      byteSize,
+      mimeType,
+    };
+    return stat;
+  });
+
+  const readCheckpointFileBytes: CheckpointStoreShape["readCheckpointFileBytes"] = Effect.fn(
+    "readCheckpointFileBytes",
+  )(function* (input) {
+    const operation = "CheckpointStore.readCheckpointFileBytes";
+    const blobSpec = yield* resolveCheckpointBlobSpec(
+      input.cwd,
+      input.checkpointRef,
+      input.relativePath,
+    );
+    if (!blobSpec) {
+      return null;
+    }
+
+    const stats = yield* statCheckpointFile(input);
+    if (!stats) {
+      return null;
+    }
+
+    return yield* Effect.try({
+      try: () =>
+        new Uint8Array(
+          execFileSync("git", ["show", blobSpec], {
+            cwd: input.cwd,
+            encoding: "buffer",
+            maxBuffer: Math.max(1_000_000, stats.byteSize + 64 * 1024),
+            env: process.env,
+          }),
+        ),
+      catch: (cause) => {
+        const detail =
+          cause instanceof Error && "message" in cause
+            ? cause.message
+            : "Failed to read checkpoint file bytes.";
+        return new GitCommandError({
+          operation,
+          command: `git show ${blobSpec}`,
+          cwd: input.cwd,
+          detail,
+          cause,
+        });
+      },
+    });
+  });
+
+  const readCheckpointFileText: CheckpointStoreShape["readCheckpointFileText"] = Effect.fn(
+    "readCheckpointFileText",
+  )(function* (input) {
+    const fileBytes = yield* readCheckpointFileBytes(input);
+    if (!fileBytes) {
+      return null;
+    }
+
+    return yield* Effect.try({
+      try: () => new TextDecoder("utf-8", { fatal: true }).decode(fileBytes),
+      catch: (cause) =>
+        new GitCommandError({
+          operation: "CheckpointStore.readCheckpointFileText",
+          command: `git show ${input.checkpointRef}:${input.relativePath}`,
+          cwd: input.cwd,
+          detail: "Checkpoint file is not valid UTF-8 text.",
+          cause,
+        }),
+    });
+  });
+
   const deleteCheckpointRefs: CheckpointStoreShape["deleteCheckpointRefs"] = Effect.fn(
     "deleteCheckpointRefs",
   )(function* (input) {
@@ -275,6 +404,9 @@ const makeCheckpointStore = Effect.gen(function* () {
     hasCheckpointRef,
     restoreCheckpoint,
     diffCheckpoints,
+    statCheckpointFile,
+    readCheckpointFileText,
+    readCheckpointFileBytes,
     deleteCheckpointRefs,
   } satisfies CheckpointStoreShape;
 });

@@ -8,28 +8,11 @@ type RepoRef = {
 type WatchConfig = {
   upstream: {
     repo: string;
-    branch: string;
+    trackedVersion: string;
   };
   omarchy: {
     repo: string;
     trackedVersion: string;
-  };
-};
-
-type GitHubRepo = {
-  default_branch: string;
-};
-
-type GitHubCompare = {
-  status: string;
-  ahead_by: number;
-  behind_by: number;
-  html_url: string;
-  base_commit: {
-    sha: string;
-  };
-  merge_base_commit: {
-    sha: string;
   };
 };
 
@@ -73,10 +56,6 @@ function parseRepoRef(value: string): RepoRef {
     throw new Error(`Invalid repo reference: ${value}`);
   }
   return { owner, name };
-}
-
-function shortSha(sha: string): string {
-  return sha.slice(0, 7);
 }
 
 function normalizeVersion(tag: string): string {
@@ -166,22 +145,6 @@ async function githubRequest<T>(
   return (await response.json()) as T;
 }
 
-async function getRepo(repo: RepoRef): Promise<GitHubRepo> {
-  return githubRequest<GitHubRepo>(`/repos/${repo.owner}/${repo.name}`);
-}
-
-async function compareForkWithUpstream(
-  forkRepo: RepoRef,
-  forkBranch: string,
-  upstreamRepo: RepoRef,
-  upstreamBranch: string,
-): Promise<GitHubCompare> {
-  const basehead = `${forkRepo.owner}:${forkBranch}...${upstreamRepo.owner}:${upstreamBranch}`;
-  return githubRequest<GitHubCompare>(
-    `/repos/${forkRepo.owner}/${forkRepo.name}/compare/${encodeURIComponent(basehead)}`,
-  );
-}
-
 async function getLatestRelease(repo: RepoRef): Promise<GitHubRelease> {
   return githubRequest<GitHubRelease>(`/repos/${repo.owner}/${repo.name}/releases/latest`);
 }
@@ -224,34 +187,26 @@ function buildIssueBody(marker: string, lines: ReadonlyArray<string>): string {
   return [marker, "", ...lines].join("\n");
 }
 
-function buildUpstreamIssue(
-  forkRepo: RepoRef,
-  forkBranch: string,
-  config: WatchConfig,
-  compare: GitHubCompare,
-): IssueDraft | null {
-  if (compare.ahead_by <= 0) {
+function buildUpstreamIssue(config: WatchConfig, release: GitHubRelease): IssueDraft | null {
+  if (compareVersions(release.tag_name, config.upstream.trackedVersion) <= 0) {
     return null;
   }
 
   const marker = "<!-- external-watch:upstream -->";
   return {
     marker,
-    title: `Sync upstream changes from ${config.upstream.repo}`,
+    title: `Review upstream release ${release.tag_name}`,
     body: buildIssueBody(marker, [
-      `Upstream \`${config.upstream.repo}\` has commits that are not in this fork.`,
+      `Upstream \`${config.upstream.repo}\` has a newer release than the version tracked in this fork.`,
       "",
-      `- Fork branch: \`${forkBranch}\``,
-      `- Upstream branch: \`${config.upstream.branch}\``,
-      `- Upstream commits missing here: \`${String(compare.ahead_by)}\``,
-      `- Fork only commits: \`${String(compare.behind_by)}\``,
-      `- Compare status: \`${compare.status}\``,
-      `- Fork head SHA: \`${shortSha(compare.base_commit.sha)}\``,
-      `- Merge base SHA: \`${shortSha(compare.merge_base_commit.sha)}\``,
-      `- Compare URL: ${compare.html_url}`,
+      `- Tracked version: \`${config.upstream.trackedVersion}\``,
+      `- Latest release: \`${release.tag_name}\``,
+      `- Release URL: ${release.html_url}`,
+      `- Published at: \`${release.published_at ?? "unknown"}\``,
+      `- Update tracker file: \`${CONFIG_PATH}\``,
       `- Checked at: \`${new Date().toISOString()}\``,
       "",
-      `Update the fork, then close this issue when \`${forkRepo.owner}/${forkRepo.name}\` is aligned.`,
+      "Close this issue after the fork is aligned with the new upstream release and the tracked version is updated.",
     ]),
   };
 }
@@ -323,24 +278,15 @@ async function main(): Promise<void> {
 
   const repo = parseRepoRef(repositoryName);
   const config = await readConfig();
-  const upstreamRepo = parseRepoRef(config.upstream.repo);
 
-  const [forkMeta, compare, release, openIssues] = await Promise.all([
-    getRepo(repo),
-    getRepo(repo).then((forkRepository) =>
-      compareForkWithUpstream(
-        repo,
-        forkRepository.default_branch,
-        upstreamRepo,
-        config.upstream.branch,
-      ),
-    ),
+  const [upstreamRelease, release, openIssues] = await Promise.all([
+    getLatestRelease(parseRepoRef(config.upstream.repo)),
     getLatestRelease(parseRepoRef(config.omarchy.repo)),
     listOpenIssues(repo),
   ]);
 
   const drafts = [
-    buildUpstreamIssue(repo, forkMeta.default_branch, config, compare),
+    buildUpstreamIssue(config, upstreamRelease),
     buildOmarchyIssue(config, release),
   ].filter((draft): draft is IssueDraft => draft !== null);
 

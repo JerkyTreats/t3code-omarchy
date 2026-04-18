@@ -5,6 +5,7 @@ import {
   type OrchestrationCommand,
   type GitActionProgressEvent,
   type GitManagerServiceError,
+  OrchestrationGetCheckpointFileError,
   OrchestrationDispatchCommandError,
   type OrchestrationEvent,
   OrchestrationGetFullThreadDiffError,
@@ -24,6 +25,7 @@ import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstab
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 
 import { CheckpointDiffQuery } from "./checkpointing/Services/CheckpointDiffQuery";
+import { CheckpointFileQuery } from "./checkpointing/Services/CheckpointFileQuery";
 import { ServerConfig } from "./config";
 import { GitCore } from "./git/Services/GitCore";
 import { GitHubCli } from "./git/Services/GitHubCli";
@@ -54,6 +56,7 @@ const WsRpcLayer = WsRpcGroup.toLayer(
     const projectionSnapshotQuery = yield* ProjectionSnapshotQuery;
     const orchestrationEngine = yield* OrchestrationEngineService;
     const checkpointDiffQuery = yield* CheckpointDiffQuery;
+    const checkpointFileQuery = yield* CheckpointFileQuery;
     const keybindings = yield* Keybindings;
     const open = yield* Open;
     const gitManager = yield* GitManager;
@@ -422,6 +425,20 @@ const WsRpcLayer = WsRpcGroup.toLayer(
               (cause) =>
                 new OrchestrationGetFullThreadDiffError({
                   message: "Failed to load full thread diff",
+                  cause,
+                }),
+            ),
+          ),
+          { "rpc.aggregate": "orchestration" },
+        ),
+      [ORCHESTRATION_WS_METHODS.getCheckpointFile]: (input) =>
+        observeRpcEffect(
+          ORCHESTRATION_WS_METHODS.getCheckpointFile,
+          checkpointFileQuery.getCheckpointFile(input).pipe(
+            Effect.mapError(
+              (cause) =>
+                new OrchestrationGetCheckpointFileError({
+                  message: "Failed to load checkpoint file",
                   cause,
                 }),
             ),

@@ -1,4 +1,5 @@
 import {
+  OrchestrationGetCheckpointFileInput,
   OrchestrationGetFullThreadDiffInput,
   OrchestrationGetTurnDiffInput,
   ThreadId,
@@ -15,6 +16,13 @@ interface CheckpointDiffQueryInput {
   enabled?: boolean;
 }
 
+interface CheckpointFileQueryInput {
+  threadId: ThreadId | null;
+  turnCount: number | null;
+  relativePath: string | null;
+  enabled?: boolean;
+}
+
 export const providerQueryKeys = {
   all: ["providers"] as const,
   checkpointDiff: (input: CheckpointDiffQueryInput) =>
@@ -26,6 +34,8 @@ export const providerQueryKeys = {
       input.toTurnCount,
       input.cacheScope ?? null,
     ] as const,
+  checkpointFile: (input: CheckpointFileQueryInput) =>
+    ["providers", "checkpointFile", input.threadId, input.turnCount, input.relativePath] as const,
 };
 
 function decodeCheckpointDiffRequest(input: CheckpointDiffQueryInput) {
@@ -41,6 +51,14 @@ function decodeCheckpointDiffRequest(input: CheckpointDiffQueryInput) {
     fromTurnCount: input.fromTurnCount,
     toTurnCount: input.toTurnCount,
   }).pipe(Option.map((fields) => ({ kind: "turnDiff" as const, input: fields })));
+}
+
+function decodeCheckpointFileRequest(input: CheckpointFileQueryInput) {
+  return Schema.decodeUnknownOption(OrchestrationGetCheckpointFileInput)({
+    threadId: input.threadId,
+    turnCount: input.turnCount,
+    relativePath: input.relativePath,
+  });
 }
 
 function asCheckpointErrorMessage(error: unknown): string {
@@ -109,6 +127,46 @@ export function checkpointDiffQueryOptions(input: CheckpointDiffQueryInput) {
       }
     },
     enabled: (input.enabled ?? true) && !!input.threadId && decodedRequest._tag === "Some",
+    staleTime: Infinity,
+    retry: (failureCount, error) => {
+      if (isCheckpointTemporarilyUnavailable(error)) {
+        return failureCount < 12;
+      }
+      return failureCount < 3;
+    },
+    retryDelay: (attempt, error) =>
+      isCheckpointTemporarilyUnavailable(error)
+        ? Math.min(5_000, 250 * 2 ** (attempt - 1))
+        : Math.min(1_000, 100 * 2 ** (attempt - 1)),
+  });
+}
+
+export function checkpointFileQueryOptions(input: CheckpointFileQueryInput) {
+  const decodedRequest = decodeCheckpointFileRequest(input);
+
+  return queryOptions({
+    queryKey: providerQueryKeys.checkpointFile(input),
+    queryFn: async () => {
+      const api = ensureNativeApi();
+      if (!input.threadId || decodedRequest._tag === "None") {
+        throw new Error("Checkpoint file is unavailable.");
+      }
+
+      try {
+        return await api.orchestration.getCheckpointFile(decodedRequest.value);
+      } catch (error) {
+        const message = asCheckpointErrorMessage(error).trim();
+        throw new Error(message.length > 0 ? message : "Failed to load checkpoint file.", {
+          cause: error,
+        });
+      }
+    },
+    enabled:
+      (input.enabled ?? true) &&
+      !!input.threadId &&
+      decodedRequest._tag === "Some" &&
+      typeof input.relativePath === "string" &&
+      input.relativePath.trim().length > 0,
     staleTime: Infinity,
     retry: (failureCount, error) => {
       if (isCheckpointTemporarilyUnavailable(error)) {

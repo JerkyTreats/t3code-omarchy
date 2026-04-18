@@ -95,6 +95,7 @@ const rpcClientMock = {
     dispatchCommand: vi.fn(),
     getTurnDiff: vi.fn(),
     getFullThreadDiff: vi.fn(),
+    getCheckpointFile: vi.fn(),
     replayEvents: vi.fn(),
     onDomainEvent: vi.fn((listener: (event: OrchestrationEvent) => void) =>
       registerListener(orchestrationEventListeners, listener),

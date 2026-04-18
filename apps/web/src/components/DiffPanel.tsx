@@ -33,6 +33,7 @@ import { useStore } from "../store";
 import { useSettings } from "../hooks/useSettings";
 import { formatShortTimestamp } from "../timestampFormat";
 import { DiffPanelLoadingState, DiffPanelShell, type DiffPanelMode } from "./DiffPanelShell";
+import { CheckpointFilePreviewSurface } from "./CheckpointFilePreviewSurface";
 import { ToggleGroup, Toggle } from "./ui/toggle-group";
 
 type DiffRenderMode = "stacked" | "split";
@@ -210,6 +211,7 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
 
   const selectedTurnId = diffSearch.diffTurnId ?? null;
   const selectedFilePath = selectedTurnId !== null ? (diffSearch.diffFilePath ?? null) : null;
+  const selectedDiffView = diffSearch.diffView ?? (selectedFilePath !== null ? "preview" : "diff");
   const selectedTurn =
     selectedTurnId === null
       ? undefined
@@ -338,7 +340,7 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
       params: { threadId: activeThread.id },
       search: (previous) => {
         const rest = stripDiffSearchParams(previous);
-        return { ...rest, diff: "1", diffTurnId: turnId };
+        return { ...rest, diff: "1", diffTurnId: turnId, diffView: "diff" };
       },
     });
   };
@@ -349,7 +351,44 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
       params: { threadId: activeThread.id },
       search: (previous) => {
         const rest = stripDiffSearchParams(previous);
-        return { ...rest, diff: "1" };
+        return { ...rest, diff: "1", diffView: "diff" };
+      },
+    });
+  };
+  const setDiffView = (view: "preview" | "diff") => {
+    if (!activeThread) return;
+    void navigate({
+      to: "/$threadId",
+      params: { threadId: activeThread.id },
+      search: (previous) => {
+        const rest = stripDiffSearchParams(previous);
+        if (selectedTurnId === null) {
+          return { ...rest, diff: "1", diffView: "diff" };
+        }
+        return {
+          ...rest,
+          diff: "1",
+          diffTurnId: selectedTurnId,
+          ...(selectedFilePath ? { diffFilePath: selectedFilePath } : {}),
+          diffView: view,
+        };
+      },
+    });
+  };
+  const navigatePreviewFile = (relativePath: string) => {
+    if (!activeThread || selectedTurnId === null) return;
+    void navigate({
+      to: "/$threadId",
+      params: { threadId: activeThread.id },
+      search: (previous) => {
+        const rest = stripDiffSearchParams(previous);
+        return {
+          ...rest,
+          diff: "1",
+          diffTurnId: selectedTurnId,
+          diffFilePath: relativePath,
+          diffView: "preview" as const,
+        };
       },
     });
   };
@@ -507,25 +546,48 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-1 [-webkit-app-region:no-drag]">
-        <ToggleGroup
-          className="shrink-0"
-          variant="outline"
-          size="xs"
-          value={[diffRenderMode]}
-          onValueChange={(value) => {
-            const next = value[0];
-            if (next === "stacked" || next === "split") {
-              setDiffRenderMode(next);
-            }
-          }}
-        >
-          <Toggle aria-label="Stacked diff view" value="stacked">
-            <Rows3Icon className="size-3" />
-          </Toggle>
-          <Toggle aria-label="Split diff view" value="split">
-            <Columns2Icon className="size-3" />
-          </Toggle>
-        </ToggleGroup>
+        {selectedTurnId !== null && selectedFilePath ? (
+          <ToggleGroup
+            className="shrink-0"
+            variant="outline"
+            size="xs"
+            value={[selectedDiffView]}
+            onValueChange={(value) => {
+              const next = value[0];
+              if (next === "preview" || next === "diff") {
+                setDiffView(next);
+              }
+            }}
+          >
+            <Toggle aria-label="Preview file" value="preview">
+              <span className="px-0.5 text-[10px] font-medium">Preview</span>
+            </Toggle>
+            <Toggle aria-label="View diff" value="diff">
+              <span className="px-0.5 text-[10px] font-medium">Diff</span>
+            </Toggle>
+          </ToggleGroup>
+        ) : null}
+        {selectedDiffView === "diff" ? (
+          <ToggleGroup
+            className="shrink-0"
+            variant="outline"
+            size="xs"
+            value={[diffRenderMode]}
+            onValueChange={(value) => {
+              const next = value[0];
+              if (next === "stacked" || next === "split") {
+                setDiffRenderMode(next);
+              }
+            }}
+          >
+            <Toggle aria-label="Stacked diff view" value="stacked">
+              <Rows3Icon className="size-3" />
+            </Toggle>
+            <Toggle aria-label="Split diff view" value="split">
+              <Columns2Icon className="size-3" />
+            </Toggle>
+          </ToggleGroup>
+        ) : null}
         <Toggle
           aria-label={diffWordWrap ? "Disable diff line wrapping" : "Enable diff line wrapping"}
           title={diffWordWrap ? "Disable line wrapping" : "Enable line wrapping"}
@@ -568,7 +630,16 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
               </div>
             )}
             {!renderablePatch ? (
-              isLoadingCheckpointDiff ? (
+              selectedDiffView === "preview" && selectedTurn && selectedFilePath ? (
+                <CheckpointFilePreviewSurface
+                  threadId={selectedTurn.turnId}
+                  turnCount={selectedCheckpointTurnCount ?? 0}
+                  filePath={selectedFilePath}
+                  wordWrap={diffWordWrap}
+                  onNavigateToPath={navigatePreviewFile}
+                  onOpenFileInEditor={openDiffFileInEditor}
+                />
+              ) : isLoadingCheckpointDiff ? (
                 <DiffPanelLoadingState label="Loading checkpoint diff..." />
               ) : (
                 <div className="flex h-full items-center justify-center px-3 py-2 text-xs text-muted-foreground/70">
@@ -579,6 +650,15 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
                   </p>
                 </div>
               )
+            ) : selectedDiffView === "preview" && selectedTurn && selectedFilePath ? (
+              <CheckpointFilePreviewSurface
+                threadId={selectedTurn.turnId}
+                turnCount={selectedCheckpointTurnCount ?? 0}
+                filePath={selectedFilePath}
+                wordWrap={diffWordWrap}
+                onNavigateToPath={navigatePreviewFile}
+                onOpenFileInEditor={openDiffFileInEditor}
+              />
             ) : renderablePatch.kind === "files" ? (
               <Virtualizer
                 className="diff-render-surface h-full min-h-0 overflow-auto px-2 pb-2"
