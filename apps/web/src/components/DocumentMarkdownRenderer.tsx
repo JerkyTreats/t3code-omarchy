@@ -23,7 +23,6 @@ import { resolveDiffThemeName, type DiffThemeName } from "~/lib/diffRendering";
 import { useTheme } from "~/hooks/useTheme";
 import { cn } from "~/lib/utils";
 import { useCheckpointAssetResolver } from "./useCheckpointAssetResolver";
-import { DocumentOutlineRail, type DocumentOutlineItem } from "./DocumentOutlineRail";
 import { CheckpointImageLightbox } from "./CheckpointImageLightbox";
 import {
   createHighlightCacheKey,
@@ -86,36 +85,26 @@ function createSlugger() {
   };
 }
 
-function parseOutline(markdown: string): DocumentOutlineItem[] {
-  const outline: DocumentOutlineItem[] = [];
-  const slug = createSlugger();
-  let inFence = false;
-
-  for (const line of markdown.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (trimmed.startsWith("```")) {
-      inFence = !inFence;
-      continue;
-    }
-    if (inFence) {
-      continue;
-    }
-    const match = /^(#{1,6})\s+(.+?)\s*$/.exec(line);
-    if (!match) {
-      continue;
-    }
-    const text = match[2]?.trim() ?? "";
-    if (text.length === 0) {
-      continue;
-    }
-    outline.push({
-      id: slug(text),
-      text,
-      depth: match[1]?.length ?? 1,
-    });
-  }
-
-  return outline;
+function HeadingAnchor(props: {
+  id: string;
+  containerRef: React.RefObject<HTMLDivElement | null>;
+}) {
+  return (
+    <a
+      href={`#${props.id}`}
+      className="document-heading-anchor"
+      aria-label="Link to section"
+      onClick={(e) => {
+        e.preventDefault();
+        props.containerRef.current
+          ?.querySelector<HTMLElement>(`[data-document-heading-id='${props.id}']`)
+          ?.scrollIntoView({ block: "start", behavior: "smooth" });
+        history.replaceState(null, "", `#${props.id}`);
+      }}
+    >
+      #
+    </a>
+  );
 }
 
 function DocumentCodeBlock(props: {
@@ -335,52 +324,9 @@ export function DocumentMarkdownRenderer(props: {
   const { resolvedTheme } = useTheme();
   const themeName = resolveDiffThemeName(resolvedTheme);
   const { resolveDocumentLink } = useCheckpointAssetResolver({ filePath: props.filePath });
-  const outline = useMemo(() => parseOutline(props.markdown), [props.markdown]);
   const headingSlug = useMemo(() => createSlugger(), []);
   const containerRef = useRef<HTMLDivElement>(null);
   const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
-  const [activeHeadingId, setActiveHeadingId] = useState<string | null>(outline[0]?.id ?? null);
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) {
-      return;
-    }
-
-    const headings = Array.from(
-      container.querySelectorAll<HTMLElement>("[data-document-heading-id]"),
-    );
-    if (headings.length === 0) {
-      setActiveHeadingId(null);
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries
-          .filter((entry) => entry.isIntersecting)
-          .toSorted((left, right) => left.boundingClientRect.top - right.boundingClientRect.top)[0];
-        const headingId =
-          visible?.target instanceof HTMLElement ? visible.target.dataset.documentHeadingId : null;
-        if (headingId) {
-          setActiveHeadingId(headingId);
-        }
-      },
-      {
-        root: container,
-        rootMargin: "0px 0px -70% 0px",
-        threshold: [0, 1],
-      },
-    );
-
-    for (const heading of headings) {
-      observer.observe(heading);
-    }
-
-    return () => {
-      observer.disconnect();
-    };
-  }, [outline, props.markdown]);
 
   const markdownComponents = useMemo<Components>(
     () => ({
@@ -501,68 +447,56 @@ export function DocumentMarkdownRenderer(props: {
         );
       },
       h1({ children, ...headingProps }) {
-        const text = nodeToPlainText(children);
-        const id = headingSlug(text);
+        const id = headingSlug(nodeToPlainText(children));
         return (
           <h1 {...headingProps} id={id} data-document-heading-id={id}>
-            <a href={`#${id}`} className="document-heading-anchor">
-              {children}
-            </a>
+            {children}
+            <HeadingAnchor id={id} containerRef={containerRef} />
           </h1>
         );
       },
       h2({ children, ...headingProps }) {
-        const text = nodeToPlainText(children);
-        const id = headingSlug(text);
+        const id = headingSlug(nodeToPlainText(children));
         return (
           <h2 {...headingProps} id={id} data-document-heading-id={id}>
-            <a href={`#${id}`} className="document-heading-anchor">
-              {children}
-            </a>
+            {children}
+            <HeadingAnchor id={id} containerRef={containerRef} />
           </h2>
         );
       },
       h3({ children, ...headingProps }) {
-        const text = nodeToPlainText(children);
-        const id = headingSlug(text);
+        const id = headingSlug(nodeToPlainText(children));
         return (
           <h3 {...headingProps} id={id} data-document-heading-id={id}>
-            <a href={`#${id}`} className="document-heading-anchor">
-              {children}
-            </a>
+            {children}
+            <HeadingAnchor id={id} containerRef={containerRef} />
           </h3>
         );
       },
       h4({ children, ...headingProps }) {
-        const text = nodeToPlainText(children);
-        const id = headingSlug(text);
+        const id = headingSlug(nodeToPlainText(children));
         return (
           <h4 {...headingProps} id={id} data-document-heading-id={id}>
-            <a href={`#${id}`} className="document-heading-anchor">
-              {children}
-            </a>
+            {children}
+            <HeadingAnchor id={id} containerRef={containerRef} />
           </h4>
         );
       },
       h5({ children, ...headingProps }) {
-        const text = nodeToPlainText(children);
-        const id = headingSlug(text);
+        const id = headingSlug(nodeToPlainText(children));
         return (
           <h5 {...headingProps} id={id} data-document-heading-id={id}>
-            <a href={`#${id}`} className="document-heading-anchor">
-              {children}
-            </a>
+            {children}
+            <HeadingAnchor id={id} containerRef={containerRef} />
           </h5>
         );
       },
       h6({ children, ...headingProps }) {
-        const text = nodeToPlainText(children);
-        const id = headingSlug(text);
+        const id = headingSlug(nodeToPlainText(children));
         return (
           <h6 {...headingProps} id={id} data-document-heading-id={id}>
-            <a href={`#${id}`} className="document-heading-anchor">
-              {children}
-            </a>
+            {children}
+            <HeadingAnchor id={id} containerRef={containerRef} />
           </h6>
         );
       },
@@ -593,7 +527,7 @@ export function DocumentMarkdownRenderer(props: {
         />
       ) : null}
       <div className="document-preview-layout h-full min-h-0 overflow-auto" ref={containerRef}>
-        <div className="mx-auto grid min-h-full max-w-[1080px] grid-cols-1 gap-6 px-4 py-4 xl:grid-cols-[minmax(0,1fr)_220px]">
+        <div className="mx-auto min-h-full max-w-[860px] px-4 py-4">
           <article
             className={cn(
               "document-markdown min-w-0 rounded-[28px] border border-border/60 bg-card/55 p-5 shadow-[0_24px_80px_-48px_color-mix(in_srgb,var(--foreground)_42%,transparent)] backdrop-blur-md sm:p-7",
@@ -616,16 +550,6 @@ export function DocumentMarkdownRenderer(props: {
               </button>
             </div>
           </article>
-          <DocumentOutlineRail
-            items={outline}
-            activeId={activeHeadingId}
-            onSelect={(id) => {
-              const target = containerRef.current?.querySelector<HTMLElement>(
-                `[data-document-heading-id='${id}']`,
-              );
-              target?.scrollIntoView({ block: "start", behavior: "smooth" });
-            }}
-          />
         </div>
       </div>
     </div>

@@ -160,11 +160,12 @@ function buildFileDiffRenderKey(fileDiff: FileDiffMetadata): string {
 
 interface DiffPanelProps {
   mode?: DiffPanelMode;
+  showPanelTab?: boolean | undefined;
 }
 
 export { DiffWorkerPoolProvider } from "./DiffWorkerPoolProvider";
 
-export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
+export default function DiffPanel({ mode = "inline", showPanelTab = true }: DiffPanelProps) {
   const navigate = useNavigate();
   const { resolvedTheme } = useTheme();
   const settings = useSettings();
@@ -605,7 +606,7 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
   );
 
   return (
-    <DiffPanelShell mode={mode} header={headerRow}>
+    <DiffPanelShell mode={mode} header={headerRow} showPanelTab={showPanelTab}>
       {!activeThread ? (
         <div className="flex flex-1 items-center justify-center px-5 text-center text-xs text-muted-foreground/70">
           Select a thread to inspect turn diffs.
@@ -632,7 +633,7 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
             {!renderablePatch ? (
               selectedDiffView === "preview" && selectedTurn && selectedFilePath ? (
                 <CheckpointFilePreviewSurface
-                  threadId={selectedTurn.turnId}
+                  threadId={activeThreadId ?? selectedTurn.turnId}
                   turnCount={selectedCheckpointTurnCount ?? 0}
                   filePath={selectedFilePath}
                   wordWrap={diffWordWrap}
@@ -652,7 +653,7 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
               )
             ) : selectedDiffView === "preview" && selectedTurn && selectedFilePath ? (
               <CheckpointFilePreviewSurface
-                threadId={selectedTurn.turnId}
+                threadId={activeThreadId ?? selectedTurn.turnId}
                 turnCount={selectedCheckpointTurnCount ?? 0}
                 filePath={selectedFilePath}
                 wordWrap={diffWordWrap}

@@ -110,7 +110,7 @@ export function CheckpointFilePreviewSurface(props: {
           Open
         </button>
       </div>
-      <div className="min-h-0 flex-1 overflow-hidden">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {file.kind === "text" && file.isMarkdown && !file.path.toLowerCase().endsWith(".mdx") ? (
           <DocumentMarkdownRenderer
             threadId={props.threadId}

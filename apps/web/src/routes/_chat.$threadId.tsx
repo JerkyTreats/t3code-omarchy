@@ -10,6 +10,10 @@ import {
   DiffPanelShell,
   type DiffPanelMode,
 } from "../components/DiffPanelShell";
+import {
+  DiffPanelExpandedProvider,
+  useDiffPanelExpanded,
+} from "../components/DiffPanelExpandedContext";
 import { useComposerDraftStore } from "../composerDraftStore";
 import {
   type DiffRouteSearch,
@@ -60,19 +64,28 @@ const DiffPanelSheet = (props: {
   );
 };
 
-const DiffLoadingFallback = (props: { mode: DiffPanelMode }) => {
+const DiffLoadingFallback = (props: {
+  mode: DiffPanelMode;
+  showPanelTab?: boolean | undefined;
+}) => {
   return (
-    <DiffPanelShell mode={props.mode} header={<DiffPanelHeaderSkeleton />}>
+    <DiffPanelShell
+      mode={props.mode}
+      header={<DiffPanelHeaderSkeleton />}
+      showPanelTab={props.showPanelTab}
+    >
       <DiffPanelLoadingState label="Loading diff viewer..." />
     </DiffPanelShell>
   );
 };
 
-const LazyDiffPanel = (props: { mode: DiffPanelMode }) => {
+const LazyDiffPanel = (props: { mode: DiffPanelMode; showPanelTab?: boolean | undefined }) => {
   return (
     <DiffWorkerPoolProvider>
-      <Suspense fallback={<DiffLoadingFallback mode={props.mode} />}>
-        <DiffPanel mode={props.mode} />
+      <Suspense
+        fallback={<DiffLoadingFallback mode={props.mode} showPanelTab={props.showPanelTab} />}
+      >
+        <DiffPanel mode={props.mode} showPanelTab={props.showPanelTab} />
       </Suspense>
     </DiffWorkerPoolProvider>
   );
@@ -159,16 +172,17 @@ const DiffPanelInlineSidebar = (props: {
           storageKey: DIFF_INLINE_SIDEBAR_WIDTH_STORAGE_KEY,
         }}
       >
-        {renderDiffContent ? <LazyDiffPanel mode="sidebar" /> : null}
+        {renderDiffContent ? <LazyDiffPanel mode="sidebar" showPanelTab={diffOpen} /> : null}
         <SidebarRail />
       </Sidebar>
     </SidebarProvider>
   );
 };
 
-function ChatThreadRouteView() {
+function ChatThreadRouteContent() {
   const bootstrapComplete = useStore((store) => store.bootstrapComplete);
   const navigate = useNavigate();
+  const { panelExpanded, setPanelExpanded } = useDiffPanelExpanded();
   const threadId = Route.useParams({
     select: (params) => ThreadId.makeUnsafe(params.threadId),
   });
@@ -231,6 +245,16 @@ function ChatThreadRouteView() {
     }
   }, [gitOpen]);
 
+  const shouldRenderDiffContent = diffOpen || hasOpenedDiff;
+  const shouldRenderGitContent = gitOpen || hasOpenedGit;
+  const shouldShowGitPanel = gitOpen || (!diffOpen && hasOpenedGit);
+
+  useEffect(() => {
+    if (!diffOpen || shouldUseDiffSheet || shouldShowGitPanel) {
+      setPanelExpanded(false);
+    }
+  }, [diffOpen, setPanelExpanded, shouldShowGitPanel, shouldUseDiffSheet]);
+
   useEffect(() => {
     if (!bootstrapComplete) {
       return;
@@ -246,22 +270,25 @@ function ChatThreadRouteView() {
     return null;
   }
 
-  const shouldRenderDiffContent = diffOpen || hasOpenedDiff;
-  const shouldRenderGitContent = gitOpen || hasOpenedGit;
-  const shouldShowGitPanel = gitOpen || (!diffOpen && hasOpenedGit);
+  const conversationPanel =
+    panelExpanded && !shouldShowGitPanel && !shouldUseDiffSheet && shouldRenderDiffContent ? (
+      <LazyDiffPanel mode="conversation" />
+    ) : null;
 
   if (!shouldShowGitPanel && !shouldUseDiffSheet) {
     return (
       <>
         <SidebarInset className="h-dvh  min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground">
-          <ChatView threadId={threadId} />
+          <ChatView threadId={threadId} conversationPanel={conversationPanel} />
         </SidebarInset>
-        <DiffPanelInlineSidebar
-          diffOpen={diffOpen}
-          onCloseDiff={closeDiff}
-          onOpenDiff={openDiff}
-          renderDiffContent={shouldRenderDiffContent}
-        />
+        {panelExpanded ? null : (
+          <DiffPanelInlineSidebar
+            diffOpen={diffOpen}
+            onCloseDiff={closeDiff}
+            onOpenDiff={openDiff}
+            renderDiffContent={shouldRenderDiffContent}
+          />
+        )}
       </>
     );
   }
@@ -285,6 +312,14 @@ function ChatThreadRouteView() {
         </DiffPanelSheet>
       )}
     </>
+  );
+}
+
+function ChatThreadRouteView() {
+  return (
+    <DiffPanelExpandedProvider>
+      <ChatThreadRouteContent />
+    </DiffPanelExpandedProvider>
   );
 }
 

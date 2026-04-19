@@ -1,4 +1,3 @@
-import path from "node:path";
 import { useCallback } from "react";
 
 const EXTERNAL_SCHEME_PATTERN = /^[A-Za-z][A-Za-z0-9+.-]*:/;
@@ -21,6 +20,33 @@ function splitHref(input: string): { pathValue: string; hash: string } {
   };
 }
 
+function posixDirname(p: string): string {
+  const slashIndex = p.lastIndexOf("/");
+  if (slashIndex < 0) return ".";
+  if (slashIndex === 0) return "/";
+  return p.slice(0, slashIndex);
+}
+
+function posixNormalize(p: string): string {
+  const absolute = p.startsWith("/");
+  const parts = p.split("/");
+  const resolved: string[] = [];
+  for (const part of parts) {
+    if (part === "" || part === ".") continue;
+    if (part === "..") {
+      resolved.pop();
+    } else {
+      resolved.push(part);
+    }
+  }
+  const result = resolved.join("/");
+  return absolute ? `/${result}` : result || ".";
+}
+
+function posixJoin(...segments: string[]): string {
+  return posixNormalize(segments.join("/"));
+}
+
 function normalizeLocalDocumentPath(basePath: string, href: string): string | null {
   const decodedHref = href.trim();
   if (decodedHref.length === 0) {
@@ -31,12 +57,12 @@ function normalizeLocalDocumentPath(basePath: string, href: string): string | nu
     if (absoluteCandidate.length === 0) {
       return null;
     }
-    const normalizedAbsoluteCandidate = path.posix.normalize(absoluteCandidate);
+    const normalizedAbsoluteCandidate = posixNormalize(absoluteCandidate);
     return normalizedAbsoluteCandidate.startsWith("../") ? null : normalizedAbsoluteCandidate;
   }
 
-  const baseDirectory = path.posix.dirname(basePath);
-  const normalized = path.posix.normalize(path.posix.join(baseDirectory, decodedHref));
+  const baseDirectory = posixDirname(basePath);
+  const normalized = posixJoin(baseDirectory, decodedHref);
   if (normalized === "." || normalized.startsWith("../")) {
     return null;
   }
