@@ -115,7 +115,7 @@ export function FilePreviewSurface(props: {
         ) : null}
         {props.file.kind === "text" &&
         (!props.file.isMarkdown || props.file.path.toLowerCase().endsWith(".mdx")) ? (
-          <div className="h-full min-h-0 overflow-auto p-4">
+          <div className="flex h-full min-h-0 flex-col overflow-hidden">
             <SourceFilePreview
               code={props.file.text}
               language={props.file.language}

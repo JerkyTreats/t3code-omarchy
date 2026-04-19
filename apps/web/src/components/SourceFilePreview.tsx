@@ -62,7 +62,7 @@ export function SourceFilePreview(props: { code: string; language: string; wordW
   return (
     <div
       className={cn(
-        "source-file-preview min-h-0 overflow-auto rounded-2xl border border-border/60 bg-card/40",
+        "source-file-preview flex-1 min-h-0 overflow-auto",
         props.wordWrap && "data-[wrap=true]:[&_pre]:overflow-x-hidden",
       )}
       data-wrap={props.wordWrap ? "true" : "false"}
