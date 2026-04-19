@@ -49,6 +49,15 @@ const GitPullRequestState = Schema.Literals(["open", "closed", "merged"]);
 const GitPreparePullRequestThreadMode = Schema.Literals(["local", "worktree"]);
 export const GitHostingProviderKind = Schema.Literals(["github", "gitlab", "unknown"]);
 export type GitHostingProviderKind = typeof GitHostingProviderKind.Type;
+export const GitFileStatus = Schema.Literals([
+  "modified",
+  "added",
+  "deleted",
+  "renamed",
+  "untracked",
+  "conflicted",
+]);
+export type GitFileStatus = typeof GitFileStatus.Type;
 export const GitHostingProvider = Schema.Struct({
   kind: GitHostingProviderKind,
   name: TrimmedNonEmptyStringSchema,
@@ -239,6 +248,7 @@ const GitStatusLocalShape = {
     files: Schema.Array(
       Schema.Struct({
         path: TrimmedNonEmptyStringSchema,
+        status: GitFileStatus,
         insertions: NonNegativeInt,
         deletions: NonNegativeInt,
       }),

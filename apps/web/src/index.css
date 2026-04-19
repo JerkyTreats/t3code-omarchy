@@ -1023,7 +1023,7 @@ label:has(> select#reasoning-effort) select {
 }
 
 /* Diffs theme bridge (match diff surfaces to app palette) */
-.diff-panel-conversation-shell {
+.document-chrome-shell {
   background:
     radial-gradient(
       circle at top,
@@ -1038,10 +1038,28 @@ label:has(> select#reasoning-effort) select {
   box-shadow: 0 32px 120px -72px color-mix(in srgb, var(--foreground) 40%, transparent);
 }
 
-.diff-panel-conversation-shell .diff-panel-viewport {
+.document-chrome-shell--explorer {
+  background:
+    radial-gradient(
+      circle at top left,
+      color-mix(in srgb, var(--primary) 7%, transparent),
+      transparent 42%
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--background) 97%, var(--card)) 0%,
+      color-mix(in srgb, var(--background) 93%, var(--card)) 100%
+    );
+  box-shadow: 0 24px 80px -56px color-mix(in srgb, var(--foreground) 30%, transparent);
+}
+
+.document-chrome-shell .document-viewport,
+.document-chrome-shell--explorer .document-viewport,
+.document-chrome-shell .diff-panel-viewport {
   background: transparent;
 }
 
+.document-viewport,
 .diff-panel-viewport {
   background: color-mix(in srgb, var(--background) 94%, var(--card));
 }

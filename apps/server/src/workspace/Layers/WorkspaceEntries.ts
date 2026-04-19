@@ -3,7 +3,7 @@ import type { Dirent } from "node:fs";
 
 import { Cache, Duration, Effect, Exit, Layer, Option, Path } from "effect";
 
-import { type ProjectEntry } from "@t3tools/contracts";
+import { type ProjectEntry, type ProjectTreeEntry } from "@t3tools/contracts";
 
 import { GitCore } from "../../git/Services/GitCore.ts";
 import {
@@ -44,6 +44,11 @@ interface RankedWorkspaceEntry {
   entry: SearchableWorkspaceEntry;
   score: number;
 }
+
+const NATURAL_SORT_COLLATOR = new Intl.Collator(undefined, {
+  numeric: true,
+  sensitivity: "base",
+});
 
 function toPosixPath(input: string): string {
   return input.replaceAll("\\", "/");
@@ -148,6 +153,25 @@ function compareRankedWorkspaceEntries(
   const scoreDelta = left.score - right.score;
   if (scoreDelta !== 0) return scoreDelta;
   return left.entry.path.localeCompare(right.entry.path);
+}
+
+function compareWorkspaceEntries(
+  left: Pick<SearchableWorkspaceEntry, "kind" | "path">,
+  right: Pick<SearchableWorkspaceEntry, "kind" | "path">,
+): number {
+  if (left.kind !== right.kind) {
+    return left.kind === "directory" ? -1 : 1;
+  }
+  return NATURAL_SORT_COLLATOR.compare(left.path, right.path);
+}
+
+function toProjectTreeEntry(entry: SearchableWorkspaceEntry): ProjectTreeEntry {
+  return {
+    path: entry.path,
+    name: basenameOf(entry.path),
+    kind: entry.kind,
+    parentPath: entry.parentPath ?? null,
+  };
 }
 
 function findInsertionIndex(
@@ -494,8 +518,34 @@ export const makeWorkspaceEntries = Effect.gen(function* () {
     },
   );
 
+  const listDirectory: WorkspaceEntriesShape["listDirectory"] = Effect.fn(
+    "WorkspaceEntries.listDirectory",
+  )(function* (input) {
+    const normalizedCwd = yield* normalizeWorkspaceRoot(input.cwd);
+    return yield* Cache.get(workspaceIndexCache, normalizedCwd).pipe(
+      Effect.map((index) => {
+        const limit = Math.max(1, Math.floor(input.limit ?? 200));
+        const directoryPath = input.directoryPath ?? null;
+        const entries = index.entries
+          .filter((entry) => (entry.parentPath ?? null) === directoryPath)
+          .toSorted(compareWorkspaceEntries)
+          .slice(0, limit)
+          .map(toProjectTreeEntry);
+        const matchingCount = index.entries.filter(
+          (entry) => (entry.parentPath ?? null) === directoryPath,
+        ).length;
+
+        return {
+          entries,
+          truncated: index.truncated || matchingCount > limit,
+        };
+      }),
+    );
+  });
+
   return {
     invalidate,
+    listDirectory,
     search,
   } satisfies WorkspaceEntriesShape;
 });

@@ -9,7 +9,12 @@
 import { Schema, ServiceMap } from "effect";
 import type { Effect } from "effect";
 
-import type { ProjectSearchEntriesInput, ProjectSearchEntriesResult } from "@t3tools/contracts";
+import type {
+  ProjectListDirectoryInput,
+  ProjectListDirectoryResult,
+  ProjectSearchEntriesInput,
+  ProjectSearchEntriesResult,
+} from "@t3tools/contracts";
 
 export class WorkspaceEntriesError extends Schema.TaggedErrorClass<WorkspaceEntriesError>()(
   "WorkspaceEntriesError",
@@ -33,6 +38,13 @@ export interface WorkspaceEntriesShape {
   readonly search: (
     input: ProjectSearchEntriesInput,
   ) => Effect.Effect<ProjectSearchEntriesResult, WorkspaceEntriesError>;
+
+  /**
+   * List direct children for a directory within the workspace root.
+   */
+  readonly listDirectory: (
+    input: ProjectListDirectoryInput,
+  ) => Effect.Effect<ProjectListDirectoryResult, WorkspaceEntriesError>;
 
   /**
    * Drop any cached workspace entries for the given workspace root.

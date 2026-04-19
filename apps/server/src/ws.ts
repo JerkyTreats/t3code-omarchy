@@ -15,6 +15,8 @@ import {
   ProjectSearchEntriesError,
   ProjectWriteFileError,
   OrchestrationReplayEventsError,
+  ProjectListDirectoryError,
+  ProjectReadFileError,
   ThreadId,
   type TerminalEvent,
   WS_METHODS,
@@ -47,6 +49,7 @@ import { ServerRuntimeStartup } from "./serverRuntimeStartup";
 import { ServerSettingsService } from "./serverSettings";
 import { TerminalManager } from "./terminal/Services/Manager";
 import { WorkspaceEntries } from "./workspace/Services/WorkspaceEntries";
+import { WorkspaceFileQuery } from "./workspace/Services/WorkspaceFileQuery";
 import { WorkspaceFileSystem } from "./workspace/Services/WorkspaceFileSystem";
 import { WorkspacePathOutsideRootError } from "./workspace/Services/WorkspacePaths";
 import { ProjectSetupScriptRunner } from "./project/Services/ProjectSetupScriptRunner";
@@ -70,6 +73,7 @@ const WsRpcLayer = WsRpcGroup.toLayer(
     const serverSettings = yield* ServerSettingsService;
     const startup = yield* ServerRuntimeStartup;
     const workspaceEntries = yield* WorkspaceEntries;
+    const workspaceFileQuery = yield* WorkspaceFileQuery;
     const workspaceFileSystem = yield* WorkspaceFileSystem;
     const projectSetupScriptRunner = yield* ProjectSetupScriptRunner;
     const serverCommandId = (tag: string) =>
@@ -561,6 +565,36 @@ const WsRpcLayer = WsRpcGroup.toLayer(
                   cause,
                 }),
             ),
+          ),
+          { "rpc.aggregate": "workspace" },
+        ),
+      [WS_METHODS.projectsListDirectory]: (input) =>
+        observeRpcEffect(
+          WS_METHODS.projectsListDirectory,
+          workspaceEntries.listDirectory(input).pipe(
+            Effect.mapError(
+              (cause) =>
+                new ProjectListDirectoryError({
+                  message: `Failed to list workspace directory: ${cause.detail}`,
+                  cause,
+                }),
+            ),
+          ),
+          { "rpc.aggregate": "workspace" },
+        ),
+      [WS_METHODS.projectsReadFile]: (input) =>
+        observeRpcEffect(
+          WS_METHODS.projectsReadFile,
+          workspaceFileQuery.readFile(input).pipe(
+            Effect.mapError((cause) => {
+              const message = Schema.is(WorkspacePathOutsideRootError)(cause)
+                ? "Workspace file path must stay within the project root."
+                : "Failed to read workspace file";
+              return new ProjectReadFileError({
+                message,
+                cause,
+              });
+            }),
           ),
           { "rpc.aggregate": "workspace" },
         ),

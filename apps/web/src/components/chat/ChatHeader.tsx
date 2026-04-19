@@ -6,7 +6,7 @@ import {
 } from "@t3tools/contracts";
 import { memo } from "react";
 import GitActionsControl from "../GitActionsControl";
-import { DiffIcon, TerminalSquareIcon } from "lucide-react";
+import { DiffIcon, FolderTreeIcon, TerminalSquareIcon } from "lucide-react";
 import { Badge } from "../ui/badge";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import ProjectScriptsControl, { type NewProjectScriptInput } from "../ProjectScriptsControl";
@@ -31,6 +31,7 @@ interface ChatHeaderProps {
   gitCwd: string | null;
   gitOpen?: boolean;
   diffOpen: boolean;
+  filesOpen: boolean;
   onRunProjectScript: (script: ProjectScript) => void;
   onAddProjectScript: (input: NewProjectScriptInput) => Promise<void>;
   onUpdateProjectScript: (scriptId: string, input: NewProjectScriptInput) => Promise<void>;
@@ -38,6 +39,7 @@ interface ChatHeaderProps {
   onToggleTerminal: () => void;
   onToggleGit?: () => void;
   onToggleDiff: () => void;
+  onToggleFiles: () => void;
 }
 
 export const ChatHeader = memo(function ChatHeader({
@@ -57,6 +59,7 @@ export const ChatHeader = memo(function ChatHeader({
   gitCwd,
   gitOpen = false,
   diffOpen,
+  filesOpen,
   onRunProjectScript,
   onAddProjectScript,
   onUpdateProjectScript,
@@ -64,6 +67,7 @@ export const ChatHeader = memo(function ChatHeader({
   onToggleTerminal,
   onToggleGit = () => undefined,
   onToggleDiff,
+  onToggleFiles,
 }: ChatHeaderProps) {
   return (
     <div className="@container/header-actions flex min-w-0 flex-1 items-center gap-2">
@@ -135,6 +139,28 @@ export const ChatHeader = memo(function ChatHeader({
               : terminalToggleShortcutLabel
                 ? `Toggle terminal drawer (${terminalToggleShortcutLabel})`
                 : "Toggle terminal drawer"}
+          </TooltipPopup>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Toggle
+                className="shrink-0"
+                pressed={filesOpen}
+                onPressedChange={onToggleFiles}
+                aria-label="Toggle project files panel"
+                variant="outline"
+                size="xs"
+                disabled={!activeProjectName}
+              >
+                <FolderTreeIcon className="size-3" />
+              </Toggle>
+            }
+          />
+          <TooltipPopup side="bottom">
+            {!activeProjectName
+              ? "Project files are unavailable until this thread has an active project."
+              : "Toggle project files panel"}
           </TooltipPopup>
         </Tooltip>
         <Tooltip>

@@ -18,7 +18,7 @@ import {
 } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
-import { GitCommandError, type GitBranch } from "@t3tools/contracts";
+import { GitCommandError, type GitBranch, type GitFileStatus } from "@t3tools/contracts";
 import { dedupeRemoteBranchesWithLocalMatches } from "@t3tools/shared/git";
 import { compactTraceAttributes } from "../../observability/Attributes.ts";
 import { gitCommandDuration, gitCommandsTotal, withMetrics } from "../../observability/Metrics.ts";
@@ -170,6 +170,50 @@ function parsePorcelainPath(line: string): string | null {
   const parts = line.trim().split(/\s+/g);
   const filePath = parts.at(-1) ?? "";
   return filePath.length > 0 ? filePath : null;
+}
+
+function normalizeGitFileStatus(line: string): GitFileStatus | null {
+  if (line.startsWith("? ")) {
+    return "untracked";
+  }
+  if (line.startsWith("u ")) {
+    return "conflicted";
+  }
+  if (!(line.startsWith("1 ") || line.startsWith("2 "))) {
+    return null;
+  }
+
+  const parts = line.trim().split(/\s+/g);
+  const statusField = parts[1] ?? "";
+  const indexStatus = statusField[0] ?? ".";
+  const worktreeStatus = statusField[1] ?? ".";
+
+  if (
+    indexStatus === "U" ||
+    worktreeStatus === "U" ||
+    (indexStatus === "A" && worktreeStatus === "A") ||
+    (indexStatus === "D" && worktreeStatus === "D")
+  ) {
+    return "conflicted";
+  }
+  if (indexStatus === "R" || worktreeStatus === "R" || line.startsWith("2 ")) {
+    return "renamed";
+  }
+  if (indexStatus === "A" || worktreeStatus === "A") {
+    return "added";
+  }
+  if (indexStatus === "D" || worktreeStatus === "D") {
+    return "deleted";
+  }
+  if (
+    indexStatus === "M" ||
+    worktreeStatus === "M" ||
+    indexStatus === "T" ||
+    worktreeStatus === "T"
+  ) {
+    return "modified";
+  }
+  return "modified";
 }
 
 function parseBranchLine(line: string): { name: string; current: boolean } | null {
@@ -1272,6 +1316,7 @@ export const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
     let behindCount = 0;
     let hasWorkingTreeChanges = false;
     const changedFilesWithoutNumstat = new Set<string>();
+    const statusByPath = new Map<string, GitFileStatus>();
     const conflictedFiles = new Set<string>();
 
     for (const line of statusStdout.split(/\r?\n/g)) {
@@ -1295,7 +1340,13 @@ export const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
       if (line.trim().length > 0 && !line.startsWith("#")) {
         hasWorkingTreeChanges = true;
         const pathValue = parsePorcelainPath(line);
-        if (pathValue) changedFilesWithoutNumstat.add(pathValue);
+        const normalizedStatus = normalizeGitFileStatus(line);
+        if (pathValue) {
+          changedFilesWithoutNumstat.add(pathValue);
+          if (normalizedStatus) {
+            statusByPath.set(pathValue, normalizedStatus);
+          }
+        }
         if (line.startsWith("u ") && pathValue) {
           conflictedFiles.add(pathValue);
         }
@@ -1325,13 +1376,23 @@ export const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
       .map(([filePath, stat]) => {
         insertions += stat.insertions;
         deletions += stat.deletions;
-        return { path: filePath, insertions: stat.insertions, deletions: stat.deletions };
+        return {
+          path: filePath,
+          status: statusByPath.get(filePath) ?? "modified",
+          insertions: stat.insertions,
+          deletions: stat.deletions,
+        };
       })
       .toSorted((a, b) => a.path.localeCompare(b.path));
 
     for (const filePath of changedFilesWithoutNumstat) {
       if (fileStatMap.has(filePath)) continue;
-      files.push({ path: filePath, insertions: 0, deletions: 0 });
+      files.push({
+        path: filePath,
+        status: statusByPath.get(filePath) ?? "modified",
+        insertions: 0,
+        deletions: 0,
+      });
     }
     files.sort((a, b) => a.path.localeCompare(b.path));
 

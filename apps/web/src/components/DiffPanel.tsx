@@ -24,7 +24,7 @@ import { checkpointDiffQueryOptions } from "~/lib/providerReactQuery";
 import { cn } from "~/lib/utils";
 import { readNativeApi } from "../nativeApi";
 import { resolvePathLinkTarget } from "../terminal-links";
-import { parseDiffRouteSearch, stripDiffSearchParams } from "../diffRouteSearch";
+import { parseChatPanelRouteSearch, stripChatPanelSearchParams } from "../chatPanelRouteSearch";
 import { useTheme } from "../hooks/useTheme";
 import { buildPatchCacheKey } from "../lib/diffRendering";
 import { resolveDiffThemeName } from "../lib/diffRendering";
@@ -180,8 +180,11 @@ export default function DiffPanel({ mode = "inline", showPanelTab = true }: Diff
     strict: false,
     select: (params) => (params.threadId ? ThreadId.makeUnsafe(params.threadId) : null),
   });
-  const diffSearch = useSearch({ strict: false, select: (search) => parseDiffRouteSearch(search) });
-  const diffOpen = diffSearch.diff === "1";
+  const diffSearch = useSearch({
+    strict: false,
+    select: (search) => parseChatPanelRouteSearch(search),
+  });
+  const diffOpen = diffSearch.panel === "diff";
   const activeThreadId = routeThreadId;
   const activeThread = useStore((store) =>
     activeThreadId ? store.threads.find((thread) => thread.id === activeThreadId) : undefined,
@@ -340,8 +343,8 @@ export default function DiffPanel({ mode = "inline", showPanelTab = true }: Diff
       to: "/$threadId",
       params: { threadId: activeThread.id },
       search: (previous) => {
-        const rest = stripDiffSearchParams(previous);
-        return { ...rest, diff: "1", diffTurnId: turnId, diffView: "diff" };
+        const rest = stripChatPanelSearchParams(previous);
+        return { ...rest, panel: "diff", diffTurnId: turnId, diffView: "diff" };
       },
     });
   };
@@ -351,8 +354,8 @@ export default function DiffPanel({ mode = "inline", showPanelTab = true }: Diff
       to: "/$threadId",
       params: { threadId: activeThread.id },
       search: (previous) => {
-        const rest = stripDiffSearchParams(previous);
-        return { ...rest, diff: "1", diffView: "diff" };
+        const rest = stripChatPanelSearchParams(previous);
+        return { ...rest, panel: "diff", diffView: "diff" };
       },
     });
   };
@@ -362,13 +365,13 @@ export default function DiffPanel({ mode = "inline", showPanelTab = true }: Diff
       to: "/$threadId",
       params: { threadId: activeThread.id },
       search: (previous) => {
-        const rest = stripDiffSearchParams(previous);
+        const rest = stripChatPanelSearchParams(previous);
         if (selectedTurnId === null) {
-          return { ...rest, diff: "1", diffView: "diff" };
+          return { ...rest, panel: "diff", diffView: "diff" };
         }
         return {
           ...rest,
-          diff: "1",
+          panel: "diff",
           diffTurnId: selectedTurnId,
           ...(selectedFilePath ? { diffFilePath: selectedFilePath } : {}),
           diffView: view,
@@ -382,10 +385,10 @@ export default function DiffPanel({ mode = "inline", showPanelTab = true }: Diff
       to: "/$threadId",
       params: { threadId: activeThread.id },
       search: (previous) => {
-        const rest = stripDiffSearchParams(previous);
+        const rest = stripChatPanelSearchParams(previous);
         return {
           ...rest,
-          diff: "1",
+          panel: "diff",
           diffTurnId: selectedTurnId,
           diffFilePath: relativePath,
           diffView: "preview" as const,

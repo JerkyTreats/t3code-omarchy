@@ -1,7 +1,9 @@
 import { Schema } from "effect";
 import { PositiveInt, TrimmedNonEmptyString } from "./baseSchemas";
+import { OrchestrationGetCheckpointFileResult } from "./orchestration";
 
 const PROJECT_SEARCH_ENTRIES_MAX_LIMIT = 200;
+const PROJECT_LIST_DIRECTORY_MAX_LIMIT = 500;
 const PROJECT_WRITE_FILE_PATH_MAX_LENGTH = 512;
 
 export const ProjectSearchEntriesInput = Schema.Struct({
@@ -34,6 +36,37 @@ export class ProjectSearchEntriesError extends Schema.TaggedErrorClass<ProjectSe
   },
 ) {}
 
+export const ProjectListDirectoryInput = Schema.Struct({
+  cwd: TrimmedNonEmptyString,
+  directoryPath: Schema.NullOr(TrimmedNonEmptyString),
+  limit: Schema.optional(
+    PositiveInt.check(Schema.isLessThanOrEqualTo(PROJECT_LIST_DIRECTORY_MAX_LIMIT)),
+  ),
+});
+export type ProjectListDirectoryInput = typeof ProjectListDirectoryInput.Type;
+
+export const ProjectTreeEntry = Schema.Struct({
+  path: TrimmedNonEmptyString,
+  name: TrimmedNonEmptyString,
+  kind: ProjectEntryKind,
+  parentPath: Schema.NullOr(TrimmedNonEmptyString),
+});
+export type ProjectTreeEntry = typeof ProjectTreeEntry.Type;
+
+export const ProjectListDirectoryResult = Schema.Struct({
+  entries: Schema.Array(ProjectTreeEntry),
+  truncated: Schema.Boolean,
+});
+export type ProjectListDirectoryResult = typeof ProjectListDirectoryResult.Type;
+
+export class ProjectListDirectoryError extends Schema.TaggedErrorClass<ProjectListDirectoryError>()(
+  "ProjectListDirectoryError",
+  {
+    message: TrimmedNonEmptyString,
+    cause: Schema.optional(Schema.Defect),
+  },
+) {}
+
 export const ProjectWriteFileInput = Schema.Struct({
   cwd: TrimmedNonEmptyString,
   relativePath: TrimmedNonEmptyString.check(Schema.isMaxLength(PROJECT_WRITE_FILE_PATH_MAX_LENGTH)),
@@ -48,6 +81,23 @@ export type ProjectWriteFileResult = typeof ProjectWriteFileResult.Type;
 
 export class ProjectWriteFileError extends Schema.TaggedErrorClass<ProjectWriteFileError>()(
   "ProjectWriteFileError",
+  {
+    message: TrimmedNonEmptyString,
+    cause: Schema.optional(Schema.Defect),
+  },
+) {}
+
+export const ProjectReadFileInput = Schema.Struct({
+  cwd: TrimmedNonEmptyString,
+  relativePath: TrimmedNonEmptyString.check(Schema.isMaxLength(PROJECT_WRITE_FILE_PATH_MAX_LENGTH)),
+});
+export type ProjectReadFileInput = typeof ProjectReadFileInput.Type;
+
+export const ProjectReadFileResult = OrchestrationGetCheckpointFileResult;
+export type ProjectReadFileResult = typeof ProjectReadFileResult.Type;
+
+export class ProjectReadFileError extends Schema.TaggedErrorClass<ProjectReadFileError>()(
+  "ProjectReadFileError",
   {
     message: TrimmedNonEmptyString,
     cause: Schema.optional(Schema.Defect),

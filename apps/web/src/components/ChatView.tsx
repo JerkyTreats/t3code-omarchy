@@ -36,8 +36,7 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useGitStatus } from "~/lib/gitStatusState";
 import { projectSearchEntriesQueryOptions } from "~/lib/projectReactQuery";
 import { isElectron } from "../env";
-import { parseDiffRouteSearch, stripDiffSearchParams } from "../diffRouteSearch";
-import { parseGitPanelRouteSearch, stripGitPanelSearchParams } from "../gitPanelRouteSearch";
+import { parseChatPanelRouteSearch, stripChatPanelSearchParams } from "../chatPanelRouteSearch";
 import {
   clampCollapsedComposerCursor,
   type ComposerTrigger,
@@ -596,10 +595,7 @@ export default function ChatView({ threadId, conversationPanel = null }: ChatVie
   const navigate = useNavigate();
   const rawSearch = useSearch({
     strict: false,
-    select: (params) => ({
-      ...parseDiffRouteSearch(params),
-      ...parseGitPanelRouteSearch(params),
-    }),
+    select: (params) => parseChatPanelRouteSearch(params),
   });
   const { resolvedTheme } = useTheme();
   const composerDraft = useComposerThreadDraft(threadId);
@@ -861,8 +857,9 @@ export default function ChatView({ threadId, conversationPanel = null }: ChatVie
   const isServerThread = serverThread !== undefined;
   const isLocalDraftThread = !isServerThread && localDraftThread !== undefined;
   const canCheckoutPullRequestIntoThread = isLocalDraftThread;
-  const diffOpen = rawSearch.diff === "1";
-  const gitOpen = rawSearch.github === "1";
+  const diffOpen = rawSearch.panel === "diff";
+  const gitOpen = rawSearch.panel === "git";
+  const filesOpen = rawSearch.panel === "files";
   const activeThreadId = activeThread?.id ?? null;
   const existingOpenTerminalThreadIds = useMemo(() => {
     const existingThreadIds = new Set<ThreadId>([...serverThreadIds, ...draftThreadIds]);
@@ -903,6 +900,27 @@ export default function ChatView({ threadId, conversationPanel = null }: ChatVie
   }, [activeThreadId, existingOpenTerminalThreadIds, terminalState.terminalOpen]);
   const latestTurnSettled = isLatestTurnSettled(activeLatestTurn, activeThread?.session ?? null);
   const activeProject = useProjectById(activeThread?.projectId);
+  const previousFilesProjectIdRef = useRef<string | null>(activeProject?.id ?? null);
+
+  useEffect(() => {
+    const previousProjectId = previousFilesProjectIdRef.current;
+    const nextProjectId = activeProject?.id ?? null;
+    const projectChanged = previousProjectId !== null && previousProjectId !== nextProjectId;
+    previousFilesProjectIdRef.current = nextProjectId;
+
+    if (!filesOpen || !rawSearch.docPath) {
+      return;
+    }
+
+    if (nextProjectId === null || projectChanged) {
+      void navigate({
+        to: "/$threadId",
+        params: { threadId },
+        replace: true,
+        search: (previous) => ({ ...stripChatPanelSearchParams(previous), panel: "files" }),
+      });
+    }
+  }, [activeProject?.id, filesOpen, navigate, rawSearch.docPath, threadId]);
 
   const openPullRequestDialog = useCallback(
     (reference?: string) => {
@@ -1596,8 +1614,8 @@ export default function ChatView({ threadId, conversationPanel = null }: ChatVie
       params: { threadId },
       replace: true,
       search: (previous) => {
-        const rest = stripDiffSearchParams(previous);
-        return diffOpen ? { ...rest, diff: undefined } : { ...rest, diff: "1" };
+        const rest = stripChatPanelSearchParams(previous);
+        return diffOpen ? rest : { ...rest, panel: "diff", diffView: "diff" };
       },
     });
   }, [diffOpen, navigate, threadId]);
@@ -1608,13 +1626,24 @@ export default function ChatView({ threadId, conversationPanel = null }: ChatVie
       replace: true,
       search: (previous) => {
         if (gitOpen) {
-          return { ...stripGitPanelSearchParams(previous), github: undefined };
+          return stripChatPanelSearchParams(previous);
         }
-        const rest = stripGitPanelSearchParams(stripDiffSearchParams(previous));
-        return { ...rest, github: "1" };
+        const rest = stripChatPanelSearchParams(previous);
+        return { ...rest, panel: "git" };
       },
     });
   }, [gitOpen, navigate, threadId]);
+  const onToggleFiles = useCallback(() => {
+    void navigate({
+      to: "/$threadId",
+      params: { threadId },
+      replace: true,
+      search: (previous) => {
+        const rest = stripChatPanelSearchParams(previous);
+        return filesOpen ? rest : { ...rest, panel: "files" };
+      },
+    });
+  }, [filesOpen, navigate, threadId]);
 
   const envLocked = Boolean(
     activeThread &&
@@ -3879,16 +3908,16 @@ export default function ChatView({ threadId, conversationPanel = null }: ChatVie
         to: "/$threadId",
         params: { threadId },
         search: (previous) => {
-          const rest = stripDiffSearchParams(previous);
+          const rest = stripChatPanelSearchParams(previous);
           return filePath
             ? {
                 ...rest,
-                diff: "1",
+                panel: "diff",
                 diffTurnId: turnId,
                 diffFilePath: filePath,
                 diffView: "preview",
               }
-            : { ...rest, diff: "1", diffTurnId: turnId, diffView: "diff" };
+            : { ...rest, panel: "diff", diffTurnId: turnId, diffView: "diff" };
         },
       });
     },
@@ -3956,6 +3985,7 @@ export default function ChatView({ threadId, conversationPanel = null }: ChatVie
           gitCwd={gitCwd}
           gitOpen={gitOpen}
           diffOpen={diffOpen}
+          filesOpen={filesOpen}
           onRunProjectScript={(script) => {
             void runProjectScript(script);
           }}
@@ -3965,6 +3995,7 @@ export default function ChatView({ threadId, conversationPanel = null }: ChatVie
           onToggleTerminal={toggleTerminalVisibility}
           onToggleGit={onToggleGit}
           onToggleDiff={onToggleDiff}
+          onToggleFiles={onToggleFiles}
         />
       </header>
 
@@ -3976,12 +4007,12 @@ export default function ChatView({ threadId, conversationPanel = null }: ChatVie
       />
       {/* Main content area with optional plan sidebar */}
       <div className="flex min-h-0 min-w-0 flex-1">
-        {/* Chat column — doubles as conversation chrome when panel is expanded */}
+        {/* Chat column — doubles as document chrome when a panel is expanded */}
         <div
           className={cn(
             "flex min-h-0 min-w-0 flex-1 flex-col",
             conversationPanel
-              ? "diff-panel-conversation-shell rounded-t-[28px] border border-b-0 border-border/60 bg-background"
+              ? "document-chrome-shell rounded-t-[28px] border border-b-0 border-border/60 bg-background"
               : "",
           )}
         >

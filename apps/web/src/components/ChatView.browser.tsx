@@ -1300,7 +1300,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
       await vi.waitFor(
         () => {
-          expect(mounted.router.state.location.search.github).toBe("1");
+          expect(mounted.router.state.location.search.panel).toBe("git");
           expect(gitToggle.getAttribute("aria-pressed")).toBe("true");
         },
         { timeout: 8_000, interval: 16 },
@@ -1310,7 +1310,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
       await vi.waitFor(
         () => {
-          expect(mounted.router.state.location.search.github).toBeUndefined();
+          expect(mounted.router.state.location.search.panel).toBeUndefined();
           expect(gitToggle.getAttribute("aria-pressed")).toBe("false");
         },
         { timeout: 8_000, interval: 16 },

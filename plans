@@ -1,0 +1,768 @@
+# Project Root Explorer and Document Mode
+
+## Summary
+
+Add a new right side panel type named `files` that provides a standard project explorer tree rooted at `project.cwd`.
+
+The explorer is not a standalone feature. It becomes part of a broader document browsing mode for the chat screen:
+
+- Header explorer toggle opens the `files` panel in the right side slot
+- The right side slot stays exclusive across `files`, `diff`, and `git`
+- Selecting a file in the explorer opens that file in the document view
+- When the document view is expanded, the main thread content area shows the file preview and the right side panel swaps to the explorer tree
+- When the document view is collapsed, the right side panel swaps back to the selected file preview and the main thread content returns to the normal message timeline
+- Thread header and composer stay in place throughout
+- Chrome styling uses the same subtle radial and linear gradient language already used by the markdown render surface
+
+This plan intentionally separates two concerns:
+
+- workspace tree navigation
+- live workspace file preview
+
+The current repo supports fuzzy workspace entry search and checkpoint file preview, but it does not support live root tree listing or live file reads. Those backend seams must be added.
+
+## Current State Findings
+
+### Project root representation
+
+- A project root is represented by `project.cwd`
+- Active worktree context is derived separately for thread runtime and git actions
+- Existing right side panel routing is split across `diff` and `github` search params
+- The app already has a reusable side panel adapter pattern via `SidebarProvider`, `Sidebar`, `SidebarRail`, and route adapters such as the git panel adapter
+
+### Workspace navigation that already exists
+
+- `WorkspaceEntries` on the server builds a cached flat index of files and directories
+- The index is sourced from git file listing when possible, then falls back to filesystem scanning
+- The index already excludes common heavy directories and gitignored paths
+- The index already invalidates after workspace writes and checkpoint restore events
+- The only public workspace query today is fuzzy search via `projects.searchEntries`
+- That search API requires a non empty query and cannot list root children or directory children
+
+### Live file preview that already exists
+
+- The app already has rich file preview components for checkpoint files
+- `DocumentMarkdownRenderer` and `SourceFilePreview` are reusable presentation pieces
+- The orchestration layer already defines a good file preview result union for text, image, binary, missing, and too large states
+- There is no live workspace read API that returns the same shape
+
+### Git data that already exists
+
+- `GitStatusResult` only exposes changed file paths plus insertion and deletion counts
+- The server already parses `git status --porcelain=2` and therefore already has enough raw data to add a per file status kind with low backend risk
+- Distinct explorer highlighting for modified, added, deleted, renamed, untracked, and conflicted paths requires that small git contract extension
+
+## Product Behavior
+
+### Explorer panel behavior
+
+- Add a new header toggle beside terminal and diff that opens the `files` panel
+- `files` uses the same exclusive right side slot as `diff` and `git`
+- Opening `files` closes `diff` and `git`
+- Opening `diff` or `git` closes `files` and clears any active document mode state
+- The explorer root is always the project root from `project.cwd`
+- Worktree threads do not change the explorer root in this feature
+- Root directories start collapsed except the synthetic root level, which is visible by default
+- Directory rows toggle expansion and collapse
+- File rows activate the document view
+- The tree supports pointer interaction plus keyboard navigation with arrow keys, enter, and space
+- There is no separate explorer search field in this pass
+- Deleted files are not inserted as ghost rows in the explorer because this is a live filesystem tree, not an SCM tree
+
+### Document browsing behavior
+
+Use a single `files` feature state with three visible modes:
+
+- `files` panel open with no selected file
+  - right side shows explorer tree
+  - main area stays on message timeline
+
+- `files` panel open with selected file and collapsed document mode
+  - right side shows selected file preview
+  - main area stays on message timeline
+  - preview surface shows an expand tab on the left seam
+
+- `files` panel open with selected file and expanded document mode
+  - main area shows selected file preview using document chrome
+  - right side shows explorer tree
+  - main document surface shows a collapse tab flush against the left seam near the project sidebar boundary
+
+Selecting a file from the explorer should immediately enter expanded document mode, since that is the requested primary flow.
+
+Collapsing expanded document mode should:
+
+- return the main area to the message timeline
+- keep the same selected file
+- swap the right side panel from explorer back to selected file preview
+
+Closing the `files` panel entirely should clear both the panel state and the selected file state.
+
+### File preview behavior
+
+- Markdown files use `DocumentMarkdownRenderer`
+- Non markdown text files use `SourceFilePreview`
+- Images use the existing image preview behavior
+- Binary and too large files use the existing unavailable states
+- The selected file preview is always read from the live workspace at `project.cwd`
+- The document view and the half panel preview use the same preview surface component so behavior stays identical in both locations
+
+### Git highlighting behavior
+
+Add distinct tree styling based on git state:
+
+- modified
+- added
+- renamed
+- untracked
+- conflicted
+
+Deleted files do not render in the tree because they do not exist in the live root.
+
+Clean tracked files use neutral styling.
+
+Directory rows aggregate child state by priority:
+
+1. conflicted
+2. modified
+3. added
+4. renamed
+5. untracked
+6. clean
+
+Visual treatment should stay subtle and align with the markdown chrome:
+
+- very light tinted text or icon accent
+- optional small status dot or left rail
+- no loud SCM panel colors
+- keep the gradient chrome as the dominant visual element
+
+## Implementation Plan
+
+### 1. Refactor chat side panel route state
+
+Replace the growing set of parallel booleans with a unified chat side panel search model.
+
+Add a new internal route search module for the chat screen with these fields:
+
+- `panel?: "diff" | "git" | "files"`
+- `diffTurnId?: TurnId`
+- `diffFilePath?: string`
+- `diffView?: "preview" | "diff"`
+- `docPath?: string`
+- `docExpanded?: "1"`
+
+Derive state like this:
+
+- `panel=files` with no `docPath`
+  - explorer panel only
+
+- `panel=files` with `docPath` and no `docExpanded`
+  - side panel file preview
+
+- `panel=files` with `docPath` and `docExpanded=1`
+  - main area file preview plus side panel explorer
+
+Refactor the current diff and git routing code to use the unified panel state rather than parallel `diff` and `github` booleans. Keep the diff specific fields.
+
+Target files:
+
+- `apps/web/src/routes/_chat.$threadId.tsx`
+- replace `diffRouteSearch.ts` and `gitPanelRouteSearch.ts` usage with a new combined search helper
+- update `ChatView.tsx`
+- update `ChatHeader.tsx`
+- update any toggle handlers in `ChatView.tsx`
+
+### 2. Add workspace directory listing API
+
+Extend the workspace query layer so the client can ask for direct children of a directory under `project.cwd`.
+
+Add new contracts in `packages/contracts/src/project.ts`:
+
+- `ProjectListDirectoryInput`
+  - `cwd`
+  - `directoryPath` as nullable project relative path
+  - `limit` optional and bounded
+
+- `ProjectTreeEntry`
+  - `path`
+  - `name`
+  - `kind`
+  - `parentPath`
+
+- `ProjectListDirectoryResult`
+  - `entries`
+  - `truncated`
+
+Extend `WorkspaceEntriesShape` with `listDirectory`.
+
+Implementation details:
+
+- reuse the existing cached flat workspace index
+- filter entries by exact `parentPath`
+- sort directories first, then files, using natural locale sort
+- return root children when `directoryPath` is null
+- preserve current ignore behavior and cache invalidation behavior
+
+Target files:
+
+- `packages/contracts/src/project.ts`
+- `packages/contracts/src/rpc.ts`
+- `packages/contracts/src/ipc.ts`
+- `apps/server/src/workspace/Services/WorkspaceEntries.ts`
+- `apps/server/src/workspace/Layers/WorkspaceEntries.ts`
+- `apps/server/src/ws.ts`
+- `apps/web/src/wsRpcClient.ts`
+- `apps/web/src/wsNativeApi.ts`
+- `apps/web/src/lib/projectReactQuery.ts`
+
+### 3. Add live workspace file read API
+
+Create a live workspace file read query that mirrors the checkpoint file result union so preview rendering can be reused.
+
+Add new contracts in `packages/contracts/src/project.ts`:
+
+- `ProjectReadFileInput`
+  - `cwd`
+  - `relativePath`
+
+- `ProjectReadFileResult`
+  - mirror the union shape of `OrchestrationGetCheckpointFileResult`
+  - use the same `kind` values
+  - preserve `isMarkdown`, `language`, `mimeType`, `byteSize`, and `maxPreviewBytes`
+
+Server side design:
+
+- add a new `WorkspaceFileQuery` service instead of expanding `WorkspaceFileSystem`
+- follow the `CheckpointFileQuery` implementation shape
+- resolve workspace relative paths safely through `WorkspacePaths`
+- detect file type, size, markdown, line endings, text encoding assumptions, image data URL generation, and large file thresholds using the same rules as checkpoint preview where practical
+- return `missing` when the path no longer exists
+
+Target files:
+
+- `packages/contracts/src/project.ts`
+- `packages/contracts/src/rpc.ts`
+- `packages/contracts/src/ipc.ts`
+- add `apps/server/src/workspace/Services/WorkspaceFileQuery.ts`
+- add `apps/server/src/workspace/Layers/WorkspaceFileQuery.ts`
+- wire into `apps/server/src/server.ts`
+- wire RPC in `apps/server/src/ws.ts`
+- add client query helpers in `apps/web/src/lib/projectReactQuery.ts`
+- extend `apps/web/src/wsRpcClient.ts`
+- extend `apps/web/src/wsNativeApi.ts`
+
+### 4. Extend git file status metadata
+
+Extend the git contract so explorer rows can render distinct state kinds.
+
+Change `GitStatusResult.workingTree.files[]` in `packages/contracts/src/git.ts` to add a `status` field with a narrow enum:
+
+- `modified`
+- `added`
+- `deleted`
+- `renamed`
+- `untracked`
+- `conflicted`
+
+Server implementation in `GitCore`:
+
+- parse porcelain status codes while already walking `git status --porcelain=2 --branch`
+- attach the normalized status kind per path
+- preserve current insertion and deletion aggregation
+
+Client usage:
+
+- build a `Map<path, status>` from `useGitStatus`
+- compute directory aggregate status in the explorer tree on the client
+
+Target files:
+
+- `packages/contracts/src/git.ts`
+- `apps/server/src/git/Layers/GitCore.ts`
+- any downstream type consumers affected by the working tree file shape
+
+### 5. Introduce the files panel route adapter
+
+Add a route adapter for the new `files` panel, mirroring the existing git panel adapter pattern.
+
+Responsibilities:
+
+- switch between side panel explorer and side panel file preview based on route state
+- on narrow viewports, fall back to sheet behavior
+- when in expanded document mode on narrow viewports, keep the main document view and present the explorer as a sheet instead of side by side
+- own the side panel width storage key and resize behavior
+
+Target files:
+
+- add `apps/web/src/components/files-panel/FilesPanelRouteAdapter.tsx`
+- add a small route context resolver if needed to derive `project.cwd`
+- integrate into `_chat.$threadId.tsx`
+
+### 6. Build the explorer tree UI
+
+Create a new side panel explorer component that feels standard and restrained.
+
+Core pieces:
+
+- `ProjectExplorerPanel`
+- `ProjectExplorerTree`
+- `ProjectExplorerTreeNode`
+- a small explorer state hook for expansion, selection, and ancestor hydration
+
+Behavior details:
+
+- load root children on open
+- lazily load directory children on expand
+- cache fetched child lists in memory by directory path and project id
+- auto expand ancestors of the selected file when entering expanded document mode
+- keyboard navigation support
+- reuse `VscodeEntryIcon` for files and directories
+- use the git status map for subtle per row styling
+- show a lightweight empty state when the project has no visible entries
+- show a loading skeleton during initial root fetch
+- show an inline error state with retry if directory listing fails
+
+Target files:
+
+- add `apps/web/src/components/files-panel/ProjectExplorerPanel.tsx`
+- add `apps/web/src/components/files-panel/ProjectExplorerTree.tsx`
+- add `apps/web/src/components/files-panel/ProjectExplorerTree.logic.ts`
+- add tests beside the logic module
+
+### 7. Generalize file preview surfaces
+
+Refactor preview surfaces so the same rendering stack works for checkpoint previews and live workspace previews.
+
+Refactor approach:
+
+- keep `DocumentMarkdownRenderer` and `SourceFilePreview` as shared presentation
+- split preview data loading from preview rendering
+- replace `CheckpointFilePreviewSurface` with a shared renderer such as `FilePreviewSurface`
+- add thin wrappers:
+  - one for checkpoint preview
+  - one for project workspace preview
+
+This avoids duplicating markdown preview logic and keeps the chrome identical between half panel and expanded document mode.
+
+Target files:
+
+- `apps/web/src/components/CheckpointFilePreviewSurface.tsx`
+- add `apps/web/src/components/FilePreviewSurface.tsx`
+- add `apps/web/src/components/ProjectFilePreviewSurface.tsx`
+- update diff preview callers
+- update new files panel callers
+
+### 8. Create shared document chrome
+
+Refactor the current markdown render chrome into a shared document browsing shell that can host either side panel preview or expanded main preview.
+
+Design details:
+
+- preserve the subtle radial and linear gradient already used for markdown render chrome
+- rename the diff specific shell class to a generic document shell class
+- use one visual language for:
+  - side panel file preview
+  - expanded document view
+  - explorer side panel when expanded document mode is active
+
+Chrome details:
+
+- rounded top corners in the main content region
+- same border softness and backdrop feel as current markdown render work
+- explorer side panel gets the same gradient backing but with a denser content rhythm
+- left seam expand and collapse tab remains the main affordance for moving between half preview and expanded preview
+
+Target files:
+
+- `apps/web/src/components/DiffPanelShell.tsx`
+- `apps/web/src/index.css`
+- possibly introduce a generic shell component under `apps/web/src/components`
+
+### 9. Integrate with chat header and mode transitions
+
+Add the explorer header toggle and wire transitions.
+
+Header behavior:
+
+- explorer toggle appears beside terminal and diff
+- pressed state reflects `panel=files`
+- tooltip copy matches the existing header control style
+
+Transition rules:
+
+- opening explorer from header with no selected file opens the explorer side panel
+- selecting a file from explorer sets `docPath` and `docExpanded=1`
+- collapsing expanded document mode clears `docExpanded`
+- closing the files panel clears `panel`, `docPath`, and `docExpanded`
+- toggling diff or git clears files mode state
+- switching threads clears stale `docPath` if the new thread has a different project id or no project
+
+Target files:
+
+- `apps/web/src/components/chat/ChatHeader.tsx`
+- `apps/web/src/components/ChatView.tsx`
+- `_chat.$threadId.tsx`
+
+## Important API and Type Changes
+
+### New contracts
+
+In `packages/contracts/src/project.ts` add:
+
+- `ProjectListDirectoryInput`
+- `ProjectTreeEntry`
+- `ProjectListDirectoryResult`
+- `ProjectReadFileInput`
+- `ProjectReadFileResult`
+- matching tagged error classes for list and read operations
+
+### RPC and native API additions
+
+In `packages/contracts/src/rpc.ts` add:
+
+- `WS_METHODS.projectsListDirectory`
+- `WS_METHODS.projectsReadFile`
+- matching RPC schema exports
+
+In `packages/contracts/src/ipc.ts` extend `NativeApi.projects` with:
+
+- `listDirectory`
+- `readFile`
+
+### Git contract change
+
+In `packages/contracts/src/git.ts` extend `GitStatusResult.workingTree.files[]` with:
+
+- `status`
+
+### Internal route type change
+
+Add a new combined chat side panel route search model for the chat screen and retire the split diff and git boolean parsing helpers inside the route.
+
+## Test Cases and Scenarios
+
+### Server tests
+
+- `WorkspaceEntries.listDirectory` returns root children sorted with directories before files
+- `WorkspaceEntries.listDirectory` returns only direct children for a nested directory
+- ignored directories and gitignored paths do not appear in directory listings
+- `WorkspaceFileQuery.readFile` returns:
+  - markdown text
+  - non markdown text
+  - image
+  - binary
+  - too large text
+  - too large image
+  - missing
+- git status parsing maps porcelain codes to the new `status` enum correctly
+
+### Client logic tests
+
+- route state derivation for `panel`, `docPath`, and `docExpanded`
+- explorer ancestor auto expansion for a selected file
+- directory aggregate git state priority
+- files panel adapter chooses explorer, side panel preview, or expanded document mode correctly
+- switching from files to diff or git clears files mode state
+- switching threads clears invalid selected file state
+
+### Browser component tests
+
+- header explorer toggle opens and closes the files panel
+- explorer root loads and renders tree rows
+- expanding a directory loads children only once and reuses cached results
+- selecting a markdown file opens expanded document mode
+- collapsing expanded document mode returns to side panel preview
+- re expanding from side panel preview returns to main document plus explorer layout
+- non markdown text file uses source preview
+- image file uses image preview
+- binary and too large files show proper unavailable states
+- narrow viewport uses sheet fallback for the explorer side panel
+- git row styling updates when the git status stream changes
+
+### Manual acceptance scenarios
+
+- Open explorer from the chat header with no selected file
+- Browse nested folders from the project root
+- Open a markdown file and verify rich render in expanded document mode
+- Collapse back to half panel preview and re expand
+- Open a source file and verify inline code preview
+- Switch to diff panel and verify files mode closes cleanly
+- Reopen files panel and verify the selected file and expansion state are restored only for the current project
+- Open a thread on a worktree and verify the explorer still roots at the canonical project root
+- Modify, add, and create untracked files locally and verify subtle git highlighting
+
+## UI Reference
+
+This section is authoritative. All visual implementation work must match the patterns below exactly. When in doubt, defer to the live CSS and component sources cited here.
+
+### Chrome CSS
+
+The document chrome CSS lives in `apps/web/src/index.css`. The current class is `diff-panel-conversation-shell` and must be renamed to `document-chrome-shell` as part of step 8. The explorer side panel variant gets `document-chrome-shell--explorer`. The visual properties are:
+
+```css
+/* apps/web/src/index.css */
+
+.document-chrome-shell {
+  background:
+    radial-gradient(
+      circle at top,
+      color-mix(in srgb, var(--primary) 10%, transparent),
+      transparent 38%
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--background) 96%, var(--card)) 0%,
+      color-mix(in srgb, var(--background) 92%, var(--card)) 100%
+    );
+  box-shadow: 0 32px 120px -72px color-mix(in srgb, var(--foreground) 40%, transparent);
+}
+
+/* Explorer variant: same gradient but denser — used when the explorer side panel
+   is rendered alongside an expanded document view. */
+.document-chrome-shell--explorer {
+  background:
+    radial-gradient(
+      circle at top left,
+      color-mix(in srgb, var(--primary) 7%, transparent),
+      transparent 42%
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--background) 97%, var(--card)) 0%,
+      color-mix(in srgb, var(--background) 93%, var(--card)) 100%
+    );
+  box-shadow: 0 24px 80px -56px color-mix(in srgb, var(--foreground) 30%, transparent);
+}
+
+/* Any scrollable content viewport nested inside either chrome class gets a
+   transparent background so the gradient shows through. */
+.document-chrome-shell .document-viewport,
+.document-chrome-shell--explorer .document-viewport {
+  background: transparent;
+}
+
+/* Standalone viewport (outside chrome) keeps the existing card tint. */
+.document-viewport {
+  background: color-mix(in srgb, var(--background) 94%, var(--card));
+}
+```
+
+The chrome class is applied to the **chat column div** in `ChatView.tsx`, not to the shell component itself. This lets it extend full-height behind the composer while the scrollable render body stays flex-constrained above it. See `ChatView.tsx` lines around the `diff-panel-conversation-shell` usage for the current wiring pattern to follow.
+
+### `DocumentShell` component
+
+Introduce `apps/web/src/components/DocumentShell.tsx` to replace the conversation-mode path currently handled by `DiffPanelShell`. It is chrome-free by design — chrome is always provided by the parent layout.
+
+```tsx
+// apps/web/src/components/DocumentShell.tsx
+
+export type DocumentShellVariant = "main" | "side-preview" | "explorer";
+
+export function DocumentShell(props: {
+  variant: DocumentShellVariant;
+  header: ReactNode;
+  children: ReactNode;
+  panelTab?: ReactNode;
+}) {
+  return (
+    <div className="relative flex h-full min-w-0 flex-col">
+      {props.panelTab}
+      <div className="border-b border-border">
+        <div className="flex h-12 items-center justify-between gap-2 px-4">{props.header}</div>
+      </div>
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden document-viewport">
+        {props.children}
+        {/* Fade overlay — height varies by variant */}
+        <div
+          className={cn(
+            "pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-background to-transparent",
+            props.variant === "main" ? "h-24" : "h-16",
+          )}
+        />
+      </div>
+    </div>
+  );
+}
+```
+
+`DiffPanelShell` retains its existing logic for `inline`, `sheet`, and `sidebar` modes and continues using `.diff-panel-viewport`. Only the `conversation` mode path migrates to `DocumentShell` + `document-chrome-shell`.
+
+### Panel tab affordance
+
+The expand/collapse tab is already extracted in `DiffPanelShell.tsx` as `PanelTab` with two placements:
+
+```tsx
+// placement="outside-left"  → tab extends left of the panel seam (sidebar/inline expand)
+// placement="flush-left"    → tab sits on the left inner edge (collapse back from main view)
+
+<PanelTab
+  onClick={onCollapse}
+  ariaLabel="Return preview to side panel"
+  title="Return to side panel"
+  placement="flush-left"
+/>
+```
+
+For the files panel, the same component applies unchanged. Expanded document mode shows `flush-left`. Side panel preview shows `outside-left`. Pass `showPanelTab={false}` when the panel is in explorer-only mode (no selected file).
+
+### Side panel route adapter shape
+
+Mirror `GitPanelRouteAdapter` exactly:
+
+```tsx
+// apps/web/src/components/files-panel/FilesPanelRouteAdapter.tsx
+
+const FILES_PANEL_INLINE_LAYOUT_MEDIA_QUERY = "(max-width: 1280px)";
+const FILES_PANEL_INLINE_DEFAULT_WIDTH = "clamp(22rem,32vw,30rem)";
+const FILES_PANEL_INLINE_SIDEBAR_MIN_WIDTH = 20 * 16;
+const FILES_PANEL_SIDEBAR_WIDTH_STORAGE_KEY = "chat_files_panel_sidebar_width";
+
+export function FilesPanelRouteAdapter(props: FilesPanelRouteAdapterProps) {
+  const shouldUseSheet = useMediaQuery(FILES_PANEL_INLINE_LAYOUT_MEDIA_QUERY);
+
+  const panelContent = props.renderContent ? (
+    <Suspense fallback={<DiffPanelLoadingState label="Loading files panel..." />}>
+      <FilesPanel ... />
+    </Suspense>
+  ) : null;
+
+  if (shouldUseSheet) {
+    return (
+      <Sheet open={props.open} onOpenChange={...}>
+        <SheetPopup side="right" showCloseButton={false} keepMounted
+          className="w-[min(88vw,580px)] max-w-[580px] p-0">
+          {panelContent}
+        </SheetPopup>
+      </Sheet>
+    );
+  }
+
+  return (
+    <SidebarProvider
+      defaultOpen={false}
+      open={props.open}
+      onOpenChange={props.onOpenChange}
+      className="w-auto min-h-0 flex-none bg-transparent"
+      style={{ "--sidebar-width": FILES_PANEL_INLINE_DEFAULT_WIDTH } as React.CSSProperties}
+    >
+      <Sidebar
+        side="right"
+        collapsible="offcanvas"
+        className="border-l border-border bg-background text-foreground"
+        resizable={{
+          minWidth: FILES_PANEL_INLINE_SIDEBAR_MIN_WIDTH,
+          storageKey: FILES_PANEL_SIDEBAR_WIDTH_STORAGE_KEY,
+        }}
+      >
+        {panelContent}
+        <SidebarRail />
+      </Sidebar>
+    </SidebarProvider>
+  );
+}
+```
+
+Note: use `bg-background` (not `bg-sidebar`) on the files panel `Sidebar` so the `document-chrome-shell--explorer` gradient is visible without a conflicting surface layer.
+
+### Explorer tree node anatomy
+
+Base the row shape directly on `ChangedFilesTree.tsx`. The key measurements are established there and must be preserved:
+
+```tsx
+// depth indent: 8px base + 14px per level (inline style, not Tailwind — avoids purging)
+const leftPadding = 8 + depth * 14;
+
+// directory row
+<button
+  type="button"
+  className="group flex w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left
+             hover:bg-background/80"
+  style={{ paddingLeft: `${leftPadding}px` }}
+  onClick={() => toggleDirectory(node.path)}
+>
+  <ChevronRightIcon
+    className={cn(
+      "size-3.5 shrink-0 text-muted-foreground/70 transition-transform group-hover:text-foreground/80",
+      isExpanded && "rotate-90",
+    )}
+  />
+  {/* folder icon from lucide, not VscodeEntryIcon */}
+  {isExpanded
+    ? <FolderIcon className="size-3.5 shrink-0 text-muted-foreground/75" />
+    : <FolderClosedIcon className="size-3.5 shrink-0 text-muted-foreground/75" />}
+  <span className="truncate font-mono text-[11px] text-muted-foreground/90 group-hover:text-foreground/90">
+    {node.name}
+  </span>
+</button>
+
+// file row
+<button
+  type="button"
+  className="group flex w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left
+             hover:bg-background/80"
+  style={{ paddingLeft: `${leftPadding}px` }}
+  onClick={() => onSelectFile(node.path)}
+>
+  <span aria-hidden="true" className="size-3.5 shrink-0" /> {/* chevron spacer */}
+  <VscodeEntryIcon pathValue={node.path} kind="file" theme={resolvedTheme}
+    className="size-3.5" />
+  <span className="truncate font-mono text-[11px] text-muted-foreground/80 group-hover:text-foreground/90">
+    {node.name}
+  </span>
+  {/* git status indicator — right-aligned, only for changed paths */}
+  {gitStatus ? <ExplorerStatusPip status={gitStatus} /> : null}
+</button>
+```
+
+Selected file row adds `bg-background/60 text-foreground` (not a ring or heavy highlight — the gradient chrome is the dominant visual element, the selection indicator should be barely-there).
+
+### Git status visual treatment
+
+Status treatment must stay below the threshold of an SCM panel. No red/green badge colors. Use the same `color-mix` softening pattern already used throughout the app:
+
+```tsx
+// apps/web/src/components/files-panel/ExplorerStatusPip.tsx
+
+const STATUS_CLASSES = {
+  modified: "bg-amber-400/40 dark:bg-amber-400/30",
+  added: "bg-emerald-400/35 dark:bg-emerald-400/25",
+  renamed: "bg-sky-400/35 dark:bg-sky-400/25",
+  untracked: "bg-muted-foreground/25",
+  conflicted: "bg-destructive/40",
+} satisfies Record<GitFileStatus, string>;
+
+export function ExplorerStatusPip(props: { status: GitFileStatus }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn("ml-auto size-1.5 shrink-0 rounded-full", STATUS_CLASSES[props.status])}
+    />
+  );
+}
+```
+
+Directory rows aggregate child status at the highest priority (conflicted > modified > added > renamed > untracked). A directory with any changed descendant shows the aggregate pip; a clean directory shows nothing.
+
+### Bottom fade overlay
+
+Every document surface that scrolls must carry the bottom fade:
+
+```tsx
+<div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-background to-transparent" />
+```
+
+In expanded document main view use `h-24`. The `from-background` token resolves correctly against both the chrome gradient and the `bg-background` input bar because they share the same `--background` variable. Do not use `from-card` or any other token here.
+
+## Assumptions and Defaults
+
+- Explorer root is always `project.cwd`
+- Worktree root is out of scope for this feature
+- Header toggle is the primary entry control
+- Selecting a file from the explorer enters expanded document mode immediately
+- Collapsing expanded document mode returns to half panel preview, not explorer only
+- Explorer and preview share the exclusive right side panel slot with diff and git
+- Thread header and composer remain visible while document mode is active
+- No dedicated explorer search box in this pass
+- No ghost rows for deleted files in the explorer
+- Clean tracked files remain neutral and only changed paths receive styling
+- Distinct changed styling requires the small git status contract extension described above

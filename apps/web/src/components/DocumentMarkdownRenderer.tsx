@@ -15,10 +15,8 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
-import { useQuery } from "@tanstack/react-query";
 
 import { readNativeApi } from "~/nativeApi";
-import { checkpointFileQueryOptions } from "~/lib/providerReactQuery";
 import { resolveDiffThemeName, type DiffThemeName } from "~/lib/diffRendering";
 import { useTheme } from "~/hooks/useTheme";
 import { cn } from "~/lib/utils";
@@ -263,63 +261,18 @@ function MermaidBlock(props: { code: string }) {
   );
 }
 
-function ResolvedCheckpointImage(props: {
-  threadId: string;
-  turnCount: number;
+export interface RenderResolvedDocumentImageInput {
   relativePath: string;
   alt: string;
   onOpen: (src: string, alt: string) => void;
-}) {
-  const assetQuery = useQuery(
-    checkpointFileQueryOptions({
-      threadId: props.threadId as never,
-      turnCount: props.turnCount,
-      relativePath: props.relativePath,
-    }),
-  );
-
-  if (assetQuery.isLoading) {
-    return <div className="document-image-placeholder">Loading image...</div>;
-  }
-
-  if (assetQuery.data?.kind !== "image") {
-    return <div className="document-image-placeholder">Image unavailable.</div>;
-  }
-
-  const imageData = assetQuery.data;
-  if (!imageData || imageData.kind !== "image") {
-    return <div className="document-image-placeholder">Image unavailable.</div>;
-  }
-
-  return (
-    <figure className="document-image-figure">
-      <button
-        type="button"
-        className="w-full"
-        onClick={() => props.onOpen(imageData.dataUrl, props.alt)}
-      >
-        <img
-          src={imageData.dataUrl}
-          alt={props.alt}
-          className="document-image"
-          loading="lazy"
-          referrerPolicy="no-referrer"
-        />
-      </button>
-      {props.alt.length > 0 ? (
-        <figcaption className="document-image-caption">{props.alt}</figcaption>
-      ) : null}
-    </figure>
-  );
 }
 
 export function DocumentMarkdownRenderer(props: {
-  threadId: string;
-  turnCount: number;
   filePath: string;
   markdown: string;
   onNavigateToPath: (relativePath: string, hash?: string) => void;
   onOpenFileInEditor: (relativePath: string) => void;
+  renderResolvedImage?: (input: RenderResolvedDocumentImageInput) => ReactNode;
 }) {
   const { resolvedTheme } = useTheme();
   const themeName = resolveDiffThemeName(resolvedTheme);
@@ -419,13 +372,11 @@ export function DocumentMarkdownRenderer(props: {
           );
         }
         return (
-          <ResolvedCheckpointImage
-            threadId={props.threadId}
-            turnCount={props.turnCount}
-            relativePath={resolved.relativePath ?? props.filePath}
-            alt={alt}
-            onOpen={(nextSrc, nextAlt) => setLightbox({ src: nextSrc, alt: nextAlt })}
-          />
+          props.renderResolvedImage?.({
+            relativePath: resolved.relativePath ?? props.filePath,
+            alt,
+            onOpen: (nextSrc, nextAlt) => setLightbox({ src: nextSrc, alt: nextAlt }),
+          }) ?? <div className="document-image-placeholder">Image unavailable.</div>
         );
       },
       pre({ children }) {

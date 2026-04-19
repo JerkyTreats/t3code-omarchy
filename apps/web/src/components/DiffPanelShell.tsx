@@ -17,7 +17,7 @@ function getDiffPanelHeaderRowClassName(mode: DiffPanelMode) {
   );
 }
 
-function PanelTab(props: {
+export function PanelTab(props: {
   onClick: () => void;
   ariaLabel: string;
   title: string;

@@ -56,6 +56,8 @@ export function createWsNativeApi(): NativeApi {
       onEvent: (callback) => rpcClient.terminal.onEvent(callback),
     },
     projects: {
+      listDirectory: rpcClient.projects.listDirectory,
+      readFile: rpcClient.projects.readFile,
       searchEntries: rpcClient.projects.searchEntries,
       writeFile: rpcClient.projects.writeFile,
     },

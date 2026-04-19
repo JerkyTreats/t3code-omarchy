@@ -16,20 +16,17 @@ import {
 } from "../components/DiffPanelExpandedContext";
 import { useComposerDraftStore } from "../composerDraftStore";
 import {
-  type DiffRouteSearch,
-  parseDiffRouteSearch,
-  stripDiffSearchParams,
-} from "../diffRouteSearch";
-import {
-  type GitPanelRouteSearch,
-  parseGitPanelRouteSearch,
-  stripGitPanelSearchParams,
-} from "../gitPanelRouteSearch";
+  type ChatPanelRouteSearch,
+  parseChatPanelRouteSearch,
+  stripChatPanelSearchParams,
+} from "../chatPanelRouteSearch";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { useStore } from "../store";
 import { Sheet, SheetPopup } from "../components/ui/sheet";
 import { Sidebar, SidebarInset, SidebarProvider, SidebarRail } from "~/components/ui/sidebar";
 import { GitPanelRouteAdapter } from "../components/git-panel/GitPanelRouteAdapter";
+import { FilesConversationDocument } from "../components/files-panel/FilesConversationDocument";
+import { FilesPanelRouteAdapter } from "../components/files-panel/FilesPanelRouteAdapter";
 
 const DiffPanel = lazy(() => import("../components/DiffPanel"));
 const DIFF_INLINE_LAYOUT_MEDIA_QUERY = "(max-width: 1180px)";
@@ -192,18 +189,21 @@ function ChatThreadRouteContent() {
     Object.hasOwn(store.draftThreadsByThreadId, threadId),
   );
   const routeThreadExists = threadExists || draftThreadExists;
-  const diffOpen = search.diff === "1";
-  const gitOpen = search.github === "1";
+  const diffOpen = search.panel === "diff";
+  const gitOpen = search.panel === "git";
+  const filesOpen = search.panel === "files";
+  const expandedFilesDocument = filesOpen && search.docExpanded === "1" && !!search.docPath;
   const shouldUseDiffSheet = useMediaQuery(DIFF_INLINE_LAYOUT_MEDIA_QUERY);
   // TanStack Router keeps active route components mounted across param-only navigations
   // unless remountDeps are configured, so this stays warm across thread switches.
   const [hasOpenedDiff, setHasOpenedDiff] = useState(diffOpen);
   const [hasOpenedGit, setHasOpenedGit] = useState(gitOpen);
+  const [hasOpenedFiles, setHasOpenedFiles] = useState(filesOpen);
   const closeDiff = useCallback(() => {
     void navigate({
       to: "/$threadId",
       params: { threadId },
-      search: { diff: undefined },
+      search: (previous) => stripChatPanelSearchParams(previous),
     });
   }, [navigate, threadId]);
   const openDiff = useCallback(() => {
@@ -211,8 +211,8 @@ function ChatThreadRouteContent() {
       to: "/$threadId",
       params: { threadId },
       search: (previous) => {
-        const rest = stripGitPanelSearchParams(stripDiffSearchParams(previous));
-        return { ...rest, diff: "1", github: undefined };
+        const rest = stripChatPanelSearchParams(previous);
+        return { ...rest, panel: "diff", diffView: "diff" };
       },
     });
   }, [navigate, threadId]);
@@ -220,7 +220,7 @@ function ChatThreadRouteContent() {
     void navigate({
       to: "/$threadId",
       params: { threadId },
-      search: (previous) => ({ ...stripGitPanelSearchParams(previous), github: undefined }),
+      search: (previous) => stripChatPanelSearchParams(previous),
     });
   }, [navigate, threadId]);
   const openGit = useCallback(() => {
@@ -228,11 +228,90 @@ function ChatThreadRouteContent() {
       to: "/$threadId",
       params: { threadId },
       search: (previous) => {
-        const rest = stripGitPanelSearchParams(stripDiffSearchParams(previous));
-        return { ...rest, github: "1" };
+        const rest = stripChatPanelSearchParams(previous);
+        return { ...rest, panel: "git" };
       },
     });
   }, [navigate, threadId]);
+  const closeFiles = useCallback(() => {
+    void navigate({
+      to: "/$threadId",
+      params: { threadId },
+      search: (previous) => stripChatPanelSearchParams(previous),
+    });
+  }, [navigate, threadId]);
+  const openFiles = useCallback(() => {
+    void navigate({
+      to: "/$threadId",
+      params: { threadId },
+      search: (previous) => {
+        const rest = stripChatPanelSearchParams(previous);
+        return { ...rest, panel: "files" };
+      },
+    });
+  }, [navigate, threadId]);
+  const selectDocumentPath = useCallback(
+    (pathValue: string) => {
+      void navigate({
+        to: "/$threadId",
+        params: { threadId },
+        search: (previous) => {
+          const rest = stripChatPanelSearchParams(previous);
+          return {
+            ...rest,
+            panel: "files",
+            docPath: pathValue,
+            docExpanded: "1" as const,
+          };
+        },
+      });
+    },
+    [navigate, threadId],
+  );
+  const expandDocument = useCallback(() => {
+    if (!search.docPath) {
+      return;
+    }
+    void navigate({
+      to: "/$threadId",
+      params: { threadId },
+      search: (previous) => ({
+        ...stripChatPanelSearchParams(previous),
+        panel: "files",
+        docPath: search.docPath,
+        docExpanded: "1" as const,
+      }),
+    });
+  }, [navigate, search.docPath, threadId]);
+  const collapseDocument = useCallback(() => {
+    if (!search.docPath) {
+      return;
+    }
+    void navigate({
+      to: "/$threadId",
+      params: { threadId },
+      search: (previous) => ({
+        ...stripChatPanelSearchParams(previous),
+        panel: "files",
+        docPath: search.docPath,
+      }),
+    });
+  }, [navigate, search.docPath, threadId]);
+  const navigateDocumentPath = useCallback(
+    (relativePath: string) => {
+      void navigate({
+        to: "/$threadId",
+        params: { threadId },
+        search: (previous) => ({
+          ...stripChatPanelSearchParams(previous),
+          panel: "files",
+          docPath: relativePath,
+          docExpanded: expandedFilesDocument ? "1" : undefined,
+        }),
+      });
+    },
+    [expandedFilesDocument, navigate, threadId],
+  );
 
   useEffect(() => {
     if (diffOpen) {
@@ -244,16 +323,21 @@ function ChatThreadRouteContent() {
       setHasOpenedGit(true);
     }
   }, [gitOpen]);
+  useEffect(() => {
+    if (filesOpen) {
+      setHasOpenedFiles(true);
+    }
+  }, [filesOpen]);
 
   const shouldRenderDiffContent = diffOpen || hasOpenedDiff;
   const shouldRenderGitContent = gitOpen || hasOpenedGit;
-  const shouldShowGitPanel = gitOpen || (!diffOpen && hasOpenedGit);
+  const shouldRenderFilesContent = filesOpen || hasOpenedFiles;
 
   useEffect(() => {
-    if (!diffOpen || shouldUseDiffSheet || shouldShowGitPanel) {
+    if (!diffOpen || shouldUseDiffSheet || gitOpen || filesOpen) {
       setPanelExpanded(false);
     }
-  }, [diffOpen, setPanelExpanded, shouldShowGitPanel, shouldUseDiffSheet]);
+  }, [diffOpen, filesOpen, gitOpen, setPanelExpanded, shouldUseDiffSheet]);
 
   useEffect(() => {
     if (!bootstrapComplete) {
@@ -271,11 +355,22 @@ function ChatThreadRouteContent() {
   }
 
   const conversationPanel =
-    panelExpanded && !shouldShowGitPanel && !shouldUseDiffSheet && shouldRenderDiffContent ? (
+    expandedFilesDocument && search.docPath ? (
+      <FilesConversationDocument
+        threadId={threadId}
+        docPath={search.docPath}
+        onNavigateToPath={navigateDocumentPath}
+        onCollapseDocument={collapseDocument}
+      />
+    ) : panelExpanded &&
+      !gitOpen &&
+      !filesOpen &&
+      !shouldUseDiffSheet &&
+      shouldRenderDiffContent ? (
       <LazyDiffPanel mode="conversation" />
     ) : null;
 
-  if (!shouldShowGitPanel && !shouldUseDiffSheet) {
+  if (!gitOpen && !filesOpen && !shouldUseDiffSheet) {
     return (
       <>
         <SidebarInset className="h-dvh  min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground">
@@ -296,15 +391,27 @@ function ChatThreadRouteContent() {
   return (
     <>
       <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground">
-        <ChatView threadId={threadId} />
+        <ChatView threadId={threadId} conversationPanel={conversationPanel} />
       </SidebarInset>
-      {shouldShowGitPanel ? (
+      {gitOpen ? (
         <GitPanelRouteAdapter
           threadId={threadId}
           gitOpen={gitOpen}
           onCloseGit={closeGit}
           onOpenGit={openGit}
           renderGitContent={shouldRenderGitContent}
+        />
+      ) : filesOpen ? (
+        <FilesPanelRouteAdapter
+          threadId={threadId}
+          open={filesOpen}
+          onCloseFiles={closeFiles}
+          onOpenFiles={openFiles}
+          renderContent={shouldRenderFilesContent}
+          docPath={search.docPath ?? null}
+          expandedDocument={expandedFilesDocument}
+          onSelectFile={selectDocumentPath}
+          onExpandDocument={expandDocument}
         />
       ) : (
         <DiffPanelSheet diffOpen={diffOpen} onCloseDiff={closeDiff}>
@@ -324,12 +431,18 @@ function ChatThreadRouteView() {
 }
 
 export const Route = createFileRoute("/_chat/$threadId")({
-  validateSearch: (search) => ({
-    ...parseDiffRouteSearch(search),
-    ...parseGitPanelRouteSearch(search),
-  }),
+  validateSearch: (search) => parseChatPanelRouteSearch(search),
   search: {
-    middlewares: [retainSearchParams<DiffRouteSearch & GitPanelRouteSearch>(["diff", "github"])],
+    middlewares: [
+      retainSearchParams<ChatPanelRouteSearch>([
+        "panel",
+        "diffTurnId",
+        "diffFilePath",
+        "diffView",
+        "docPath",
+        "docExpanded",
+      ]),
+    ],
   },
   component: ChatThreadRouteView,
 });
