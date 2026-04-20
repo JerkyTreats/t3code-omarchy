@@ -1003,15 +1003,121 @@ lifecycleLayer("CodexAdapterLive lifecycle", (it) => {
 
       assert.deepEqual(firstEvent.value.payload.usage, {
         usedTokens: 126,
-        totalProcessedTokens: 11_839,
+        totalProcessedTokens: 126,
         maxTokens: 258_400,
-        inputTokens: 11_833,
-        cachedInputTokens: 3456,
+        inputTokens: 120,
+        cachedInputTokens: 0,
         outputTokens: 6,
         reasoningOutputTokens: 0,
         lastUsedTokens: 126,
         lastInputTokens: 120,
         lastCachedInputTokens: 0,
+        lastOutputTokens: 6,
+        lastReasoningOutputTokens: 0,
+        compactsAutomatically: true,
+      });
+    }),
+  );
+
+  it.effect("accumulates Codex cumulative token usage as per-turn deltas", () =>
+    Effect.gen(function* () {
+      const adapter = yield* CodexAdapter;
+      const eventsFiber = yield* Stream.runCollect(Stream.take(adapter.streamEvents, 2)).pipe(
+        Effect.forkChild,
+      );
+
+      lifecycleManager.emit("event", {
+        id: asEventId("evt-codex-thread-token-usage-delta-1"),
+        kind: "notification",
+        provider: "codex",
+        threadId: asThreadId("thread-token-delta"),
+        turnId: asTurnId("turn-token-delta"),
+        createdAt: new Date().toISOString(),
+        method: "thread/tokenUsage/updated",
+        payload: {
+          tokenUsage: {
+            total: {
+              inputTokens: 11_833,
+              cachedInputTokens: 3_456,
+              outputTokens: 6,
+              reasoningOutputTokens: 0,
+              totalTokens: 11_839,
+            },
+            last: {
+              inputTokens: 120,
+              cachedInputTokens: 0,
+              outputTokens: 6,
+              reasoningOutputTokens: 0,
+              totalTokens: 126,
+            },
+            modelContextWindow: 258_400,
+          },
+        },
+      } satisfies ProviderEvent);
+      lifecycleManager.emit("event", {
+        id: asEventId("evt-codex-thread-token-usage-delta-2"),
+        kind: "notification",
+        provider: "codex",
+        threadId: asThreadId("thread-token-delta"),
+        turnId: asTurnId("turn-token-delta"),
+        createdAt: new Date().toISOString(),
+        method: "thread/tokenUsage/updated",
+        payload: {
+          tokenUsage: {
+            total: {
+              inputTokens: 12_327,
+              cachedInputTokens: 3_656,
+              outputTokens: 12,
+              reasoningOutputTokens: 0,
+              totalTokens: 12_339,
+            },
+            last: {
+              inputTokens: 494,
+              cachedInputTokens: 200,
+              outputTokens: 6,
+              reasoningOutputTokens: 0,
+              totalTokens: 500,
+            },
+            modelContextWindow: 258_400,
+          },
+        },
+      } satisfies ProviderEvent);
+
+      const events = Array.from(yield* Fiber.join(eventsFiber));
+      assert.equal(events[0]?.type, "thread.token-usage.updated");
+      assert.equal(events[1]?.type, "thread.token-usage.updated");
+      if (events[0]?.type !== "thread.token-usage.updated") {
+        return;
+      }
+      if (events[1]?.type !== "thread.token-usage.updated") {
+        return;
+      }
+      assert.deepEqual(events[0].payload.usage, {
+        usedTokens: 126,
+        totalProcessedTokens: 126,
+        maxTokens: 258_400,
+        inputTokens: 120,
+        cachedInputTokens: 0,
+        outputTokens: 6,
+        reasoningOutputTokens: 0,
+        lastUsedTokens: 126,
+        lastInputTokens: 120,
+        lastCachedInputTokens: 0,
+        lastOutputTokens: 6,
+        lastReasoningOutputTokens: 0,
+        compactsAutomatically: true,
+      });
+      assert.deepEqual(events[1].payload.usage, {
+        usedTokens: 500,
+        totalProcessedTokens: 626,
+        maxTokens: 258_400,
+        inputTokens: 414,
+        cachedInputTokens: 200,
+        outputTokens: 12,
+        reasoningOutputTokens: 0,
+        lastUsedTokens: 500,
+        lastInputTokens: 294,
+        lastCachedInputTokens: 200,
         lastOutputTokens: 6,
         lastReasoningOutputTokens: 0,
         compactsAutomatically: true,

@@ -112,6 +112,200 @@ function asNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
+function subtractCachedInputTokens(
+  inputTokens: number | undefined,
+  cachedInputTokens: number | undefined,
+): number | undefined {
+  if (inputTokens === undefined) {
+    return undefined;
+  }
+  if (cachedInputTokens === undefined) {
+    return inputTokens;
+  }
+  return Math.max(0, inputTokens - cachedInputTokens);
+}
+
+interface CodexTokenUsageCounters {
+  readonly inputTokens?: number;
+  readonly cachedInputTokens?: number;
+  readonly outputTokens?: number;
+  readonly reasoningOutputTokens?: number;
+  readonly totalTokens?: number;
+}
+
+interface CodexTokenUsageTracker {
+  readonly normalize: (
+    event: ProviderEvent,
+    usage: unknown,
+  ) => ThreadTokenUsageSnapshot | undefined;
+  readonly clearThread: (threadId: ThreadId) => void;
+  readonly clearAll: () => void;
+}
+
+function readCodexTokenUsageCounters(
+  value: Record<string, unknown> | undefined,
+): CodexTokenUsageCounters {
+  const inputTokens = asNumber(value?.input_tokens) ?? asNumber(value?.inputTokens);
+  const cachedInputTokens =
+    asNumber(value?.cached_input_tokens) ?? asNumber(value?.cachedInputTokens);
+  const outputTokens = asNumber(value?.output_tokens) ?? asNumber(value?.outputTokens);
+  const reasoningOutputTokens =
+    asNumber(value?.reasoning_output_tokens) ?? asNumber(value?.reasoningOutputTokens);
+  const totalTokens = asNumber(value?.total_tokens) ?? asNumber(value?.totalTokens);
+
+  return {
+    ...(inputTokens !== undefined ? { inputTokens } : {}),
+    ...(cachedInputTokens !== undefined ? { cachedInputTokens } : {}),
+    ...(outputTokens !== undefined ? { outputTokens } : {}),
+    ...(reasoningOutputTokens !== undefined ? { reasoningOutputTokens } : {}),
+    ...(totalTokens !== undefined ? { totalTokens } : {}),
+  };
+}
+
+function counterDelta(
+  current: number | undefined,
+  previous: number | undefined,
+  fallback: number | undefined,
+): number | undefined {
+  if (current === undefined) {
+    return fallback;
+  }
+  if (previous === undefined) {
+    return fallback ?? current;
+  }
+  if (current >= previous) {
+    return current - previous;
+  }
+  return fallback ?? current;
+}
+
+function deltaCodexTokenUsageCounters(input: {
+  readonly current: CodexTokenUsageCounters;
+  readonly previous: CodexTokenUsageCounters | undefined;
+  readonly fallback: CodexTokenUsageCounters;
+}): CodexTokenUsageCounters {
+  const inputTokens = counterDelta(
+    input.current.inputTokens,
+    input.previous?.inputTokens,
+    input.fallback.inputTokens,
+  );
+  const cachedInputTokens = counterDelta(
+    input.current.cachedInputTokens,
+    input.previous?.cachedInputTokens,
+    input.fallback.cachedInputTokens,
+  );
+  const outputTokens = counterDelta(
+    input.current.outputTokens,
+    input.previous?.outputTokens,
+    input.fallback.outputTokens,
+  );
+  const reasoningOutputTokens = counterDelta(
+    input.current.reasoningOutputTokens,
+    input.previous?.reasoningOutputTokens,
+    input.fallback.reasoningOutputTokens,
+  );
+  const totalTokens = counterDelta(
+    input.current.totalTokens,
+    input.previous?.totalTokens,
+    input.fallback.totalTokens,
+  );
+
+  return {
+    ...(inputTokens !== undefined ? { inputTokens } : {}),
+    ...(cachedInputTokens !== undefined ? { cachedInputTokens } : {}),
+    ...(outputTokens !== undefined ? { outputTokens } : {}),
+    ...(reasoningOutputTokens !== undefined ? { reasoningOutputTokens } : {}),
+    ...(totalTokens !== undefined ? { totalTokens } : {}),
+  };
+}
+
+function hasPositiveTokenUsageCounter(counters: CodexTokenUsageCounters): boolean {
+  return (
+    (counters.inputTokens ?? 0) > 0 ||
+    (counters.cachedInputTokens ?? 0) > 0 ||
+    (counters.outputTokens ?? 0) > 0 ||
+    (counters.reasoningOutputTokens ?? 0) > 0 ||
+    (counters.totalTokens ?? 0) > 0
+  );
+}
+
+function addCounter(left: number | undefined, right: number | undefined): number | undefined {
+  if (right === undefined) {
+    return left;
+  }
+  return (left ?? 0) + right;
+}
+
+function addCodexTokenUsageCounters(
+  left: CodexTokenUsageCounters | undefined,
+  right: CodexTokenUsageCounters,
+): CodexTokenUsageCounters {
+  const inputTokens = addCounter(left?.inputTokens, right.inputTokens);
+  const cachedInputTokens = addCounter(left?.cachedInputTokens, right.cachedInputTokens);
+  const outputTokens = addCounter(left?.outputTokens, right.outputTokens);
+  const reasoningOutputTokens = addCounter(
+    left?.reasoningOutputTokens,
+    right.reasoningOutputTokens,
+  );
+  const totalTokens = addCounter(left?.totalTokens, right.totalTokens);
+
+  return {
+    ...(inputTokens !== undefined ? { inputTokens } : {}),
+    ...(cachedInputTokens !== undefined ? { cachedInputTokens } : {}),
+    ...(outputTokens !== undefined ? { outputTokens } : {}),
+    ...(reasoningOutputTokens !== undefined ? { reasoningOutputTokens } : {}),
+    ...(totalTokens !== undefined ? { totalTokens } : {}),
+  };
+}
+
+function tokenUsageTurnKey(event: ProviderEvent): string {
+  const payload = asObject(event.payload);
+  const turnId = event.turnId ?? payloadTurnId(payload) ?? "thread";
+  return `${event.threadId}:${turnId}`;
+}
+
+function makeCodexTokenUsageTracker(): CodexTokenUsageTracker {
+  const latestCumulativeUsageByThreadId = new Map<string, CodexTokenUsageCounters>();
+  const accumulatedUsageByTurnKey = new Map<string, CodexTokenUsageCounters>();
+
+  return {
+    normalize(event, value) {
+      const usage = asObject(value);
+      const current = readCodexTokenUsageCounters(
+        asObject(usage?.total_token_usage ?? usage?.total),
+      );
+      const fallback = readCodexTokenUsageCounters(
+        asObject(usage?.last_token_usage ?? usage?.last),
+      );
+      const threadKey = event.threadId.toString();
+      const previous = latestCumulativeUsageByThreadId.get(threadKey);
+      const delta = deltaCodexTokenUsageCounters({ current, previous, fallback });
+      latestCumulativeUsageByThreadId.set(threadKey, current);
+      if (!hasPositiveTokenUsageCounter(delta)) {
+        return undefined;
+      }
+
+      const turnKey = tokenUsageTurnKey(event);
+      const accumulated = addCodexTokenUsageCounters(accumulatedUsageByTurnKey.get(turnKey), delta);
+      accumulatedUsageByTurnKey.set(turnKey, accumulated);
+      return normalizeCodexTokenUsage(value, accumulated);
+    },
+    clearThread(threadId) {
+      const threadKey = threadId.toString();
+      latestCumulativeUsageByThreadId.delete(threadKey);
+      for (const turnKey of accumulatedUsageByTurnKey.keys()) {
+        if (turnKey.startsWith(`${threadKey}:`)) {
+          accumulatedUsageByTurnKey.delete(turnKey);
+        }
+      }
+    },
+    clearAll() {
+      latestCumulativeUsageByThreadId.clear();
+      accumulatedUsageByTurnKey.clear();
+    },
+  };
+}
+
 const FATAL_CODEX_STDERR_SNIPPETS = ["failed to connect to websocket"];
 
 function isFatalCodexProcessStderrMessage(message: string): boolean {
@@ -119,13 +313,18 @@ function isFatalCodexProcessStderrMessage(message: string): boolean {
   return FATAL_CODEX_STDERR_SNIPPETS.some((snippet) => normalized.includes(snippet));
 }
 
-function normalizeCodexTokenUsage(value: unknown): ThreadTokenUsageSnapshot | undefined {
+function normalizeCodexTokenUsage(
+  value: unknown,
+  turnUsageTotals?: CodexTokenUsageCounters,
+): ThreadTokenUsageSnapshot | undefined {
   const usage = asObject(value);
   const totalUsage = asObject(usage?.total_token_usage ?? usage?.total);
   const lastUsage = asObject(usage?.last_token_usage ?? usage?.last);
 
   const totalProcessedTokens =
-    asNumber(totalUsage?.total_tokens) ?? asNumber(totalUsage?.totalTokens);
+    turnUsageTotals !== undefined
+      ? turnUsageTotals.totalTokens
+      : (asNumber(totalUsage?.total_tokens) ?? asNumber(totalUsage?.totalTokens));
   const usedTokens =
     asNumber(lastUsage?.total_tokens) ?? asNumber(lastUsage?.totalTokens) ?? totalProcessedTokens;
   if (usedTokens === undefined || usedTokens <= 0) {
@@ -133,28 +332,46 @@ function normalizeCodexTokenUsage(value: unknown): ThreadTokenUsageSnapshot | un
   }
 
   const maxTokens = asNumber(usage?.model_context_window) ?? asNumber(usage?.modelContextWindow);
-  const totalInputTokens = asNumber(totalUsage?.input_tokens) ?? asNumber(totalUsage?.inputTokens);
+  const totalInputTokens =
+    turnUsageTotals !== undefined
+      ? turnUsageTotals.inputTokens
+      : (asNumber(totalUsage?.input_tokens) ?? asNumber(totalUsage?.inputTokens));
   const totalCachedInputTokens =
-    asNumber(totalUsage?.cached_input_tokens) ?? asNumber(totalUsage?.cachedInputTokens);
+    turnUsageTotals !== undefined
+      ? turnUsageTotals.cachedInputTokens
+      : (asNumber(totalUsage?.cached_input_tokens) ?? asNumber(totalUsage?.cachedInputTokens));
   const totalOutputTokens =
-    asNumber(totalUsage?.output_tokens) ?? asNumber(totalUsage?.outputTokens);
+    turnUsageTotals !== undefined
+      ? turnUsageTotals.outputTokens
+      : (asNumber(totalUsage?.output_tokens) ?? asNumber(totalUsage?.outputTokens));
   const totalReasoningOutputTokens =
-    asNumber(totalUsage?.reasoning_output_tokens) ?? asNumber(totalUsage?.reasoningOutputTokens);
+    turnUsageTotals !== undefined
+      ? turnUsageTotals.reasoningOutputTokens
+      : (asNumber(totalUsage?.reasoning_output_tokens) ??
+        asNumber(totalUsage?.reasoningOutputTokens));
   const lastInputTokens = asNumber(lastUsage?.input_tokens) ?? asNumber(lastUsage?.inputTokens);
   const lastCachedInputTokens =
     asNumber(lastUsage?.cached_input_tokens) ?? asNumber(lastUsage?.cachedInputTokens);
   const lastOutputTokens = asNumber(lastUsage?.output_tokens) ?? asNumber(lastUsage?.outputTokens);
   const reasoningOutputTokens =
     asNumber(lastUsage?.reasoning_output_tokens) ?? asNumber(lastUsage?.reasoningOutputTokens);
+  const totalNonCachedInputTokens = subtractCachedInputTokens(
+    totalInputTokens,
+    totalCachedInputTokens,
+  );
+  const lastNonCachedInputTokens = subtractCachedInputTokens(
+    lastInputTokens,
+    lastCachedInputTokens,
+  );
 
   return {
     usedTokens,
-    ...(totalProcessedTokens !== undefined && totalProcessedTokens > usedTokens
+    ...(totalProcessedTokens !== undefined && totalProcessedTokens > 0
       ? { totalProcessedTokens }
       : {}),
     ...(maxTokens !== undefined ? { maxTokens } : {}),
-    ...((totalInputTokens ?? lastInputTokens) !== undefined
-      ? { inputTokens: totalInputTokens ?? lastInputTokens }
+    ...((totalNonCachedInputTokens ?? lastNonCachedInputTokens) !== undefined
+      ? { inputTokens: totalNonCachedInputTokens ?? lastNonCachedInputTokens }
       : {}),
     ...((totalCachedInputTokens ?? lastCachedInputTokens) !== undefined
       ? { cachedInputTokens: totalCachedInputTokens ?? lastCachedInputTokens }
@@ -166,7 +383,9 @@ function normalizeCodexTokenUsage(value: unknown): ThreadTokenUsageSnapshot | un
       ? { reasoningOutputTokens: totalReasoningOutputTokens ?? reasoningOutputTokens }
       : {}),
     lastUsedTokens: usedTokens,
-    ...(lastInputTokens !== undefined ? { lastInputTokens } : {}),
+    ...(lastNonCachedInputTokens !== undefined
+      ? { lastInputTokens: lastNonCachedInputTokens }
+      : {}),
     ...(lastCachedInputTokens !== undefined ? { lastCachedInputTokens } : {}),
     ...(lastOutputTokens !== undefined ? { lastOutputTokens } : {}),
     ...(reasoningOutputTokens !== undefined
@@ -632,6 +851,7 @@ function mapItemLifecycle(
 function mapToRuntimeEvents(
   event: ProviderEvent,
   canonicalThreadId: ThreadId,
+  tokenUsageTracker?: CodexTokenUsageTracker,
 ): ReadonlyArray<ProviderRuntimeEvent> {
   const payload = asObject(event.payload);
   const turn = asObject(payload?.turn);
@@ -814,7 +1034,9 @@ function mapToRuntimeEvents(
 
   if (event.method === "thread/tokenUsage/updated") {
     const tokenUsage = asObject(payload?.tokenUsage);
-    const normalizedUsage = normalizeCodexTokenUsage(tokenUsage ?? event.payload);
+    const normalizedUsage = tokenUsageTracker
+      ? tokenUsageTracker.normalize(event, tokenUsage ?? event.payload)
+      : normalizeCodexTokenUsage(tokenUsage ?? event.payload);
     if (!normalizedUsage) {
       return [];
     }
@@ -1431,6 +1653,7 @@ const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     }),
   );
   const serverSettingsService = yield* ServerSettingsService;
+  const tokenUsageTracker = makeCodexTokenUsageTracker();
 
   const startSession: CodexAdapterShape["startSession"] = Effect.fn("startSession")(
     function* (input) {
@@ -1456,6 +1679,7 @@ const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
       );
       const binaryPath = codexSettings.binaryPath;
       const homePath = codexSettings.homePath;
+      tokenUsageTracker.clearThread(input.threadId);
       const managerInput: CodexAppServerStartSessionInput = {
         threadId: input.threadId,
         provider: "codex",
@@ -1612,6 +1836,7 @@ const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
 
   const stopSession: CodexAdapterShape["stopSession"] = (threadId) =>
     Effect.sync(() => {
+      tokenUsageTracker.clearThread(threadId);
       manager.stopSession(threadId);
     });
 
@@ -1623,6 +1848,7 @@ const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
 
   const stopAll: CodexAdapterShape["stopAll"] = () =>
     Effect.sync(() => {
+      tokenUsageTracker.clearAll();
       manager.stopAll();
     });
 
@@ -1639,7 +1865,7 @@ const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     const services = yield* Effect.services<never>();
     const listenerEffect = Effect.fn("listener")(function* (event: ProviderEvent) {
       yield* writeNativeEvent(event);
-      const runtimeEvents = mapToRuntimeEvents(event, event.threadId);
+      const runtimeEvents = mapToRuntimeEvents(event, event.threadId, tokenUsageTracker);
       if (runtimeEvents.length === 0) {
         yield* Effect.logDebug("ignoring unhandled Codex provider event", {
           method: event.method,

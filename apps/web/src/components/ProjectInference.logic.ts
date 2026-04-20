@@ -45,10 +45,18 @@ export interface ProjectInferenceDashboardSnapshot {
 interface LatestTurnUsageSnapshot {
   createdAt: string;
   durationMs: number;
-  inputTokens: number;
+  totalInputTokens: number;
   cachedInputTokens: number;
   outputTokens: number;
   totalProcessedTokens: number;
+}
+
+interface TokenComponentTotals {
+  totalInputTokens: number;
+  cachedInputTokens: number;
+  outputTokens: number;
+  reasoningOutputTokens: number;
+  componentTotal: number;
 }
 
 function activityOrder(
@@ -81,20 +89,41 @@ function asFiniteNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function resolveTokenComponentTotals(
+  payload: Record<string, unknown>,
+  comparisonTotal: number,
+): TokenComponentTotals {
+  const inputTokens = asFiniteNumber(payload.inputTokens) ?? 0;
+  const cachedInputTokens = asFiniteNumber(payload.cachedInputTokens) ?? 0;
+  const outputTokens = asFiniteNumber(payload.outputTokens) ?? 0;
+  const reasoningOutputTokens = asFiniteNumber(payload.reasoningOutputTokens) ?? 0;
+  const rawComponentTotal = inputTokens + cachedInputTokens + outputTokens + reasoningOutputTokens;
+  const inputAsTotalComponentTotal = inputTokens + outputTokens + reasoningOutputTokens;
+  const cachedInputIsInputSubset =
+    cachedInputTokens > 0 &&
+    comparisonTotal > 0 &&
+    rawComponentTotal > comparisonTotal &&
+    inputAsTotalComponentTotal <= comparisonTotal;
+  const totalInputTokens = cachedInputIsInputSubset ? inputTokens : inputTokens + cachedInputTokens;
+  const componentTotal = totalInputTokens + outputTokens + reasoningOutputTokens;
+
+  return {
+    totalInputTokens,
+    cachedInputTokens,
+    outputTokens,
+    reasoningOutputTokens,
+    componentTotal,
+  };
+}
+
 function resolveProcessedTokens(payload: Record<string, unknown>): number {
   const totalProcessedTokens = asFiniteNumber(payload.totalProcessedTokens);
   if (totalProcessedTokens !== null && totalProcessedTokens > 0) {
     return totalProcessedTokens;
   }
 
-  // Cross-provider burn accounting is only reliable from totalProcessedTokens when present.
-  // Without it, fall back to the closest per-snapshot estimate we have.
-  const inputTokens = asFiniteNumber(payload.inputTokens) ?? 0;
-  const cachedInputTokens = asFiniteNumber(payload.cachedInputTokens) ?? 0;
-  const outputTokens = asFiniteNumber(payload.outputTokens) ?? 0;
-  const reasoningOutputTokens = asFiniteNumber(payload.reasoningOutputTokens) ?? 0;
   const usedTokens = asFiniteNumber(payload.usedTokens) ?? 0;
-  const componentTotal = inputTokens + cachedInputTokens + outputTokens + reasoningOutputTokens;
+  const { componentTotal } = resolveTokenComponentTotals(payload, usedTokens);
 
   return componentTotal > 0 ? Math.max(componentTotal, usedTokens) : usedTokens;
 }
@@ -119,13 +148,14 @@ function collectLatestTurnUsageSnapshots(
       if (processedTokens <= 0 && durationMs <= 0) {
         continue;
       }
+      const componentTotals = resolveTokenComponentTotals(payload, processedTokens);
 
       latestUsageByTurnKey.set(activity.turnId ?? activity.id, {
         createdAt: activity.createdAt,
         durationMs,
-        inputTokens: asFiniteNumber(payload.inputTokens) ?? 0,
-        cachedInputTokens: asFiniteNumber(payload.cachedInputTokens) ?? 0,
-        outputTokens: asFiniteNumber(payload.outputTokens) ?? 0,
+        totalInputTokens: componentTotals.totalInputTokens,
+        cachedInputTokens: componentTotals.cachedInputTokens,
+        outputTokens: componentTotals.outputTokens,
         totalProcessedTokens: processedTokens,
       });
     }
@@ -197,20 +227,20 @@ export function buildProjectInferenceDashboardSnapshot(input: {
 
     for (const usage of usageByTurnKey.values()) {
       totalProcessedTokens += usage.totalProcessedTokens;
-      totalInputTokens += usage.inputTokens + usage.cachedInputTokens;
+      totalInputTokens += usage.totalInputTokens;
       cachedInputTokens += usage.cachedInputTokens;
       outputTokens += usage.outputTokens;
       totalDurationMs += usage.durationMs;
       trackedTurns += 1;
       lifetimeTotalBurnTokens += usage.totalProcessedTokens;
-      lifetimeInputTokens += usage.inputTokens + usage.cachedInputTokens;
+      lifetimeInputTokens += usage.totalInputTokens;
       lifetimeCachedInputTokens += usage.cachedInputTokens;
       lifetimeOutputTokens += usage.outputTokens;
 
       if (new Date(usage.createdAt).getTime() >= cutoffMs) {
         recentTrackedTurns += 1;
         recentTotalBurnTokens += usage.totalProcessedTokens;
-        recentInputTokens += usage.inputTokens + usage.cachedInputTokens;
+        recentInputTokens += usage.totalInputTokens;
         recentCachedInputTokens += usage.cachedInputTokens;
         recentOutputTokens += usage.outputTokens;
       }
