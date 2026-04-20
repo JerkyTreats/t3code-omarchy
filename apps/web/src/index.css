@@ -794,6 +794,30 @@ label:has(> select#reasoning-effort) select {
   padding-left: 1.35rem;
 }
 
+.document-markdown ul {
+  list-style-type: disc;
+}
+
+.document-markdown ol {
+  list-style-type: decimal;
+}
+
+.document-markdown ul ul {
+  list-style-type: circle;
+}
+
+.document-markdown ul ul ul {
+  list-style-type: square;
+}
+
+.document-markdown ol ol {
+  list-style-type: lower-alpha;
+}
+
+.document-markdown ol ol ol {
+  list-style-type: lower-roman;
+}
+
 .document-markdown li + li {
   margin-top: 0.3rem;
 }
