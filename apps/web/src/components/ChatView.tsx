@@ -714,6 +714,7 @@ export default function ChatView({ threadId, conversationPanel = null }: ChatVie
     LastInvokedScriptByProjectSchema,
   );
   const messagesScrollRef = useRef<HTMLDivElement>(null);
+  const messagesBottomRef = useRef<HTMLDivElement>(null);
   const [messagesScrollElement, setMessagesScrollElement] = useState<HTMLDivElement | null>(null);
   const shouldAutoScrollRef = useRef(true);
   const lastKnownScrollTopRef = useRef(0);
@@ -721,6 +722,7 @@ export default function ChatView({ threadId, conversationPanel = null }: ChatVie
   const lastTouchClientYRef = useRef<number | null>(null);
   const pendingUserScrollUpIntentRef = useRef(false);
   const pendingAutoScrollFrameRef = useRef<number | null>(null);
+  const pendingAutoScrollCorrectionFrameRef = useRef<number | null>(null);
   const pendingInteractionAnchorRef = useRef<{
     element: HTMLElement;
     top: number;
@@ -2024,17 +2026,51 @@ export default function ChatView({ threadId, conversationPanel = null }: ChatVie
 
   // Auto-scroll on new messages
   const messageCount = timelineMessages.length;
-  const scrollMessagesToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
+  const applyMessagesBottomScroll = useCallback((behavior: ScrollBehavior = "auto") => {
     const scrollContainer = messagesScrollRef.current;
     if (!scrollContainer) return;
-    scrollContainer.scrollTo({ top: scrollContainer.scrollHeight, behavior });
+    const bottomTarget = messagesBottomRef.current;
+    if (bottomTarget && scrollContainer.contains(bottomTarget)) {
+      bottomTarget.scrollIntoView({ block: "end", behavior });
+    } else {
+      scrollContainer.scrollTo({ top: scrollContainer.scrollHeight, behavior });
+    }
+    if (behavior === "auto") {
+      scrollContainer.scrollTop = Math.max(
+        0,
+        scrollContainer.scrollHeight - scrollContainer.clientHeight,
+      );
+    }
     lastKnownScrollTopRef.current = scrollContainer.scrollTop;
-    shouldAutoScrollRef.current = true;
   }, []);
+  const scheduleAutoScrollCorrection = useCallback(() => {
+    if (pendingAutoScrollCorrectionFrameRef.current !== null) return;
+    pendingAutoScrollCorrectionFrameRef.current = window.requestAnimationFrame(() => {
+      pendingAutoScrollCorrectionFrameRef.current = null;
+      if (!shouldAutoScrollRef.current) return;
+      applyMessagesBottomScroll();
+    });
+  }, [applyMessagesBottomScroll]);
+  const scrollMessagesToBottom = useCallback(
+    (behavior: ScrollBehavior = "auto") => {
+      shouldAutoScrollRef.current = true;
+      pendingUserScrollUpIntentRef.current = false;
+      setShowScrollToBottom(false);
+      applyMessagesBottomScroll(behavior);
+      scheduleAutoScrollCorrection();
+    },
+    [applyMessagesBottomScroll, scheduleAutoScrollCorrection],
+  );
   const cancelPendingStickToBottom = useCallback(() => {
     const pendingFrame = pendingAutoScrollFrameRef.current;
     if (pendingFrame === null) return;
     pendingAutoScrollFrameRef.current = null;
+    window.cancelAnimationFrame(pendingFrame);
+  }, []);
+  const cancelPendingAutoScrollCorrection = useCallback(() => {
+    const pendingFrame = pendingAutoScrollCorrectionFrameRef.current;
+    if (pendingFrame === null) return;
+    pendingAutoScrollCorrectionFrameRef.current = null;
     window.cancelAnimationFrame(pendingFrame);
   }, []);
   const cancelPendingInteractionAnchorAdjustment = useCallback(() => {
@@ -2155,9 +2191,30 @@ export default function ChatView({ threadId, conversationPanel = null }: ChatVie
   useEffect(() => {
     return () => {
       cancelPendingStickToBottom();
+      cancelPendingAutoScrollCorrection();
       cancelPendingInteractionAnchorAdjustment();
     };
-  }, [cancelPendingInteractionAnchorAdjustment, cancelPendingStickToBottom]);
+  }, [
+    cancelPendingAutoScrollCorrection,
+    cancelPendingInteractionAnchorAdjustment,
+    cancelPendingStickToBottom,
+  ]);
+  useLayoutEffect(() => {
+    if (!messagesScrollElement) return;
+    if (shouldAutoScrollRef.current) {
+      scrollMessagesToBottom();
+      scheduleStickToBottom();
+      return;
+    }
+
+    const maxScrollTop = Math.max(
+      0,
+      messagesScrollElement.scrollHeight - messagesScrollElement.clientHeight,
+    );
+    messagesScrollElement.scrollTop = Math.min(lastKnownScrollTopRef.current, maxScrollTop);
+    lastKnownScrollTopRef.current = messagesScrollElement.scrollTop;
+    setShowScrollToBottom(!isScrollContainerNearBottom(messagesScrollElement));
+  }, [messagesScrollElement, scheduleStickToBottom, scrollMessagesToBottom]);
   useLayoutEffect(() => {
     if (!activeThread?.id) return;
     shouldAutoScrollRef.current = true;
@@ -4059,6 +4116,7 @@ export default function ChatView({ threadId, conversationPanel = null }: ChatVie
                   timestampFormat={timestampFormat}
                   workspaceRoot={activeWorkspaceRoot}
                 />
+                <div ref={messagesBottomRef} aria-hidden="true" className="h-px w-full" />
               </div>
             )}
 
@@ -4067,7 +4125,7 @@ export default function ChatView({ threadId, conversationPanel = null }: ChatVie
               <div className="pointer-events-none absolute bottom-1 left-1/2 z-30 flex -translate-x-1/2 justify-center py-1.5">
                 <button
                   type="button"
-                  onClick={() => scrollMessagesToBottom("smooth")}
+                  onClick={forceStickToBottom}
                   className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-border/60 bg-card px-3 py-1 text-muted-foreground text-xs shadow-sm transition-colors hover:border-border hover:text-foreground hover:cursor-pointer"
                 >
                   <ChevronDownIcon className="size-3.5" />

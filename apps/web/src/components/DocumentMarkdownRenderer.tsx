@@ -6,6 +6,7 @@ import {
   use,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -280,6 +281,10 @@ export function DocumentMarkdownRenderer(props: {
   const headingSlug = useMemo(() => createSlugger(), []);
   const containerRef = useRef<HTMLDivElement>(null);
   const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
+
+  useLayoutEffect(() => {
+    containerRef.current?.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [props.filePath, props.markdown]);
 
   const markdownComponents = useMemo<Components>(
     () => ({

@@ -21,6 +21,35 @@ const POSIX_FILE_ROOT_PREFIXES = [
   "/root/",
 ] as const;
 
+function splitPathAndPosition(value: string): {
+  path: string;
+  line: string | undefined;
+  column: string | undefined;
+} {
+  let path = value;
+  let column: string | undefined;
+  let line: string | undefined;
+
+  const columnMatch = path.match(/:(\d+)$/);
+  if (!columnMatch?.[1]) {
+    return { path, line: undefined, column: undefined };
+  }
+
+  column = columnMatch[1];
+  path = path.slice(0, -columnMatch[0].length);
+
+  const lineMatch = path.match(/:(\d+)$/);
+  if (lineMatch?.[1]) {
+    line = lineMatch[1];
+    path = path.slice(0, -lineMatch[0].length);
+  } else {
+    line = column;
+    column = undefined;
+  }
+
+  return { path, line, column };
+}
+
 function safeDecode(value: string): string {
   try {
     return decodeURIComponent(value);
@@ -131,4 +160,32 @@ export function resolveMarkdownFileLinkTarget(
 
   if (!cwd) return null;
   return resolvePathLinkTarget(pathWithPosition, cwd);
+}
+
+export function resolveMarkdownRelativeFileLink(
+  href: string | undefined,
+  cwd?: string,
+): string | null {
+  if (!cwd) {
+    return null;
+  }
+
+  const absoluteTarget = resolveMarkdownFileLinkTarget(href, cwd);
+  if (!absoluteTarget) {
+    return null;
+  }
+
+  const { path } = splitPathAndPosition(absoluteTarget);
+  const normalizedCwd = cwd.replaceAll("\\", "/").replace(/\/+$/, "");
+  const normalizedPath = path.replaceAll("\\", "/");
+  if (normalizedPath === normalizedCwd) {
+    return null;
+  }
+
+  const prefixedCwd = `${normalizedCwd}/`;
+  if (!normalizedPath.startsWith(prefixedCwd)) {
+    return null;
+  }
+
+  return normalizedPath.slice(prefixedCwd.length);
 }

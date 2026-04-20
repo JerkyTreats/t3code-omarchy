@@ -184,6 +184,7 @@ function ChatThreadRouteContent() {
     select: (params) => ThreadId.makeUnsafe(params.threadId),
   });
   const search = Route.useSearch();
+  const activeThread = useStore((store) => store.threads.find((thread) => thread.id === threadId));
   const threadExists = useStore((store) => store.threads.some((thread) => thread.id === threadId));
   const draftThreadExists = useComposerDraftStore((store) =>
     Object.hasOwn(store.draftThreadsByThreadId, threadId),
@@ -312,6 +313,26 @@ function ChatThreadRouteContent() {
     },
     [expandedFilesDocument, navigate, threadId],
   );
+  const selectDiffExplorerFile = useCallback(
+    (pathValue: string) => {
+      const targetTurnId = search.diffTurnId ?? activeThread?.latestTurn?.turnId ?? null;
+      if (!targetTurnId) {
+        return;
+      }
+      void navigate({
+        to: "/$threadId",
+        params: { threadId },
+        search: (previous) => ({
+          ...stripChatPanelSearchParams(previous),
+          panel: "diff",
+          diffTurnId: targetTurnId,
+          diffFilePath: pathValue,
+          diffView: "preview",
+        }),
+      });
+    },
+    [activeThread?.latestTurn?.turnId, navigate, search.diffTurnId, threadId],
+  );
 
   useEffect(() => {
     if (diffOpen) {
@@ -376,7 +397,21 @@ function ChatThreadRouteContent() {
         <SidebarInset className="h-dvh  min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground">
           <ChatView threadId={threadId} conversationPanel={conversationPanel} />
         </SidebarInset>
-        {panelExpanded ? null : (
+        {panelExpanded ? (
+          <FilesPanelRouteAdapter
+            threadId={threadId}
+            open
+            onCloseFiles={() => setPanelExpanded(false)}
+            onOpenFiles={() => setPanelExpanded(true)}
+            renderContent={shouldRenderDiffContent}
+            docPath={search.diffFilePath ?? null}
+            expandedDocument
+            showPreview={false}
+            useExplorerChrome
+            onSelectFile={selectDiffExplorerFile}
+            onExpandDocument={() => undefined}
+          />
+        ) : (
           <DiffPanelInlineSidebar
             diffOpen={diffOpen}
             onCloseDiff={closeDiff}

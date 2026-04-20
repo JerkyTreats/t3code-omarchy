@@ -15,6 +15,8 @@ import React, {
 import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
+import { ThreadId } from "@t3tools/contracts";
 import { openInPreferredEditor } from "../editorPreferences";
 import { resolveDiffThemeName, type DiffThemeName } from "../lib/diffRendering";
 import { useTheme } from "../hooks/useTheme";
@@ -25,8 +27,9 @@ import {
   getHighlighterPromise,
   highlightedCodeCache,
 } from "../lib/codeHighlighting";
-import { resolveMarkdownFileLinkTarget } from "../markdown-links";
+import { resolveMarkdownFileLinkTarget, resolveMarkdownRelativeFileLink } from "../markdown-links";
 import { readNativeApi } from "../nativeApi";
+import { parseChatPanelRouteSearch, stripChatPanelSearchParams } from "../chatPanelRouteSearch";
 
 class CodeHighlightErrorBoundary extends React.Component<
   { fallback: ReactNode; children: ReactNode },
@@ -197,10 +200,20 @@ function SuspenseShikiCodeBlock({
 function ChatMarkdown({ text, cwd, isStreaming = false }: ChatMarkdownProps) {
   const { resolvedTheme } = useTheme();
   const diffThemeName = resolveDiffThemeName(resolvedTheme);
+  const navigate = useNavigate();
+  const threadId = useParams({
+    strict: false,
+    select: (params) => (params.threadId ? ThreadId.makeUnsafe(params.threadId) : null),
+  });
+  const panelSearch = useSearch({
+    strict: false,
+    select: (search) => parseChatPanelRouteSearch(search),
+  });
   const markdownComponents = useMemo<Components>(
     () => ({
       a({ node: _node, href, ...props }) {
         const targetPath = resolveMarkdownFileLinkTarget(href, cwd);
+        const relativePath = resolveMarkdownRelativeFileLink(href, cwd);
         if (!targetPath) {
           return <a {...props} href={href} target="_blank" rel="noopener noreferrer" />;
         }
@@ -212,6 +225,37 @@ function ChatMarkdown({ text, cwd, isStreaming = false }: ChatMarkdownProps) {
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
+              if (threadId && relativePath) {
+                if (panelSearch.panel === "diff" && panelSearch.diffTurnId) {
+                  void navigate({
+                    to: "/$threadId",
+                    params: { threadId },
+                    search: (previous) => ({
+                      ...stripChatPanelSearchParams(previous),
+                      panel: "diff",
+                      diffTurnId: panelSearch.diffTurnId,
+                      diffFilePath: relativePath,
+                      diffView: "preview",
+                    }),
+                  });
+                  return;
+                }
+
+                if (panelSearch.panel === "files") {
+                  void navigate({
+                    to: "/$threadId",
+                    params: { threadId },
+                    search: (previous) => ({
+                      ...stripChatPanelSearchParams(previous),
+                      panel: "files",
+                      docPath: relativePath,
+                      ...(panelSearch.docExpanded === "1" ? { docExpanded: "1" as const } : {}),
+                    }),
+                  });
+                  return;
+                }
+              }
+
               const api = readNativeApi();
               if (api) {
                 void openInPreferredEditor(api, targetPath);
@@ -244,7 +288,7 @@ function ChatMarkdown({ text, cwd, isStreaming = false }: ChatMarkdownProps) {
         );
       },
     }),
-    [cwd, diffThemeName, isStreaming],
+    [cwd, diffThemeName, isStreaming, navigate, panelSearch, threadId],
   );
 
   return (

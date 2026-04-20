@@ -988,7 +988,7 @@ label:has(> select#reasoning-effort) select {
 
 .source-file-preview .line {
   display: block;
-  min-height: .5rem;
+  min-height: 0.5rem;
   padding-left: 4rem;
   padding-right: 1rem;
   counter-increment: source-line;
@@ -1019,7 +1019,7 @@ label:has(> select#reasoning-effort) select {
   margin: 0;
   overflow: auto;
   font-size: 0.84rem;
-  line-height: .75rem;
+  line-height: 0.75rem;
 }
 
 /* Diffs theme bridge (match diff surfaces to app palette) */

@@ -36,6 +36,8 @@ function FilesPanelContent(props: {
   expandedDocument: boolean;
   onSelectFile: (pathValue: string) => void;
   onExpandDocument: () => void;
+  showPreview?: boolean;
+  useExplorerChrome?: boolean;
 }) {
   const gitStatusQuery = useGitStatus(props.cwd);
   const statusByPath = useMemo(
@@ -56,7 +58,7 @@ function FilesPanelContent(props: {
     [props.cwd],
   );
 
-  if (props.docPath && !props.expandedDocument) {
+  if ((props.showPreview ?? true) && props.docPath && !props.expandedDocument) {
     return (
       <div className="document-chrome-shell h-full min-h-0">
         <DocumentShell
@@ -93,7 +95,7 @@ function FilesPanelContent(props: {
   return (
     <div
       className={
-        props.expandedDocument
+        props.useExplorerChrome || props.expandedDocument
           ? "document-chrome-shell--explorer h-full min-h-0"
           : "document-chrome-shell h-full min-h-0"
       }
@@ -131,6 +133,8 @@ interface FilesPanelRouteAdapterProps {
   expandedDocument: boolean;
   onSelectFile: (pathValue: string) => void;
   onExpandDocument: () => void;
+  showPreview?: boolean;
+  useExplorerChrome?: boolean;
 }
 
 export function FilesPanelRouteAdapter(props: FilesPanelRouteAdapterProps) {
@@ -163,6 +167,10 @@ export function FilesPanelRouteAdapter(props: FilesPanelRouteAdapterProps) {
       expandedDocument={props.expandedDocument}
       onSelectFile={props.onSelectFile}
       onExpandDocument={props.onExpandDocument}
+      {...(props.showPreview !== undefined ? { showPreview: props.showPreview } : {})}
+      {...(props.useExplorerChrome !== undefined
+        ? { useExplorerChrome: props.useExplorerChrome }
+        : {})}
     />
   ) : null;
 
