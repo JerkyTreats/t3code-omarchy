@@ -1,6 +1,7 @@
 import { type ThreadId } from "@t3tools/contracts";
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 
+import { useComposerDraftStore } from "~/composerDraftStore";
 import { openInPreferredEditor } from "~/editorPreferences";
 import { readNativeApi } from "~/nativeApi";
 import { useStore } from "~/store";
@@ -8,6 +9,7 @@ import { resolvePathLinkTarget } from "~/terminal-links";
 import { DocumentShell } from "../DocumentShell";
 import { PanelTab } from "../DiffPanelShell";
 import { ProjectFilePreviewHeader, ProjectFilePreviewSurface } from "../ProjectFilePreviewSurface";
+import { resolveFilesPanelProject } from "./resolveFilesPanelProject";
 
 export function FilesConversationDocument(props: {
   threadId: ThreadId;
@@ -18,10 +20,16 @@ export function FilesConversationDocument(props: {
   const activeThread = useStore((store) =>
     store.threads.find((thread) => thread.id === props.threadId),
   );
-  const activeProject = useStore((store) =>
-    activeThread
-      ? (store.projects.find((project) => project.id === activeThread.projectId) ?? null)
-      : null,
+  const activeDraftThread = useComposerDraftStore((store) => store.getDraftThread(props.threadId));
+  const projects = useStore((store) => store.projects);
+  const activeProject = useMemo(
+    () =>
+      resolveFilesPanelProject({
+        activeDraftThread,
+        activeThread: activeThread ?? null,
+        projects,
+      }),
+    [activeDraftThread, activeThread, projects],
   );
   const projectCwd = activeProject?.cwd ?? null;
 

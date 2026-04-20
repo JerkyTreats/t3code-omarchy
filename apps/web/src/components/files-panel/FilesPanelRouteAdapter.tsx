@@ -1,6 +1,7 @@
 import { type GitFileStatus, type ThreadId } from "@t3tools/contracts";
 import { Suspense, lazy, useCallback, useMemo } from "react";
 
+import { useComposerDraftStore } from "~/composerDraftStore";
 import { openInPreferredEditor } from "~/editorPreferences";
 import { useMediaQuery } from "~/hooks/useMediaQuery";
 import { useGitStatus } from "~/lib/gitStatusState";
@@ -12,6 +13,7 @@ import { DiffPanelLoadingState, PanelTab } from "../DiffPanelShell";
 import { ProjectFilePreviewHeader, ProjectFilePreviewSurface } from "../ProjectFilePreviewSurface";
 import { Sheet, SheetPopup } from "../ui/sheet";
 import { Sidebar, SidebarProvider, SidebarRail } from "../ui/sidebar";
+import { resolveFilesPanelProject } from "./resolveFilesPanelProject";
 
 const FILES_PANEL_INLINE_LAYOUT_MEDIA_QUERY = "(max-width: 1280px)";
 const FILES_PANEL_INLINE_DEFAULT_WIDTH = "clamp(22rem,32vw,30rem)";
@@ -141,10 +143,16 @@ export function FilesPanelRouteAdapter(props: FilesPanelRouteAdapterProps) {
   const activeThread = useStore((store) =>
     store.threads.find((thread) => thread.id === props.threadId),
   );
-  const activeProject = useStore((store) =>
-    activeThread
-      ? (store.projects.find((project) => project.id === activeThread.projectId) ?? null)
-      : null,
+  const activeDraftThread = useComposerDraftStore((store) => store.getDraftThread(props.threadId));
+  const projects = useStore((store) => store.projects);
+  const activeProject = useMemo(
+    () =>
+      resolveFilesPanelProject({
+        activeDraftThread,
+        activeThread: activeThread ?? null,
+        projects,
+      }),
+    [activeDraftThread, activeThread, projects],
   );
   const projectCwd = activeProject?.cwd ?? null;
   const shouldUseSheet = useMediaQuery(FILES_PANEL_INLINE_LAYOUT_MEDIA_QUERY);
