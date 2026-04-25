@@ -18,6 +18,7 @@ import {
   deriveTimelineEntries,
   deriveWorkLogEntries,
   findLatestProposedPlan,
+  findProposedPlanByReference,
   findSidebarProposedPlan,
   hasActionableProposedPlan,
   hasToolActivityForTurn,
@@ -520,6 +521,63 @@ describe("findLatestProposedPlan", () => {
     );
 
     expect(latestPlan?.planMarkdown).toBe("# Latest");
+  });
+});
+
+describe("findProposedPlanByReference", () => {
+  const threads = [
+    {
+      id: ThreadId.makeUnsafe("thread-1"),
+      proposedPlans: [
+        {
+          id: "plan-1",
+          turnId: TurnId.makeUnsafe("turn-1"),
+          planMarkdown: "# Plan 1",
+          implementedAt: null,
+          implementationThreadId: null,
+          createdAt: "2026-02-23T00:00:01.000Z",
+          updatedAt: "2026-02-23T00:00:02.000Z",
+        },
+      ],
+    },
+  ];
+
+  it("finds a proposed plan by thread id and plan id", () => {
+    expect(
+      findProposedPlanByReference({
+        threads,
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        planId: "plan-1",
+      }),
+    ).toEqual({
+      id: "plan-1",
+      turnId: "turn-1",
+      planMarkdown: "# Plan 1",
+      implementedAt: null,
+      implementationThreadId: null,
+      createdAt: "2026-02-23T00:00:01.000Z",
+      updatedAt: "2026-02-23T00:00:02.000Z",
+    });
+  });
+
+  it("returns null for a missing thread", () => {
+    expect(
+      findProposedPlanByReference({
+        threads,
+        threadId: ThreadId.makeUnsafe("thread-missing"),
+        planId: "plan-1",
+      }),
+    ).toBeNull();
+  });
+
+  it("returns null for a missing plan id", () => {
+    expect(
+      findProposedPlanByReference({
+        threads,
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        planId: "plan-missing",
+      }),
+    ).toBeNull();
   });
 });
 

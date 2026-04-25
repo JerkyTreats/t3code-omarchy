@@ -30,6 +30,7 @@ import {
   getHighlighterPromise,
   highlightedCodeCache,
 } from "~/lib/codeHighlighting";
+import { resolveMarkdownRelativeFileLink } from "~/markdown-links";
 
 function nodeToPlainText(node: ReactNode): string {
   if (typeof node === "string" || typeof node === "number") {
@@ -274,6 +275,8 @@ export function DocumentMarkdownRenderer(props: {
   onNavigateToPath: (relativePath: string, hash?: string) => void;
   onOpenFileInEditor: (relativePath: string) => void;
   renderResolvedImage?: (input: RenderResolvedDocumentImageInput) => ReactNode;
+  showSourceFooter?: boolean;
+  workspaceCwd?: string | undefined;
 }) {
   const { resolvedTheme } = useTheme();
   const themeName = resolveDiffThemeName(resolvedTheme);
@@ -289,6 +292,22 @@ export function DocumentMarkdownRenderer(props: {
   const markdownComponents = useMemo<Components>(
     () => ({
       a({ href, children, ...linkProps }) {
+        const workspaceRelativePath = resolveMarkdownRelativeFileLink(href, props.workspaceCwd);
+        if (workspaceRelativePath) {
+          return (
+            <a
+              {...linkProps}
+              href={href}
+              onClick={(event) => {
+                event.preventDefault();
+                props.onNavigateToPath(workspaceRelativePath);
+              }}
+            >
+              {children}
+            </a>
+          );
+        }
+
         const resolved = resolveDocumentLink(href);
         if (!resolved) {
           return (
@@ -402,6 +421,13 @@ export function DocumentMarkdownRenderer(props: {
           </Suspense>
         );
       },
+      table({ node: _node, ...tableProps }) {
+        return (
+          <div className="document-markdown-table-scroll">
+            <table {...tableProps} />
+          </div>
+        );
+      },
       h1({ children, ...headingProps }) {
         const id = headingSlug(nodeToPlainText(children));
         return (
@@ -496,15 +522,17 @@ export function DocumentMarkdownRenderer(props: {
             >
               {props.markdown}
             </ReactMarkdown>
-            <div className="mt-8 border-t border-border/60 pt-4 text-xs text-muted-foreground/75">
-              <button
-                type="button"
-                className="underline underline-offset-4"
-                onClick={() => props.onOpenFileInEditor(props.filePath)}
-              >
-                Open source in editor
-              </button>
-            </div>
+            {props.showSourceFooter !== false ? (
+              <div className="mt-8 border-t border-border/60 pt-4 text-xs text-muted-foreground/75">
+                <button
+                  type="button"
+                  className="underline underline-offset-4"
+                  onClick={() => props.onOpenFileInEditor(props.filePath)}
+                >
+                  Open source in editor
+                </button>
+              </div>
+            ) : null}
           </article>
         </div>
       </div>

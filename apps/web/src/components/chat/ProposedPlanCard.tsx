@@ -8,7 +8,7 @@ import {
   stripDisplayedPlanMarkdown,
 } from "../../proposedPlan";
 import ChatMarkdown from "../ChatMarkdown";
-import { ChevronDownIcon, ChevronRightIcon, EllipsisIcon } from "lucide-react";
+import { ChevronDownIcon, ChevronRightIcon, EllipsisIcon, Maximize2Icon } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
@@ -30,10 +30,12 @@ export const ProposedPlanCard = memo(function ProposedPlanCard({
   planMarkdown,
   cwd,
   workspaceRoot,
+  onOpenMarkdownPreview,
 }: {
   planMarkdown: string;
   cwd: string | undefined;
   workspaceRoot: string | undefined;
+  onOpenMarkdownPreview?: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [isSaveDialogOpen, setIsSaveDialogOpen] = useState(false);
@@ -131,6 +133,18 @@ export const ProposedPlanCard = memo(function ProposedPlanCard({
                 <ChevronRightIcon aria-hidden="true" className="size-3.5" />
               )}
               {expanded ? "Collapse plan" : "Expand plan"}
+            </Button>
+          ) : null}
+          {onOpenMarkdownPreview ? (
+            <Button
+              type="button"
+              size="icon-xs"
+              variant="outline"
+              onClick={onOpenMarkdownPreview}
+              aria-label="Open in Markdown Preview"
+              title="Open in Markdown Preview"
+            >
+              <Maximize2Icon aria-hidden="true" className="size-4" />
             </Button>
           ) : null}
           <Menu>

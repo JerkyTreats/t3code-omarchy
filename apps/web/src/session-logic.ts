@@ -504,6 +504,21 @@ export function findLatestProposedPlan(
   return toLatestProposedPlanState(latestPlan);
 }
 
+export function findProposedPlanByReference(input: {
+  threads: ReadonlyArray<Pick<Thread, "id" | "proposedPlans">>;
+  threadId: ThreadId | string | null | undefined;
+  planId: OrchestrationProposedPlanId | string | null | undefined;
+}): LatestProposedPlanState | null {
+  if (!input.threadId || !input.planId) {
+    return null;
+  }
+
+  const proposedPlan = input.threads
+    .find((thread) => thread.id === input.threadId)
+    ?.proposedPlans.find((plan) => plan.id === input.planId);
+  return proposedPlan ? toLatestProposedPlanState(proposedPlan) : null;
+}
+
 export function findSidebarProposedPlan(input: {
   threads: ReadonlyArray<Pick<Thread, "id" | "proposedPlans">>;
   latestTurn: Pick<OrchestrationLatestTurn, "turnId" | "sourceProposedPlan"> | null;

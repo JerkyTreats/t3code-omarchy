@@ -16,7 +16,7 @@ import {
 } from "@tanstack/react-virtual";
 import { deriveTimelineEntries, formatElapsed } from "../../session-logic";
 import { AUTO_SCROLL_BOTTOM_THRESHOLD_PX } from "../../chat-scroll";
-import { type TurnDiffSummary } from "../../types";
+import { type ProposedPlan, type TurnDiffSummary } from "../../types";
 import { summarizeTurnDiffStats } from "../../lib/turnDiffTree";
 import ChatMarkdown from "../ChatMarkdown";
 import {
@@ -82,6 +82,7 @@ interface MessagesTimelineProps {
   onRevertUserMessage: (messageId: MessageId) => void;
   isRevertingCheckpoint: boolean;
   onImageExpand: (preview: ExpandedImagePreview) => void;
+  onOpenProposedPlanPreview?: (plan: ProposedPlan) => void;
   markdownCwd: string | undefined;
   resolvedTheme: "light" | "dark";
   timestampFormat: TimestampFormat;
@@ -117,6 +118,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   onRevertUserMessage,
   isRevertingCheckpoint,
   onImageExpand,
+  onOpenProposedPlanPreview,
   markdownCwd,
   resolvedTheme,
   timestampFormat,
@@ -533,6 +535,9 @@ export const MessagesTimeline = memo(function MessagesTimeline({
             planMarkdown={row.proposedPlan.planMarkdown}
             cwd={markdownCwd}
             workspaceRoot={workspaceRoot}
+            {...(onOpenProposedPlanPreview
+              ? { onOpenMarkdownPreview: () => onOpenProposedPlanPreview(row.proposedPlan) }
+              : {})}
           />
         </div>
       )}

@@ -85,6 +85,7 @@ import {
   DEFAULT_THREAD_TERMINAL_ID,
   MAX_TERMINALS_PER_GROUP,
   type ChatMessage,
+  type ProposedPlan,
   type SessionPhase,
   type Thread,
   type TurnDiffSummary,
@@ -3980,6 +3981,41 @@ export default function ChatView({ threadId, conversationPanel = null }: ChatVie
     },
     [navigate, threadId],
   );
+  const openPlanPreview = useCallback(
+    (input: { planThreadId: ThreadId; planId: ProposedPlan["id"] }) => {
+      void navigate({
+        to: "/$threadId",
+        params: { threadId },
+        search: (previous) => ({
+          ...stripChatPanelSearchParams(previous),
+          planPreview: "1" as const,
+          planThreadId: input.planThreadId,
+          planId: input.planId,
+        }),
+      });
+    },
+    [navigate, threadId],
+  );
+  const onOpenTimelineProposedPlanPreview = useCallback(
+    (plan: ProposedPlan) => {
+      if (!activeThread) {
+        return;
+      }
+      openPlanPreview({ planThreadId: activeThread.id, planId: plan.id });
+    },
+    [activeThread, openPlanPreview],
+  );
+  const onOpenSidebarProposedPlanPreview = useCallback(() => {
+    if (!activeThread || !sidebarProposedPlan) {
+      return;
+    }
+    const sourceProposedPlan = activeLatestTurn?.sourceProposedPlan;
+    const planThreadId =
+      sourceProposedPlan && sourceProposedPlan.planId === sidebarProposedPlan.id
+        ? sourceProposedPlan.threadId
+        : activeThread.id;
+    openPlanPreview({ planThreadId, planId: sidebarProposedPlan.id });
+  }, [activeLatestTurn?.sourceProposedPlan, activeThread, openPlanPreview, sidebarProposedPlan]);
   const onRevertUserMessage = (messageId: MessageId) => {
     const targetTurnCount = revertTurnCountByUserMessageId.get(messageId);
     if (typeof targetTurnCount !== "number") {
@@ -4111,6 +4147,7 @@ export default function ChatView({ threadId, conversationPanel = null }: ChatVie
                   onRevertUserMessage={onRevertUserMessage}
                   isRevertingCheckpoint={isRevertingCheckpoint}
                   onImageExpand={onExpandTimelineImage}
+                  onOpenProposedPlanPreview={onOpenTimelineProposedPlanPreview}
                   markdownCwd={gitCwd ?? undefined}
                   resolvedTheme={resolvedTheme}
                   timestampFormat={timestampFormat}
@@ -4596,6 +4633,7 @@ export default function ChatView({ threadId, conversationPanel = null }: ChatVie
             markdownCwd={gitCwd ?? undefined}
             workspaceRoot={activeWorkspaceRoot}
             timestampFormat={timestampFormat}
+            onOpenMarkdownPreview={onOpenSidebarProposedPlanPreview}
             onClose={() => {
               setPlanSidebarOpen(false);
               // Track that the user explicitly dismissed for this turn so auto-open won't fight them.

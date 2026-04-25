@@ -10,6 +10,7 @@ import {
   ChevronRightIcon,
   EllipsisIcon,
   LoaderIcon,
+  Maximize2Icon,
   PanelRightCloseIcon,
 } from "lucide-react";
 import { cn } from "~/lib/utils";
@@ -56,6 +57,7 @@ interface PlanSidebarProps {
   markdownCwd: string | undefined;
   workspaceRoot: string | undefined;
   timestampFormat: TimestampFormat;
+  onOpenMarkdownPreview?: () => void;
   onClose: () => void;
 }
 
@@ -65,6 +67,7 @@ const PlanSidebar = memo(function PlanSidebar({
   markdownCwd,
   workspaceRoot,
   timestampFormat,
+  onOpenMarkdownPreview,
   onClose,
 }: PlanSidebarProps) {
   const [proposedPlanExpanded, setProposedPlanExpanded] = useState(false);
@@ -135,6 +138,18 @@ const PlanSidebar = memo(function PlanSidebar({
           ) : null}
         </div>
         <div className="flex items-center gap-1">
+          {planMarkdown && onOpenMarkdownPreview ? (
+            <Button
+              size="icon-xs"
+              variant="ghost"
+              onClick={onOpenMarkdownPreview}
+              aria-label="Open in Markdown Preview"
+              title="Open in Markdown Preview"
+              className="text-muted-foreground/50 hover:text-foreground/70"
+            >
+              <Maximize2Icon className="size-3.5" />
+            </Button>
+          ) : null}
           {planMarkdown ? (
             <Menu>
               <MenuTrigger

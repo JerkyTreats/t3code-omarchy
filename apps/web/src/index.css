@@ -674,6 +674,8 @@ label:has(> select#reasoning-effort) select {
 
 .chat-markdown .chat-markdown-codeblock {
   position: relative;
+  max-width: 100%;
+  min-width: 0;
   margin: 0.65rem 0;
 }
 
@@ -723,11 +725,25 @@ label:has(> select#reasoning-effort) select {
   border-collapse: collapse;
 }
 
+.chat-markdown .chat-markdown-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 0.65rem 0;
+}
+
+.chat-markdown .chat-markdown-table-scroll table {
+  width: max-content;
+  min-width: 100%;
+  margin: 0;
+}
+
 .chat-markdown th,
 .chat-markdown td {
   border: 1px solid var(--border);
   padding: 0.35rem 0.45rem;
   text-align: left;
+  overflow-wrap: normal;
+  word-break: normal;
 }
 
 .document-markdown {
@@ -853,6 +869,18 @@ label:has(> select#reasoning-effort) select {
   border-radius: 0.95rem;
 }
 
+.document-markdown .document-markdown-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 0.85rem 0;
+}
+
+.document-markdown .document-markdown-table-scroll table {
+  width: max-content;
+  min-width: 100%;
+  margin: 0;
+}
+
 .document-markdown thead th {
   position: sticky;
   top: 0;
@@ -864,6 +892,8 @@ label:has(> select#reasoning-effort) select {
   border-bottom: 1px solid var(--border);
   padding: 0.55rem 0.7rem;
   text-align: left;
+  overflow-wrap: normal;
+  word-break: normal;
 }
 
 .document-markdown tr:last-child td {
@@ -905,7 +935,10 @@ label:has(> select#reasoning-effort) select {
 
 .document-code-block {
   position: relative;
-  overflow: hidden;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
   border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
   border-radius: 1rem;
   background: color-mix(in srgb, var(--muted) 74%, var(--background));

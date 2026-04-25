@@ -1,6 +1,7 @@
 import { ThreadId } from "@t3tools/contracts";
+import { projectScriptCwd } from "@t3tools/shared/projectScripts";
 import { createFileRoute, retainSearchParams, useNavigate } from "@tanstack/react-router";
-import { Suspense, lazy, type ReactNode, useCallback, useEffect, useState } from "react";
+import { Suspense, lazy, type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 
 import ChatView from "../components/ChatView";
 import { DiffWorkerPoolProvider } from "../components/DiffWorkerPoolProvider";
@@ -27,6 +28,8 @@ import { Sidebar, SidebarInset, SidebarProvider, SidebarRail } from "~/component
 import { GitPanelRouteAdapter } from "../components/git-panel/GitPanelRouteAdapter";
 import { FilesConversationDocument } from "../components/files-panel/FilesConversationDocument";
 import { FilesPanelRouteAdapter } from "../components/files-panel/FilesPanelRouteAdapter";
+import { PlanConversationDocument } from "../components/PlanConversationDocument";
+import { findProposedPlanByReference } from "../session-logic";
 
 const DiffPanel = lazy(() => import("../components/DiffPanel"));
 const DIFF_INLINE_LAYOUT_MEDIA_QUERY = "(max-width: 1180px)";
@@ -184,6 +187,8 @@ function ChatThreadRouteContent() {
     select: (params) => ThreadId.makeUnsafe(params.threadId),
   });
   const search = Route.useSearch();
+  const threads = useStore((store) => store.threads);
+  const projects = useStore((store) => store.projects);
   const activeThread = useStore((store) => store.threads.find((thread) => thread.id === threadId));
   const threadExists = useStore((store) => store.threads.some((thread) => thread.id === threadId));
   const draftThreadExists = useComposerDraftStore((store) =>
@@ -194,6 +199,36 @@ function ChatThreadRouteContent() {
   const gitOpen = search.panel === "git";
   const filesOpen = search.panel === "files";
   const expandedFilesDocument = filesOpen && search.docExpanded === "1" && !!search.docPath;
+  const planPreviewOpen = search.planPreview === "1" && !!search.planThreadId && !!search.planId;
+  const planPreviewThread = useMemo(
+    () => threads.find((thread) => thread.id === search.planThreadId),
+    [search.planThreadId, threads],
+  );
+  const planPreviewProject = useMemo(
+    () => projects.find((project) => project.id === planPreviewThread?.projectId),
+    [planPreviewThread?.projectId, projects],
+  );
+  const planPreviewWorkspaceCwd = useMemo(
+    () =>
+      planPreviewProject
+        ? projectScriptCwd({
+            project: { cwd: planPreviewProject.cwd },
+            worktreePath: planPreviewThread?.worktreePath ?? null,
+          })
+        : undefined,
+    [planPreviewProject, planPreviewThread?.worktreePath],
+  );
+  const planPreviewPlan = useMemo(
+    () =>
+      planPreviewOpen
+        ? findProposedPlanByReference({
+            threads,
+            threadId: search.planThreadId,
+            planId: search.planId,
+          })
+        : null,
+    [planPreviewOpen, search.planId, search.planThreadId, threads],
+  );
   const shouldUseDiffSheet = useMediaQuery(DIFF_INLINE_LAYOUT_MEDIA_QUERY);
   // TanStack Router keeps active route components mounted across param-only navigations
   // unless remountDeps are configured, so this stays warm across thread switches.
@@ -298,6 +333,13 @@ function ChatThreadRouteContent() {
       }),
     });
   }, [navigate, search.docPath, threadId]);
+  const closePlanPreview = useCallback(() => {
+    void navigate({
+      to: "/$threadId",
+      params: { threadId },
+      search: (previous) => stripChatPanelSearchParams(previous),
+    });
+  }, [navigate, threadId]);
   const navigateDocumentPath = useCallback(
     (relativePath: string) => {
       void navigate({
@@ -312,6 +354,21 @@ function ChatThreadRouteContent() {
       });
     },
     [expandedFilesDocument, navigate, threadId],
+  );
+  const navigatePlanPreviewPath = useCallback(
+    (relativePath: string) => {
+      void navigate({
+        to: "/$threadId",
+        params: { threadId },
+        search: (previous) => ({
+          ...stripChatPanelSearchParams(previous),
+          panel: "files",
+          docPath: relativePath,
+          docExpanded: "1" as const,
+        }),
+      });
+    },
+    [navigate, threadId],
   );
   const selectDiffExplorerFile = useCallback(
     (pathValue: string) => {
@@ -355,10 +412,10 @@ function ChatThreadRouteContent() {
   const shouldRenderFilesContent = filesOpen || hasOpenedFiles;
 
   useEffect(() => {
-    if (!diffOpen || shouldUseDiffSheet || gitOpen || filesOpen) {
+    if (!diffOpen || shouldUseDiffSheet || gitOpen || filesOpen || planPreviewOpen) {
       setPanelExpanded(false);
     }
-  }, [diffOpen, filesOpen, gitOpen, setPanelExpanded, shouldUseDiffSheet]);
+  }, [diffOpen, filesOpen, gitOpen, planPreviewOpen, setPanelExpanded, shouldUseDiffSheet]);
 
   useEffect(() => {
     if (!bootstrapComplete) {
@@ -376,7 +433,15 @@ function ChatThreadRouteContent() {
   }
 
   const conversationPanel =
-    expandedFilesDocument && search.docPath ? (
+    planPreviewOpen && search.planThreadId ? (
+      <PlanConversationDocument
+        proposedPlan={planPreviewPlan}
+        planThreadId={search.planThreadId}
+        workspaceCwd={planPreviewWorkspaceCwd}
+        onNavigateToPath={navigatePlanPreviewPath}
+        onCollapse={closePlanPreview}
+      />
+    ) : expandedFilesDocument && search.docPath ? (
       <FilesConversationDocument
         threadId={threadId}
         docPath={search.docPath}
@@ -476,6 +541,9 @@ export const Route = createFileRoute("/_chat/$threadId")({
         "diffView",
         "docPath",
         "docExpanded",
+        "planPreview",
+        "planThreadId",
+        "planId",
       ]),
     ],
   },

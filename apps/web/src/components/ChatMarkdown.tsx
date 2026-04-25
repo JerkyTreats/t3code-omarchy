@@ -287,6 +287,13 @@ function ChatMarkdown({ text, cwd, isStreaming = false }: ChatMarkdownProps) {
           </MarkdownCodeBlock>
         );
       },
+      table({ node: _node, ...props }) {
+        return (
+          <div className="chat-markdown-table-scroll">
+            <table {...props} />
+          </div>
+        );
+      },
     }),
     [cwd, diffThemeName, isStreaming, navigate, panelSearch, threadId],
   );

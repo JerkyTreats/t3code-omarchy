@@ -1,4 +1,4 @@
-import { TurnId } from "@t3tools/contracts";
+import { ThreadId, TurnId, type OrchestrationProposedPlanId } from "@t3tools/contracts";
 
 export interface ChatPanelRouteSearch {
   panel?: "diff" | "git" | "files" | undefined;
@@ -7,6 +7,9 @@ export interface ChatPanelRouteSearch {
   diffView?: "preview" | "diff" | undefined;
   docPath?: string | undefined;
   docExpanded?: "1" | undefined;
+  planPreview?: "1" | undefined;
+  planThreadId?: ThreadId | undefined;
+  planId?: OrchestrationProposedPlanId | undefined;
 }
 
 function isPanelOpenValue(value: unknown): boolean {
@@ -31,6 +34,9 @@ export function stripChatPanelSearchParams<T extends Record<string, unknown>>(
     diffView: _diffView,
     docPath: _docPath,
     docExpanded: _docExpanded,
+    planPreview: _planPreview,
+    planThreadId: _planThreadId,
+    planId: _planId,
     ...rest
   } = params;
   return {
@@ -41,10 +47,23 @@ export function stripChatPanelSearchParams<T extends Record<string, unknown>>(
     diffView: undefined,
     docPath: undefined,
     docExpanded: undefined,
+    planPreview: undefined,
+    planThreadId: undefined,
+    planId: undefined,
   } as T & ChatPanelRouteSearch;
 }
 
 export function parseChatPanelRouteSearch(search: Record<string, unknown>): ChatPanelRouteSearch {
+  const planThreadIdRaw = normalizeSearchString(search.planThreadId);
+  const planIdRaw = normalizeSearchString(search.planId);
+  if (isPanelOpenValue(search.planPreview) && planThreadIdRaw && planIdRaw) {
+    return {
+      planPreview: "1",
+      planThreadId: ThreadId.makeUnsafe(planThreadIdRaw),
+      planId: planIdRaw as OrchestrationProposedPlanId,
+    };
+  }
+
   const panelRaw = normalizeSearchString(search.panel);
   const panel =
     panelRaw === "diff" || panelRaw === "git" || panelRaw === "files" ? panelRaw : undefined;

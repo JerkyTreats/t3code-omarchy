@@ -2886,6 +2886,52 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
+  it("opens proposed plans in fullscreen markdown preview without saving a workspace file", async () => {
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createSnapshotWithLongProposedPlan(),
+    });
+
+    try {
+      const openPreviewButton = await waitForElement(
+        () =>
+          document.querySelector<HTMLButtonElement>(
+            'button[aria-label="Open in Markdown Preview"]',
+          ),
+        "Unable to find plan markdown preview button.",
+      );
+      openPreviewButton.click();
+
+      await vi.waitFor(
+        () => {
+          expect(mounted.router.state.location.search.planPreview).toBe("1");
+          expect(document.body.textContent).toContain("Ship plan mode follow-up");
+          expect(document.body.textContent).toContain("Step 20: confirm deep hidden detail");
+        },
+        { timeout: 8_000, interval: 16 },
+      );
+
+      expect(wsRequests.some((request) => request._tag === WS_METHODS.projectsWriteFile)).toBe(
+        false,
+      );
+
+      const returnButton = await waitForElement(
+        () => document.querySelector<HTMLButtonElement>('button[aria-label="Return to chat"]'),
+        "Unable to find return to chat button.",
+      );
+      returnButton.click();
+
+      await vi.waitFor(
+        () => {
+          expect(mounted.router.state.location.search.planPreview).toBeUndefined();
+        },
+        { timeout: 8_000, interval: 16 },
+      );
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
   it("uses the active worktree path when saving a proposed plan to the workspace", async () => {
     const snapshot = createSnapshotWithLongProposedPlan();
     const threads = snapshot.threads.slice();
