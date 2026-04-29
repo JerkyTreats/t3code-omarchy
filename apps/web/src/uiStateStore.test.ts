@@ -1,4 +1,4 @@
-import { ProjectId, ThreadId } from "@t3tools/contracts";
+import { ProjectId, ThreadId, TurnId } from "@t3tools/contracts";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -6,6 +6,7 @@ import {
   markThreadUnread,
   reorderProjects,
   setProjectExpanded,
+  setThreadChangedFilesExpanded,
   syncProjects,
   syncThreads,
   type UiState,
@@ -16,6 +17,7 @@ function makeUiState(overrides: Partial<UiState> = {}): UiState {
     projectExpandedById: {},
     projectOrder: [],
     threadLastVisitedAtById: {},
+    threadChangedFilesExpandedById: {},
     ...overrides,
   };
 }
@@ -132,10 +134,15 @@ describe("uiStateStore pure functions", () => {
   it("syncThreads prunes missing thread UI state", () => {
     const thread1 = ThreadId.makeUnsafe("thread-1");
     const thread2 = ThreadId.makeUnsafe("thread-2");
+    const turnId = "turn-1";
     const initialState = makeUiState({
       threadLastVisitedAtById: {
         [thread1]: "2026-02-25T12:35:00.000Z",
         [thread2]: "2026-02-25T12:36:00.000Z",
+      },
+      threadChangedFilesExpandedById: {
+        [thread1]: { [turnId]: false },
+        [thread2]: { [turnId]: false },
       },
     });
 
@@ -143,6 +150,9 @@ describe("uiStateStore pure functions", () => {
 
     expect(next.threadLastVisitedAtById).toEqual({
       [thread1]: "2026-02-25T12:35:00.000Z",
+    });
+    expect(next.threadChangedFilesExpandedById).toEqual({
+      [thread1]: { [turnId]: false },
     });
   });
 
@@ -179,14 +189,32 @@ describe("uiStateStore pure functions", () => {
 
   it("clearThreadUi removes visit state for deleted threads", () => {
     const thread1 = ThreadId.makeUnsafe("thread-1");
+    const turnId = "turn-1";
     const initialState = makeUiState({
       threadLastVisitedAtById: {
         [thread1]: "2026-02-25T12:35:00.000Z",
+      },
+      threadChangedFilesExpandedById: {
+        [thread1]: { [turnId]: false },
       },
     });
 
     const next = clearThreadUi(initialState, thread1);
 
     expect(next.threadLastVisitedAtById).toEqual({});
+    expect(next.threadChangedFilesExpandedById).toEqual({});
+  });
+
+  it("setThreadChangedFilesExpanded stores only collapsed overrides", () => {
+    const thread1 = ThreadId.makeUnsafe("thread-1");
+    const turnId = TurnId.makeUnsafe("turn-1");
+
+    const collapsed = setThreadChangedFilesExpanded(makeUiState(), thread1, turnId, false);
+    expect(collapsed.threadChangedFilesExpandedById).toEqual({
+      [thread1]: { [turnId]: false },
+    });
+
+    const expanded = setThreadChangedFilesExpanded(collapsed, thread1, turnId, true);
+    expect(expanded.threadChangedFilesExpandedById).toEqual({});
   });
 });

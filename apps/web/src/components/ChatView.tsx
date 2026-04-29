@@ -213,6 +213,7 @@ const EMPTY_ACTIVITIES: OrchestrationThreadActivity[] = [];
 const EMPTY_PROJECT_ENTRIES: ProjectEntry[] = [];
 const EMPTY_PROVIDERS: ServerProvider[] = [];
 const EMPTY_PENDING_USER_INPUT_ANSWERS: Record<string, PendingUserInputDraftAnswer> = {};
+const EMPTY_CHANGED_FILES_EXPANDED_BY_TURN_ID: Record<string, boolean> = {};
 
 type ThreadPlanCatalogEntry = Pick<Thread, "id" | "proposedPlans">;
 
@@ -585,8 +586,15 @@ export default function ChatView({ threadId, conversationPanel = null }: ChatVie
   const serverThread = useThreadById(threadId);
   const setStoreThreadError = useStore((store) => store.setError);
   const markThreadVisited = useUiStateStore((store) => store.markThreadVisited);
+  const setThreadChangedFilesExpanded = useUiStateStore(
+    (store) => store.setThreadChangedFilesExpanded,
+  );
   const activeThreadLastVisitedAt = useUiStateStore(
     (store) => store.threadLastVisitedAtById[threadId],
+  );
+  const changedFilesExpandedByTurnId = useUiStateStore(
+    (store) =>
+      store.threadChangedFilesExpandedById[threadId] ?? EMPTY_CHANGED_FILES_EXPANDED_BY_TURN_ID,
   );
   const settings = useSettings();
   const setStickyComposerModelSelection = useComposerDraftStore(
@@ -3956,6 +3964,12 @@ export default function ChatView({ threadId, conversationPanel = null }: ChatVie
       [groupId]: !existing[groupId],
     }));
   }, []);
+  const handleSetChangedFilesExpanded = useCallback(
+    (turnId: TurnId, expanded: boolean) => {
+      setThreadChangedFilesExpanded(threadId, turnId, expanded);
+    },
+    [setThreadChangedFilesExpanded, threadId],
+  );
   const onExpandTimelineImage = useCallback((preview: ExpandedImagePreview) => {
     setExpandedImage(preview);
   }, []);
@@ -4142,6 +4156,8 @@ export default function ChatView({ threadId, conversationPanel = null }: ChatVie
                   nowIso={nowIso}
                   expandedWorkGroups={expandedWorkGroups}
                   onToggleWorkGroup={onToggleWorkGroup}
+                  changedFilesExpandedByTurnId={changedFilesExpandedByTurnId}
+                  onSetChangedFilesExpanded={handleSetChangedFilesExpanded}
                   onOpenTurnDiff={onOpenTurnDiff}
                   revertTurnCountByUserMessageId={revertTurnCountByUserMessageId}
                   onRevertUserMessage={onRevertUserMessage}

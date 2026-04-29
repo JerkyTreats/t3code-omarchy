@@ -178,10 +178,11 @@ interface StagePackageJson {
   readonly author: string;
   readonly main: string;
   readonly build: Record<string, unknown>;
-  readonly dependencies: Record<string, unknown>;
+  readonly dependencies: Record<string, string>;
   readonly devDependencies: {
     readonly electron: string;
   };
+  readonly overrides: Record<string, string>;
 }
 
 const AzureTrustedSigningOptionsConfig = Config.all({
@@ -424,9 +425,9 @@ function validateBundledClientAssets(clientDir: string) {
 }
 
 function resolveDesktopRuntimeDependencies(
-  dependencies: Record<string, unknown> | undefined,
-  catalog: Record<string, unknown>,
-): Record<string, unknown> {
+  dependencies: Record<string, string> | undefined,
+  catalog: Record<string, string>,
+): Record<string, string> {
   if (!dependencies || Object.keys(dependencies).length === 0) {
     return {};
   }
@@ -595,6 +596,19 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
         cause,
       }),
   });
+  const resolvedOverrides = yield* Effect.try({
+    try: () =>
+      resolveCatalogDependencies(
+        rootPackageJson.overrides,
+        rootPackageJson.workspaces.catalog,
+        "apps/desktop",
+      ),
+    catch: (cause) =>
+      new BuildScriptError({
+        message: "Could not resolve overrides from package.json.",
+        cause,
+      }),
+  });
 
   const appVersion = options.version ?? serverPackageJson.version;
   const commitHash = resolveGitCommitHash(repoRoot);
@@ -677,6 +691,7 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
     devDependencies: {
       electron: electronVersion,
     },
+    overrides: resolvedOverrides,
   };
 
   const stagePackageJsonString = yield* encodeJsonString(stagePackageJson);

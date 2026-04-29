@@ -4,6 +4,7 @@ import type {
   AuthSessionState,
   DesktopEnvironmentBootstrap,
 } from "@t3tools/contracts";
+import { Data, Predicate } from "effect";
 import { create } from "zustand";
 
 export type ServerAuthGateState =
@@ -136,18 +137,16 @@ async function waitFor(delayMs: number): Promise<void> {
   });
 }
 
-export class BootstrapHttpError extends Error {
+export class BootstrapHttpError extends Data.TaggedError("BootstrapHttpError")<{
+  readonly message: string;
   readonly status: number;
+}> {}
 
-  constructor(message: string, status: number) {
-    super(message);
-    this.name = "BootstrapHttpError";
-    this.status = status;
-  }
-}
+const isBootstrapHttpError = (u: unknown): u is BootstrapHttpError =>
+  Predicate.isTagged(u, "BootstrapHttpError");
 
 function isTransientBootstrapError(error: unknown): boolean {
-  if (error instanceof BootstrapHttpError) {
+  if (isBootstrapHttpError(error)) {
     return TRANSIENT_BOOTSTRAP_STATUS_CODES.has(error.status);
   }
 
@@ -183,10 +182,10 @@ export async function fetchSessionState(): Promise<AuthSessionState> {
       credentials: "include",
     });
     if (!response.ok) {
-      throw new BootstrapHttpError(
-        `Failed to load server auth session state ${response.status}.`,
-        response.status,
-      );
+      throw new BootstrapHttpError({
+        message: `Failed to load server auth session state ${response.status}.`,
+        status: response.status,
+      });
     }
     return (await response.json()) as AuthSessionState;
   });
@@ -206,10 +205,10 @@ async function exchangeBootstrapCredential(credential: string): Promise<AuthBoot
 
     if (!response.ok) {
       const message = await response.text();
-      throw new BootstrapHttpError(
-        message || `Failed to bootstrap auth session ${response.status}.`,
-        response.status,
-      );
+      throw new BootstrapHttpError({
+        message: message || `Failed to bootstrap auth session ${response.status}.`,
+        status: response.status,
+      });
     }
 
     return (await response.json()) as AuthBootstrapResult;
