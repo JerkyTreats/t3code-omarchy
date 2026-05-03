@@ -1,4 +1,4 @@
-import { type ChildProcessWithoutNullStreams, spawn, spawnSync } from "node:child_process";
+import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import fs from "node:fs";
@@ -23,15 +23,14 @@ import { normalizeModelSlug } from "@t3tools/shared/model";
 import { Effect, ServiceMap } from "effect";
 
 import {
-  formatCodexCliUpgradeMessage,
-  isCodexCliVersionSupported,
-  parseCodexCliVersion,
-} from "./provider/codexCliVersion";
-import {
   readCodexAccountSnapshot,
   resolveCodexModelForAccount,
   type CodexAccountSnapshot,
 } from "./provider/codexAccount";
+import {
+  assertSupportedCodexCliVersion as assertSupportedCodexCliVersionHelper,
+  resolveSupportedCodexCliBinaryPath as resolveSupportedCodexCliBinaryPathHelper,
+} from "./provider/codexCliBinary";
 import { buildCodexInitializeParams, killCodexChildProcess } from "./provider/codexAppServer";
 
 export { buildCodexInitializeParams } from "./provider/codexAppServer";
@@ -143,8 +142,6 @@ export interface CodexThreadSnapshot {
   threadId: string;
   turns: CodexThreadTurnSnapshot[];
 }
-
-const CODEX_VERSION_CHECK_TIMEOUT_MS = 4_000;
 
 const ANSI_ESCAPE_CHAR = String.fromCharCode(27);
 const ANSI_ESCAPE_REGEX = new RegExp(`${ANSI_ESCAPE_CHAR}\\[[0-9;]*m`, "g");
@@ -1588,44 +1585,7 @@ function assertSupportedCodexCliVersion(input: {
   readonly cwd: string;
   readonly homePath?: string;
 }): void {
-  const result = spawnSync(input.binaryPath, ["--version"], {
-    cwd: input.cwd,
-    env: {
-      ...process.env,
-      ...(input.homePath ? { CODEX_HOME: input.homePath } : {}),
-    },
-    encoding: "utf8",
-    shell: process.platform === "win32",
-    stdio: ["ignore", "pipe", "pipe"],
-    timeout: CODEX_VERSION_CHECK_TIMEOUT_MS,
-    maxBuffer: 1024 * 1024,
-  });
-
-  if (result.error) {
-    const lower = result.error.message.toLowerCase();
-    if (
-      lower.includes("enoent") ||
-      lower.includes("command not found") ||
-      lower.includes("not found")
-    ) {
-      throw new Error(`Codex CLI (${input.binaryPath}) is not installed or not executable.`);
-    }
-    throw new Error(
-      `Failed to execute Codex CLI version check: ${result.error.message || String(result.error)}`,
-    );
-  }
-
-  const stdout = result.stdout ?? "";
-  const stderr = result.stderr ?? "";
-  if (result.status !== 0) {
-    const detail = stderr.trim() || stdout.trim() || `Command exited with code ${result.status}.`;
-    throw new Error(`Codex CLI version check failed. ${detail}`);
-  }
-
-  const parsedVersion = parseCodexCliVersion(`${stdout}\n${stderr}`);
-  if (parsedVersion && !isCodexCliVersionSupported(parsedVersion)) {
-    throw new Error(formatCodexCliUpgradeMessage(parsedVersion));
-  }
+  assertSupportedCodexCliVersionHelper(input);
 }
 
 function resolveSupportedCodexCliBinaryPath(input: {
@@ -1633,32 +1593,7 @@ function resolveSupportedCodexCliBinaryPath(input: {
   readonly cwd: string;
   readonly homePath?: string;
 }): string {
-  const candidates = [input.preferredBinaryPath, process.env.CODEX_BINARY_PATH, "codex"].filter(
-    (value, index, values): value is string => {
-      if (!value || value.trim().length === 0) {
-        return false;
-      }
-      return values.indexOf(value) === index;
-    },
-  );
-
-  let firstError: Error | undefined;
-  for (const candidate of candidates) {
-    try {
-      assertSupportedCodexCliVersion({
-        binaryPath: candidate,
-        cwd: input.cwd,
-        ...(input.homePath ? { homePath: input.homePath } : {}),
-      });
-      return candidate;
-    } catch (error) {
-      if (!firstError) {
-        firstError = error instanceof Error ? error : new Error(String(error));
-      }
-    }
-  }
-
-  throw firstError ?? new Error("Codex CLI is not installed or not executable.");
+  return resolveSupportedCodexCliBinaryPathHelper(input);
 }
 
 function readResumeCursorThreadId(resumeCursor: unknown): string | undefined {

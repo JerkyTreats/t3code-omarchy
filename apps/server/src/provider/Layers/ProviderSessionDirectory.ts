@@ -6,6 +6,7 @@ import { ProviderSessionDirectoryPersistenceError, ProviderValidationError } fro
 import {
   ProviderSessionDirectory,
   type ProviderRuntimeBinding,
+  type ProviderRuntimeBindingWithMetadata,
   type ProviderSessionDirectoryShape,
 } from "../Services/ProviderSessionDirectory.ts";
 
@@ -145,12 +146,40 @@ const makeProviderSessionDirectory = Effect.gen(function* () {
       Effect.map((rows) => rows.map((row) => row.threadId)),
     );
 
+  const listBindings: ProviderSessionDirectoryShape["listBindings"] = () =>
+    repository.list().pipe(
+      Effect.mapError(toPersistenceError("ProviderSessionDirectory.listBindings:list")),
+      Effect.flatMap((rows) =>
+        Effect.forEach(
+          rows,
+          (row) =>
+            decodeProviderKind(row.providerName, "ProviderSessionDirectory.listBindings").pipe(
+              Effect.map(
+                (provider) =>
+                  ({
+                    threadId: row.threadId,
+                    provider,
+                    adapterKey: row.adapterKey,
+                    runtimeMode: row.runtimeMode,
+                    status: row.status,
+                    resumeCursor: row.resumeCursor,
+                    runtimePayload: row.runtimePayload,
+                    lastSeenAt: row.lastSeenAt,
+                  }) satisfies ProviderRuntimeBindingWithMetadata,
+              ),
+            ),
+          { concurrency: "unbounded" },
+        ),
+      ),
+    );
+
   return {
     upsert,
     getProvider,
     getBinding,
     remove,
     listThreadIds,
+    listBindings,
   } satisfies ProviderSessionDirectoryShape;
 });
 

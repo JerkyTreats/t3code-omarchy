@@ -23,6 +23,7 @@ import { makeCodexAdapterLive } from "./provider/Layers/CodexAdapter";
 import { makeClaudeAdapterLive } from "./provider/Layers/ClaudeAdapter";
 import { ProviderAdapterRegistryLive } from "./provider/Layers/ProviderAdapterRegistry";
 import { makeProviderServiceLive } from "./provider/Layers/ProviderService";
+import { ProviderSessionReaperLive } from "./provider/Layers/ProviderSessionReaper";
 import { OrchestrationEngineLive } from "./orchestration/Layers/OrchestrationEngine";
 import { OrchestrationProjectionPipelineLive } from "./orchestration/Layers/ProjectionPipeline";
 import { OrchestrationEventStoreLive } from "./persistence/Layers/OrchestrationEventStore";
@@ -145,6 +146,10 @@ const OrchestrationLayerLive = Layer.mergeAll(
   OrchestrationEngineLive.pipe(Layer.provide(OrchestrationInfrastructureLayerLive)),
 );
 
+const ProviderSessionDirectoryLayerLive = ProviderSessionDirectoryLive.pipe(
+  Layer.provide(ProviderSessionRuntimeRepositoryLive),
+);
+
 const CheckpointingLayerLive = Layer.empty.pipe(
   Layer.provideMerge(CheckpointDiffQueryLive),
   Layer.provideMerge(CheckpointFileQueryLive),
@@ -160,9 +165,6 @@ const ProviderLayerLive = Layer.unwrap(
     const canonicalEventLogger = yield* makeEventNdjsonLogger(providerEventLogPath, {
       stream: "canonical",
     });
-    const providerSessionDirectoryLayer = ProviderSessionDirectoryLive.pipe(
-      Layer.provide(ProviderSessionRuntimeRepositoryLive),
-    );
     const codexAdapterLayer = makeCodexAdapterLive(
       nativeEventLogger ? { nativeEventLogger } : undefined,
     );
@@ -172,11 +174,15 @@ const ProviderLayerLive = Layer.unwrap(
     const adapterRegistryLayer = ProviderAdapterRegistryLive.pipe(
       Layer.provide(codexAdapterLayer),
       Layer.provide(claudeAdapterLayer),
-      Layer.provideMerge(providerSessionDirectoryLayer),
+      Layer.provideMerge(ProviderSessionDirectoryLayerLive),
     );
     return makeProviderServiceLive(
       canonicalEventLogger ? { canonicalEventLogger } : undefined,
-    ).pipe(Layer.provide(adapterRegistryLayer), Layer.provide(providerSessionDirectoryLayer));
+    ).pipe(
+      Layer.provide(adapterRegistryLayer),
+      Layer.provide(ProviderSessionDirectoryLayerLive),
+      Layer.provideMerge(ProviderSessionDirectoryLayerLive),
+    );
   }),
 );
 
@@ -185,6 +191,12 @@ const PersistenceLayerLive = Layer.empty.pipe(Layer.provideMerge(SqlitePersisten
 const AuthLayerLive = ServerAuthLive.pipe(
   Layer.provideMerge(PersistenceLayerLive),
   Layer.provide(ServerSecretStoreLive),
+);
+
+const ProviderRuntimeLayerLive = ProviderSessionReaperLive.pipe(
+  Layer.provideMerge(ProviderSessionDirectoryLayerLive),
+  Layer.provideMerge(ProviderLayerLive),
+  Layer.provideMerge(OrchestrationLayerLive),
 );
 
 const GitManagerLayerLive = GitManagerLive.pipe(
@@ -217,7 +229,7 @@ const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(CheckpointingLayerLive),
   Layer.provideMerge(GitLayerLive),
   Layer.provideMerge(OrchestrationLayerLive),
-  Layer.provideMerge(ProviderLayerLive),
+  Layer.provideMerge(ProviderRuntimeLayerLive),
   Layer.provideMerge(TerminalLayerLive),
   Layer.provideMerge(PersistenceLayerLive),
   Layer.provideMerge(KeybindingsLive),

@@ -28,6 +28,7 @@ import {
   sanitizeThreadTitle,
   toJsonSchemaObject,
 } from "../Utils.ts";
+import { resolveSupportedCodexCliBinaryPath } from "../../provider/codexCliBinary.ts";
 import { getCodexModelCapabilities } from "../../provider/Layers/CodexProvider.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
 import { normalizeCodexModelOptionsWithCapabilities } from "@t3tools/shared/model";
@@ -161,8 +162,22 @@ const makeCodexTextGeneration = Effect.gen(function* () {
       );
       const reasoningEffort =
         modelSelection.options?.reasoningEffort ?? CODEX_GIT_TEXT_GENERATION_REASONING_EFFORT;
+      const binaryPath = yield* Effect.try({
+        try: () =>
+          resolveSupportedCodexCliBinaryPath({
+            cwd,
+            ...(codexSettings?.binaryPath ? { preferredBinaryPath: codexSettings.binaryPath } : {}),
+            ...(codexSettings?.homePath ? { homePath: codexSettings.homePath } : {}),
+          }),
+        catch: (cause) =>
+          new TextGenerationError({
+            operation,
+            detail: cause instanceof Error ? cause.message : "Failed to resolve Codex CLI binary.",
+            cause,
+          }),
+      });
       const command = ChildProcess.make(
-        codexSettings?.binaryPath || "codex",
+        binaryPath,
         [
           "exec",
           "--ephemeral",
@@ -197,7 +212,7 @@ const makeCodexTextGeneration = Effect.gen(function* () {
         .spawn(command)
         .pipe(
           Effect.mapError((cause) =>
-            normalizeCliError("codex", operation, cause, "Failed to spawn Codex CLI process"),
+            normalizeCliError(binaryPath, operation, cause, "Failed to spawn Codex CLI process"),
           ),
         );
 

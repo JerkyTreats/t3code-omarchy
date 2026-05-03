@@ -31,6 +31,7 @@ import {
 } from "./CodexProvider";
 import { checkClaudeProviderStatus, parseClaudeAuthStatusFromOutput } from "./ClaudeProvider";
 import { haveProvidersChanged, ProviderRegistryLive } from "./ProviderRegistry";
+import { ServerConfig } from "../../config";
 import { ServerSettingsService, type ServerSettingsShape } from "../../serverSettings";
 import { ProviderRegistry } from "../Services/ProviderRegistry";
 
@@ -521,6 +522,9 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
           yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
           const providerRegistryLayer = ProviderRegistryLive.pipe(
             Layer.provideMerge(Layer.succeed(ServerSettingsService, serverSettings)),
+            Layer.provideMerge(
+              ServerConfig.layerTest(process.cwd(), { prefix: "t3-provider-registry-test-" }),
+            ),
             Layer.provideMerge(
               mockCommandSpawnerLayer((command, args) => {
                 const joined = args.join(" ");

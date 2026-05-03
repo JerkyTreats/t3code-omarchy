@@ -497,9 +497,11 @@ describe("startSession", () => {
         }),
       ).rejects.toThrow("stop before spawn");
 
-      expect(resolveBinaryPath).toHaveBeenCalledWith({
-        cwd: "/repo/current",
-      });
+      expect(resolveBinaryPath).toHaveBeenCalledWith(
+        expect.objectContaining({
+          cwd: "/repo/current",
+        }),
+      );
     } finally {
       resolveBinaryPath.mockRestore();
       processCwd.mockRestore();

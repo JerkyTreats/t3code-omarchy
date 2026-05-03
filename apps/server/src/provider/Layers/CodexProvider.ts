@@ -45,6 +45,7 @@ import {
   type CodexAccountSnapshot,
 } from "../codexAccount";
 import { probeCodexAccount } from "../codexAppServer";
+import { resolveSupportedCodexCliBinaryPath } from "../codexCliBinary";
 import { CodexProvider } from "../Services/CodexProvider";
 import { ServerSettingsService } from "../../serverSettings";
 import { ServerSettingsError } from "@t3tools/contracts";
@@ -64,6 +65,11 @@ const DEFAULT_CODEX_MODEL_CAPABILITIES: ModelCapabilities = {
 
 const PROVIDER = "codex" as const;
 const OPENAI_AUTH_PROVIDERS = new Set(["openai"]);
+
+class CodexCliResolutionError extends Error {
+  readonly _tag = "CodexCliResolutionError";
+}
+
 const BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
   {
     slug: "gpt-5.4",
@@ -319,14 +325,24 @@ const runCodexCommand = Effect.fn("runCodexCommand")(function* (args: ReadonlyAr
   const codexSettings = yield* settingsService.getSettings.pipe(
     Effect.map((settings) => settings.providers.codex),
   );
-  const command = ChildProcess.make(codexSettings.binaryPath, [...args], {
+  const binaryPath = yield* Effect.try({
+    try: () =>
+      resolveSupportedCodexCliBinaryPath({
+        cwd: process.cwd(),
+        ...(codexSettings.binaryPath ? { preferredBinaryPath: codexSettings.binaryPath } : {}),
+        ...(codexSettings.homePath ? { homePath: codexSettings.homePath } : {}),
+      }),
+    catch: (cause) =>
+      new CodexCliResolutionError(cause instanceof Error ? cause.message : String(cause)),
+  });
+  const command = ChildProcess.make(binaryPath, [...args], {
     shell: process.platform === "win32",
     env: {
       ...process.env,
       ...(codexSettings.homePath ? { CODEX_HOME: codexSettings.homePath } : {}),
     },
   });
-  return yield* spawnAndCollect(codexSettings.binaryPath, command);
+  return yield* spawnAndCollect(binaryPath, command);
 });
 
 export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(function* (
