@@ -235,6 +235,7 @@ interface ComposerDraftStoreState {
     provider: ProviderKind,
     nextProviderOptions: ProviderModelOptions[ProviderKind] | null | undefined,
     options?: {
+      model?: string | null | undefined;
       persistSticky?: boolean;
     },
   ) => void;

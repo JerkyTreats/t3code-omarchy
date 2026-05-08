@@ -15,6 +15,7 @@ const workspaceFiles = [
   "apps/marketing/package.json",
   "packages/contracts/package.json",
   "packages/shared/package.json",
+  "packages/effect-acp/package.json",
   "scripts/package.json",
 ] as const;
 

@@ -4,6 +4,7 @@ import {
   type ClaudeCodeEffort,
   type ClaudeModelOptions,
   type CodexModelOptions,
+  type CursorModelOptions,
   type ModelCapabilities,
   type ModelSelection,
   type ProviderKind,
@@ -44,12 +45,9 @@ export function getDefaultEffort(caps: ModelCapabilities): string | null {
 /**
  * Resolve a raw effort option against capabilities.
  *
- * Returns the effective effort value — the explicit value if supported and not
- * prompt-injected, otherwise the model's default. Returns `undefined` only
- * when the model has no effort levels at all.
- *
- * Prompt-injected efforts (e.g. "ultrathink") are excluded because they are
- * applied via prompt text, not the effort API parameter.
+ * Returns the explicit supported value when present and not prompt-injected,
+ * otherwise the model default. Returns `undefined` when the model exposes no
+ * effort levels.
  */
 export function resolveEffort(
   caps: ModelCapabilities,
@@ -67,8 +65,6 @@ export function resolveEffort(
   return defaultValue ?? undefined;
 }
 
-// ── Context window helpers ───────────────────────────────────────────
-
 /** Check whether a capabilities object includes a given context window value. */
 export function hasContextWindowOption(caps: ModelCapabilities, value: string): boolean {
   return caps.contextWindowOptions.some((o) => o.value === value);
@@ -82,14 +78,8 @@ export function getDefaultContextWindow(caps: ModelCapabilities): string | null 
 /**
  * Resolve a raw `contextWindow` option against capabilities.
  *
- * Returns the effective context window value — the explicit value if supported,
- * otherwise the model's default. Returns `undefined` only when the model has
- * no context window options at all.
- *
- * Unlike effort levels (where the API has matching defaults), the context
- * window requires an explicit API suffix (e.g. `[1m]`), so we always preserve
- * the resolved value to avoid ambiguity between "user chose the default" and
- * "not specified".
+ * Returns the explicit supported value when present, otherwise the model
+ * default. Returns `undefined` when the model exposes no context window options.
  */
 export function resolveContextWindow(
   caps: ModelCapabilities,
@@ -189,7 +179,7 @@ export function resolveSelectableModel(
   return resolved ? resolved.slug : null;
 }
 
-export function resolveModelSlug(model: string | null | undefined, provider: ProviderKind): string {
+function resolveModelSlug(model: string | null | undefined, provider: ProviderKind): string {
   const normalized = normalizeModelSlug(model, provider);
   if (!normalized) {
     return DEFAULT_MODEL_BY_PROVIDER[provider];

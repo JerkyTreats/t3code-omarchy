@@ -15,6 +15,14 @@ const providerOrderRank = (provider: ServerProvider["provider"]): number => {
   return rank === -1 ? Number.MAX_SAFE_INTEGER : rank;
 };
 
+const mergeProviderModels = (
+  fallbackModels: ReadonlyArray<ServerProvider["models"][number]>,
+  cachedModels: ReadonlyArray<ServerProvider["models"][number]>,
+): ReadonlyArray<ServerProvider["models"][number]> => {
+  const fallbackSlugs = new Set(fallbackModels.map((model) => model.slug));
+  return [...fallbackModels, ...cachedModels.filter((model) => !fallbackSlugs.has(model.slug))];
+};
+
 export const orderProviderSnapshots = (
   providers: ReadonlyArray<ServerProvider>,
 ): ReadonlyArray<ServerProvider> =>
@@ -36,6 +44,7 @@ export const hydrateCachedProvider = (input: {
   const { message: _fallbackMessage, ...fallbackWithoutMessage } = input.fallbackProvider;
   const hydratedProvider: ServerProvider = {
     ...fallbackWithoutMessage,
+    models: mergeProviderModels(input.fallbackProvider.models, input.cachedProvider.models),
     installed: input.cachedProvider.installed,
     version: input.cachedProvider.version,
     status: input.cachedProvider.status,

@@ -25,6 +25,7 @@ export interface ProviderAdapterRegistryLiveOptions {
 const makeProviderAdapterRegistry = Effect.fn("makeProviderAdapterRegistry")(function* (
   options?: ProviderAdapterRegistryLiveOptions,
 ) {
+  const cursorAdapterOption = yield* Effect.serviceOption(CursorAdapter);
   const adapters =
     options?.adapters !== undefined
       ? options.adapters
