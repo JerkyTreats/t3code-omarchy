@@ -18,6 +18,7 @@ import {
 } from "@t3tools/contracts";
 import {
   type ClientSettings,
+  ClientSettingsSchema,
   DEFAULT_CLIENT_SETTINGS,
   DEFAULT_UNIFIED_SETTINGS,
   SidebarProjectSortOrder,
@@ -55,6 +56,10 @@ function replaceClientSettingsSnapshot(settings: ClientSettings): void {
   emitClientSettingsChange();
 }
 
+export function normalizeHydratedClientSettings(settings: unknown): ClientSettings {
+  return Schema.decodeUnknownSync(ClientSettingsSchema)(settings);
+}
+
 function subscribeClientSettings(listener: () => void): () => void {
   clientSettingsListeners.add(listener);
   void hydrateClientSettings();
@@ -75,7 +80,7 @@ async function hydrateClientSettings(): Promise<void> {
     try {
       const persistedSettings = await ensureLocalApi().persistence.getClientSettings();
       if (persistedSettings) {
-        replaceClientSettingsSnapshot(persistedSettings);
+        replaceClientSettingsSnapshot(normalizeHydratedClientSettings(persistedSettings));
       }
     } catch (error) {
       console.error(`${CLIENT_SETTINGS_PERSISTENCE_ERROR_SCOPE} hydrate failed`, error);

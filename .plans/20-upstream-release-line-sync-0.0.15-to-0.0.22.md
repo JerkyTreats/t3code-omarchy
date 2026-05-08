@@ -1,10 +1,14 @@
-# Upstream Release Line Sync 0.0.15 To 0.0.21
+# Upstream Release Line Sync 0.0.15 To 0.0.22
 
 ## Objective
 
-Move the fork from upstream `v0.0.15` to upstream `v0.0.21` in release-sized increments while preserving fork-owned product areas.
+Move the fork from upstream `v0.0.15` to upstream `v0.0.22` in release-sized increments while preserving fork-owned product areas.
 
 Start with a full walk of the upstream delta so later fixes can inform earlier integration choices.
+
+As of `2026-05-06`, the latest stable upstream tag visible in local fetch state is `v0.0.22`.
+
+Nightly `v0.0.23` builds are visible upstream, but stable parity should land first.
 
 ## Current Fork Reality
 
@@ -162,6 +166,10 @@ Primary risk:
 
 ### `v0.0.19 -> v0.0.20`
 
+Status:
+
+- complete
+
 Scope:
 
 - tiny release
@@ -182,6 +190,11 @@ Integration plan:
 
 1. Take this only after `v0.0.17 -> v0.0.19` lands cleanly.
 2. Keep it as a minimal commit so it stays easy to revert if grouping logic collides with local sidebar state.
+
+Result:
+
+- release workflow dependency install ordering was adopted
+- settings guard was adapted through schema backed client settings hydration because this fork no longer has the upstream sidebar project grouping override fields
 
 ### `v0.0.20 -> v0.0.21`
 
@@ -227,14 +240,66 @@ Primary risk:
 
 - this range lands after the fork already introduced document explorer, markdown preview, and fullscreen plan preview work, so shared-file conflicts are expected rather than exceptional
 
+### `v0.0.21 -> v0.0.22`
+
+Scope:
+
+- very large release
+- multi-provider shell and provider-instance model
+- hosted frontend, Tailscale, and SSH remote substrate
+- pluggable VCS and multi-host source control provider stack
+- startup and memory reduction work
+- diff UX, mobile shell, and markdown stability fixes
+
+Protected surfaces touched:
+
+- `F1`
+- `F4`
+- `F5`
+- `F6`
+- `F7`
+- `F8`
+- `F9`
+
+Default intake:
+
+- `adopt` startup and memory reduction work, provider runtime hardening, desktop server exposure fixes, markdown highlight stability, and narrowly scoped mobile correctness fixes
+- `adapt` multi-provider shell, provider settings surfaces, source control provider discovery, VCS driver seams, diff presentation changes, `ChatView`, `Sidebar`, `ChatMarkdown`, and route-shell changes
+- `reject` any source control resolution that weakens fork-first GitHub identity, any shell simplification that breaks draft ownership, and any preview or diff change that regresses protected markdown and plan flows
+
+Required seam owners:
+
+- `apps/server/src/sourceControl`
+- `apps/server/src/vcs`
+- `apps/server/src/git/Layers/GitHubCli.ts`
+- `apps/server/src/git/Layers/GitManager.ts`
+- `apps/server/src/provider`
+- `apps/web/src/components/ChatView.tsx`
+- `apps/web/src/components/Sidebar.tsx`
+- `apps/web/src/components/ChatMarkdown.tsx`
+- `apps/web/src/components/settings`
+- `apps/web/src/routes`
+- `apps/desktop/src/main.ts`
+
+Integration plan:
+
+1. Take startup, memory, and provider-runtime hardening first.
+2. Land the source control and VCS substrate under the existing fork identity seams.
+3. Reconcile the multi-provider shell and settings work after the provider substrate is stable.
+4. Reconcile diff and mobile shell changes last, with focused verification on draft ownership, plan preview, and Git workflow affordances.
+
+Primary risk:
+
+- this is the first range where multi-provider shell work, remote connectivity, and source control abstraction all overlap fork-owned Git and shell behavior at the same time
+
 ## Recommended Execution Order
 
-1. Pull the pending governed deltas from `main` after explicit user confirmation, so `F9` is documented before sync work starts.
-2. Create a release note for `v0.0.16` with concrete `adopt`, `adapt`, and `reject` decisions at file level.
-3. Integrate `v0.0.16`.
-4. Integrate `v0.0.17`.
-5. Stop and reassess whether `F9` needs more seam extraction before taking `v0.0.17 -> v0.0.19`.
-6. Continue through `v0.0.19`, `v0.0.20`, and `v0.0.21` one release line at a time.
+1. Confirm the current branch state against the existing `v0.0.15 -> v0.0.19` intake notes and record what is already landed.
+2. Integrate `v0.0.19 -> v0.0.20`.
+3. Integrate `v0.0.20 -> v0.0.21`.
+4. Integrate `v0.0.21 -> v0.0.22`.
+5. Update `.github/external-watch.json` only after the `v0.0.22` parity landing is verified.
+6. Reassess whether nightly `v0.0.23` work is worth planning immediately after stable parity.
 
 ## Fork Preservation Gate Per Release
 
@@ -251,4 +316,4 @@ For each release line:
 
 ## Immediate Next Step
 
-Bring over the pending governed `main` delta for `F9`, then write the detailed file-level intake note for `v0.0.15 -> v0.0.16`.
+Validate which `v0.0.15 -> v0.0.19` slices are already reflected on `t3code/upstream-release-line-sync`, then take the tiny `v0.0.19 -> v0.0.20` release line as the first explicit parity checkpoint.
