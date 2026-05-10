@@ -3,6 +3,7 @@ import { ChildProcessSpawner } from "effect/unstable/process";
 
 import { CursorModelSelection } from "@t3tools/contracts";
 import { sanitizeBranchFragment, sanitizeFeatureBranchName } from "@t3tools/shared/git";
+import { normalizeCursorModelOptions } from "@t3tools/shared/model";
 
 import { TextGenerationError } from "@t3tools/contracts";
 import {
@@ -151,7 +152,7 @@ const makeCursorTextGeneration = Effect.gen(function* () {
         yield* applyCursorAcpModelSelection({
           runtime,
           model: modelSelection.model,
-          modelOptions: modelSelection.options,
+          modelOptions: normalizeCursorModelOptions(modelSelection.options),
           mapError: ({ cause, configId, step }) =>
             mapCursorAcpError(
               operation,

@@ -1,7 +1,7 @@
-import { Option, Schema, ServiceMap } from "effect";
+import { Option, Schema, Context } from "effect";
 import type { Effect } from "effect";
 
-import type { AuthPairingLinkRepositoryError } from "../Errors";
+import type { AuthPairingLinkRepositoryError } from "../Errors.ts";
 
 export const AuthPairingLinkRecord = Schema.Struct({
   id: Schema.String,
@@ -70,7 +70,7 @@ export interface AuthPairingLinkRepositoryShape {
   ) => Effect.Effect<Option.Option<AuthPairingLinkRecord>, AuthPairingLinkRepositoryError>;
 }
 
-export class AuthPairingLinkRepository extends ServiceMap.Service<
+export class AuthPairingLinkRepository extends Context.Service<
   AuthPairingLinkRepository,
   AuthPairingLinkRepositoryShape
 >()("t3/persistence/Services/AuthPairingLinks/AuthPairingLinkRepository") {}

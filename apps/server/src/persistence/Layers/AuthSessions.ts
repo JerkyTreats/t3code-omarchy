@@ -7,7 +7,7 @@ import {
   type AuthSessionRepositoryError,
   toPersistenceDecodeError,
   toPersistenceSqlError,
-} from "../Errors";
+} from "../Errors.ts";
 import {
   AuthSessionRecord,
   AuthSessionRepository,
@@ -18,7 +18,7 @@ import {
   RevokeAuthSessionInput,
   RevokeOtherAuthSessionsInput,
   SetAuthSessionLastConnectedAtInput,
-} from "../Services/AuthSessions";
+} from "../Services/AuthSessions.ts";
 
 const AuthSessionDbRow = Schema.Struct({
   sessionId: AuthSessionId,

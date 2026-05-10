@@ -38,6 +38,7 @@ Use it together with [Upstream Merge Policy](governance/upstream_merge_policy.md
 - `F7` local branch, worktree, and promotion workflow
 - `F8` plan aware sidebar and activity status cues
 - `F9` plan markdown preview and markdown rendering behavior
+- `F10` Codex model and binary selection
 
 ## F1 Branding And Release Identity
 
@@ -321,6 +322,48 @@ Plan review and markdown presentation preserve fork specific preview flows and r
 - Returning from fullscreen plan preview restores the chat route without forcing a workspace write.
 - Wide markdown tables and code blocks remain horizontally scrollable instead of stretching or clipping the layout.
 - Workspace path links, local heading links, and external links keep the expected fork navigation behavior in plan preview and markdown document surfaces.
+
+## F10 Codex Model And Binary Selection
+
+### Intent
+
+Codex provider setup follows the installed Codex app-server capability surface instead of relying on stale hardcoded model lists or ambiguous shell binary resolution.
+
+### Required Behavior
+
+- Codex provider models prefer `model/list` from the selected Codex app-server when available.
+- Built in Codex models remain only as a fallback when app-server model discovery is unavailable.
+- Custom Codex models configured by the user remain merged into the provider model list.
+- App-server initialization uses the resolved Codex CLI version as the client version so newer models are not rejected as requiring a newer Codex.
+- Settings expose detected supported Codex binaries when available.
+- An explicit non bare Codex binary path selected by the user remains pinned and must not be silently replaced by another PATH or environment candidate.
+- Desktop launch preserves an explicit configured Codex binary path for the backend child process.
+
+### Owner Modules
+
+- `apps/desktop/scripts/electron-launcher.mjs`
+- `apps/desktop/src/main.ts`
+- `apps/server/src/codexAppServerManager.ts`
+- `apps/server/src/provider/Layers/CodexProvider.ts`
+- `apps/server/src/provider/codexAppServer.ts`
+- `apps/server/src/provider/codexCliBinary.ts`
+- `apps/server/src/provider/providerSnapshot.ts`
+- `apps/web/src/components/settings/SettingsPanels.tsx`
+- `packages/contracts/src/server.ts`
+
+### Upstream Intake Rule
+
+- Adapt upstream provider model changes so Codex app-server model discovery remains authoritative when available.
+- Reject upstream changes that reintroduce a hardcoded Codex only model catalog as the primary source.
+- Reject upstream binary resolution changes that silently replace an explicit user selected Codex binary path.
+
+### Verification
+
+- A Codex app-server `model/list` response containing a new model such as `gpt-5.5` appears in the Codex model selector without a code update to the built in fallback list.
+- App-server initialize sends the resolved Codex CLI version as `clientInfo.version`.
+- Settings show detected supported Codex binaries and selecting one persists its absolute path.
+- Restarting the desktop app keeps the configured Codex binary path for the backend process.
+- Explicit binary path pinning does not fall through to a newer PATH or environment binary unless the user selected bare `codex`.
 
 ## Change Procedure
 

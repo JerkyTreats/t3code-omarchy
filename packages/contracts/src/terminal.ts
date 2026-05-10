@@ -1,5 +1,5 @@
-import { Schema } from "effect";
-import { TrimmedNonEmptyString } from "./baseSchemas";
+import { Effect, Schema } from "effect";
+import { TrimmedNonEmptyString } from "./baseSchemas.ts";
 
 export const DEFAULT_TERMINAL_ID = "default";
 
@@ -20,7 +20,7 @@ const TerminalEnvSchema = Schema.Record(TerminalEnvKeySchema, TerminalEnvValueSc
 );
 
 const TerminalIdWithDefaultSchema = TerminalIdSchema.pipe(
-  Schema.withDecodingDefault(() => DEFAULT_TERMINAL_ID),
+  Schema.withDecodingDefault(Effect.succeed(DEFAULT_TERMINAL_ID)),
 );
 
 export const TerminalThreadInput = Schema.Struct({

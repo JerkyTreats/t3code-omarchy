@@ -12,11 +12,11 @@ import type {
   ServerAuthDescriptor,
   ServerAuthSessionMethod,
 } from "@t3tools/contracts";
-import { Data, DateTime, ServiceMap } from "effect";
+import { Data, DateTime, Context } from "effect";
 import type { Effect } from "effect";
 import type * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 
-import type { SessionRole } from "./SessionCredentialService";
+import type { SessionRole } from "./SessionCredentialService.ts";
 
 export interface AuthenticatedSession {
   readonly sessionId: AuthSessionId;
@@ -80,6 +80,6 @@ export interface ServerAuthShape {
   readonly issueStartupPairingUrl: (baseUrl: string) => Effect.Effect<string, AuthError>;
 }
 
-export class ServerAuth extends ServiceMap.Service<ServerAuth, ServerAuthShape>()(
+export class ServerAuth extends Context.Service<ServerAuth, ServerAuthShape>()(
   "t3/auth/Services/ServerAuth",
 ) {}

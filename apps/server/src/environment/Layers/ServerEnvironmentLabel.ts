@@ -2,7 +2,7 @@ import * as OS from "node:os";
 
 import { Effect, FileSystem } from "effect";
 
-import { runProcess } from "../../processRunner";
+import { runProcess } from "../../processRunner.ts";
 
 interface ResolveServerEnvironmentLabelInput {
   readonly cwdBaseName: string;

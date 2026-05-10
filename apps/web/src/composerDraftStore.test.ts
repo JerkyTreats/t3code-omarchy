@@ -21,6 +21,7 @@ import {
   type TerminalContextDraft,
 } from "./lib/terminalContext";
 import { createDebouncedStorage } from "./lib/storage";
+import { createModelSelection, normalizeProviderOptionSelections } from "@t3tools/shared/model";
 
 function makeImage(input: {
   id: string;
@@ -79,16 +80,36 @@ function resetComposerDraftStore() {
   });
 }
 
+const OPTION_ORDER_BY_PROVIDER = {
+  codex: ["reasoningEffort", "fastMode"],
+  claudeAgent: ["thinking", "effort", "fastMode", "contextWindow"],
+  cursor: ["reasoning", "thinking", "fastMode", "contextWindow"],
+} as const;
+
+function orderedSelectionOptions(
+  provider: keyof typeof OPTION_ORDER_BY_PROVIDER,
+  options?: ModelSelection["options"],
+) {
+  if (!options || Array.isArray(options)) {
+    return normalizeProviderOptionSelections(options);
+  }
+
+  const normalized = normalizeProviderOptionSelections(options) ?? [];
+  const order = OPTION_ORDER_BY_PROVIDER[provider];
+  const rankById = new Map<string, number>(order.map((id, index) => [id, index]));
+  return [...normalized].sort(
+    (left, right) =>
+      (rankById.get(left.id) ?? Number.MAX_SAFE_INTEGER) -
+      (rankById.get(right.id) ?? Number.MAX_SAFE_INTEGER),
+  );
+}
+
 function modelSelection(
   provider: "codex" | "claudeAgent" | "cursor",
   model: string,
   options?: ModelSelection["options"],
 ): ModelSelection {
-  return {
-    provider,
-    model,
-    ...(options ? { options } : {}),
-  } as ModelSelection;
+  return createModelSelection(provider, model, orderedSelectionOptions(provider, options));
 }
 
 function providerModelOptions(options: ProviderModelOptions): ProviderModelOptions {
@@ -799,7 +820,7 @@ describe("composerDraftStore modelSelection", () => {
     const store = useComposerDraftStore.getState();
 
     store.setModelSelection(
-      threadRef,
+      threadId,
       modelSelection("cursor", "claude-opus-4-6", {
         reasoning: "xhigh",
         fastMode: true,
@@ -807,13 +828,15 @@ describe("composerDraftStore modelSelection", () => {
       }),
     );
 
-    store.setProviderModelOptions(threadRef, "cursor", {
+    store.setProviderModelOptions(threadId, "cursor", {
       reasoning: "medium",
       fastMode: false,
       thinking: true,
     });
 
-    expect(draftFor(threadId, TEST_ENVIRONMENT_ID)?.modelSelectionByProvider.cursor).toEqual(
+    expect(
+      useComposerDraftStore.getState().draftsByThreadId[threadId]?.modelSelectionByProvider.cursor,
+    ).toEqual(
       modelSelection("cursor", "claude-opus-4-6", {
         reasoning: "medium",
         fastMode: false,
@@ -826,7 +849,7 @@ describe("composerDraftStore modelSelection", () => {
     const store = useComposerDraftStore.getState();
 
     store.setProviderModelOptions(
-      threadRef,
+      threadId,
       "cursor",
       {
         reasoning: "high",
@@ -837,7 +860,9 @@ describe("composerDraftStore modelSelection", () => {
       },
     );
 
-    expect(draftFor(threadId, TEST_ENVIRONMENT_ID)?.modelSelectionByProvider.cursor).toEqual(
+    expect(
+      useComposerDraftStore.getState().draftsByThreadId[threadId]?.modelSelectionByProvider.cursor,
+    ).toEqual(
       modelSelection("cursor", "gpt-5.4", {
         reasoning: "high",
       }),
@@ -893,8 +918,12 @@ describe("composerDraftStore modelSelection", () => {
     store.setModelOptions(threadId, providerModelOptions({ codex: { reasoningEffort: "xhigh" } }));
 
     const draft = useComposerDraftStore.getState().draftsByThreadId[threadId];
-    expect(draft?.modelSelectionByProvider.codex?.options).toEqual({ reasoningEffort: "xhigh" });
-    expect(draft?.modelSelectionByProvider.claudeAgent?.options).toEqual({ effort: "max" });
+    expect(draft?.modelSelectionByProvider.codex?.options).toEqual(
+      orderedSelectionOptions("codex", { reasoningEffort: "xhigh" }),
+    );
+    expect(draft?.modelSelectionByProvider.claudeAgent?.options).toEqual(
+      orderedSelectionOptions("claudeAgent", { effort: "max" }),
+    );
   });
 
   it("preserves other provider options when switching the active model selection", () => {
@@ -914,7 +943,9 @@ describe("composerDraftStore modelSelection", () => {
     expect(draft?.modelSelectionByProvider.claudeAgent).toEqual(
       modelSelection("claudeAgent", "claude-opus-4-6", { effort: "max" }),
     );
-    expect(draft?.modelSelectionByProvider.codex?.options).toEqual({ fastMode: true });
+    expect(draft?.modelSelectionByProvider.codex?.options).toEqual(
+      orderedSelectionOptions("codex", { fastMode: true }),
+    );
     expect(draft?.activeProvider).toBe("claudeAgent");
   });
 
@@ -1029,14 +1060,7 @@ describe("composerDraftStore sticky composer settings", () => {
   it("drops empty cursor model options when normalizing sticky state", () => {
     const store = useComposerDraftStore.getState();
 
-    store.setStickyModelSelection(
-      modelSelection("cursor", "gpt-5.4", {
-        reasoning: undefined,
-        fastMode: undefined,
-        thinking: undefined,
-        contextWindow: undefined,
-      }),
-    );
+    store.setStickyModelSelection(modelSelection("cursor", "gpt-5.4", {}));
 
     expect(useComposerDraftStore.getState().stickyModelSelectionByProvider.cursor).toEqual(
       modelSelection("cursor", "gpt-5.4"),
@@ -1080,7 +1104,9 @@ describe("composerDraftStore provider-scoped option updates", () => {
     expect(draft?.modelSelectionByProvider.codex).toEqual(
       modelSelection("codex", "gpt-5.3-codex", { reasoningEffort: "medium" }),
     );
-    expect(draft?.modelSelectionByProvider.claudeAgent?.options).toEqual({ effort: "max" });
+    expect(draft?.modelSelectionByProvider.claudeAgent?.options).toEqual(
+      orderedSelectionOptions("claudeAgent", { effort: "max" }),
+    );
     expect(draft?.activeProvider).toBe("codex");
   });
 });

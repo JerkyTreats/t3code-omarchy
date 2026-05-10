@@ -1,9 +1,9 @@
 import type { ServerAuthDescriptor } from "@t3tools/contracts";
 import { Effect, Layer } from "effect";
 
-import { ServerConfig } from "../../config";
-import { SESSION_COOKIE_NAME } from "../utils";
-import { ServerAuthPolicy, type ServerAuthPolicyShape } from "../Services/ServerAuthPolicy";
+import { ServerConfig } from "../../config.ts";
+import { SESSION_COOKIE_NAME } from "../utils.ts";
+import { ServerAuthPolicy, type ServerAuthPolicyShape } from "../Services/ServerAuthPolicy.ts";
 
 function isLoopbackHost(host: string | undefined): boolean {
   if (!host) {

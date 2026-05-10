@@ -125,16 +125,15 @@ async function githubRequest<T>(
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  let body: string | undefined;
-  if (init?.body !== undefined) {
+  const body = init?.body === undefined ? undefined : JSON.stringify(init.body);
+  if (body !== undefined) {
     headers.set("Content-Type", "application/json");
-    body = JSON.stringify(init.body);
   }
 
   const response = await fetch(`https://api.github.com${path}`, {
     method: init?.method ?? "GET",
     headers,
-    body,
+    ...(body === undefined ? {} : { body }),
   });
 
   if (!response.ok) {

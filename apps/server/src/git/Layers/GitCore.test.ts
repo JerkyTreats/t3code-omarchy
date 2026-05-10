@@ -617,7 +617,7 @@ it.layer(TestLayer)("git integration", (it) => {
 
     it.effect("refreshes upstream behind count after checkout when remote branch advanced", () =>
       Effect.gen(function* () {
-        const services = yield* Effect.services();
+        const services = yield* Effect.context();
         const runPromise = Effect.runPromiseWith(services);
 
         const remote = yield* makeTmpDir();

@@ -126,7 +126,7 @@ async function mountMenu(props?: { modelSelection?: ModelSelection; prompt?: str
           threadId={threadId}
           model={model}
           prompt={props?.prompt ?? ""}
-          modelOptions={providerOptions}
+          modelOptions={Array.isArray(providerOptions) ? undefined : providerOptions}
           onPromptChange={onPromptChange}
         />
       }

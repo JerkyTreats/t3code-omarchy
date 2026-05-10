@@ -4,7 +4,7 @@ import {
   assertSupportedCodexCliVersion,
   resolveSupportedCodexCliBinary,
   resolveSupportedCodexCliBinaries,
-} from "./codexCliBinary";
+} from "./codexCliBinary.ts";
 
 const spawnSyncMock = vi.hoisted(() => vi.fn());
 

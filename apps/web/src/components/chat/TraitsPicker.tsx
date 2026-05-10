@@ -1,6 +1,8 @@
 import {
   type ClaudeModelOptions,
   type CodexModelOptions,
+  type CursorModelOptions,
+  type ModelSelection,
   type ProviderKind,
   type ProviderModelOptions,
   type ServerProviderModel,
@@ -32,7 +34,7 @@ import { useComposerDraftStore } from "../../composerDraftStore";
 import { getProviderModelCapabilities } from "../../providerModels";
 import { cn } from "~/lib/utils";
 
-type ProviderOptions = ProviderModelOptions[ProviderKind];
+type ProviderOptions = ProviderModelOptions[ProviderKind] | ModelSelection["options"];
 type TraitsPersistence =
   | {
       threadId: ThreadId;
@@ -52,6 +54,9 @@ function getRawEffort(
   if (provider === "codex") {
     return trimOrNull((modelOptions as CodexModelOptions | undefined)?.reasoningEffort);
   }
+  if (provider === "cursor") {
+    return trimOrNull((modelOptions as CursorModelOptions | undefined)?.reasoning);
+  }
   return trimOrNull((modelOptions as ClaudeModelOptions | undefined)?.effort);
 }
 
@@ -59,7 +64,7 @@ function getRawContextWindow(
   provider: ProviderKind,
   modelOptions: ProviderOptions | null | undefined,
 ): string | null {
-  if (provider === "claudeAgent") {
+  if (provider === "claudeAgent" || provider === "cursor") {
     return trimOrNull((modelOptions as ClaudeModelOptions | undefined)?.contextWindow);
   }
   return null;
@@ -70,10 +75,14 @@ function buildNextOptions(
   modelOptions: ProviderOptions | null | undefined,
   patch: Record<string, unknown>,
 ): ProviderOptions {
+  const baseOptions = Array.isArray(modelOptions) ? undefined : modelOptions;
   if (provider === "codex") {
-    return { ...(modelOptions as CodexModelOptions | undefined), ...patch } as CodexModelOptions;
+    return { ...(baseOptions as CodexModelOptions | undefined), ...patch } as CodexModelOptions;
   }
-  return { ...(modelOptions as ClaudeModelOptions | undefined), ...patch } as ClaudeModelOptions;
+  if (provider === "cursor") {
+    return { ...(baseOptions as CursorModelOptions | undefined), ...patch } as CursorModelOptions;
+  }
+  return { ...(baseOptions as ClaudeModelOptions | undefined), ...patch } as ClaudeModelOptions;
 }
 
 function getSelectedTraits(
@@ -85,11 +94,12 @@ function getSelectedTraits(
   allowPromptInjectedEffort: boolean,
 ) {
   const caps = getProviderModelCapabilities(models, model, provider);
+  const reasoningEffortLevels = caps.reasoningEffortLevels ?? [];
+  const promptInjectedEffortLevels = caps.promptInjectedEffortLevels ?? [];
+  const contextWindowOptions = caps.contextWindowOptions ?? [];
   const effortLevels = allowPromptInjectedEffort
-    ? caps.reasoningEffortLevels
-    : caps.reasoningEffortLevels.filter(
-        (option) => !caps.promptInjectedEffortLevels.includes(option.value),
-      );
+    ? reasoningEffortLevels
+    : reasoningEffortLevels.filter((option) => !promptInjectedEffortLevels.includes(option.value));
 
   // Resolve effort from options (provider-specific key)
   const rawEffort = getRawEffort(provider, modelOptions);
@@ -106,7 +116,6 @@ function getSelectedTraits(
     (modelOptions as { fastMode?: boolean } | undefined)?.fastMode === true;
 
   // Context window
-  const contextWindowOptions = caps.contextWindowOptions;
   const rawContextWindow = getRawContextWindow(provider, modelOptions);
   const defaultContextWindow = getDefaultContextWindow(caps);
   const contextWindow =
@@ -117,7 +126,7 @@ function getSelectedTraits(
   // Prompt-controlled effort (e.g. ultrathink in prompt text)
   const ultrathinkPromptControlled =
     allowPromptInjectedEffort &&
-    caps.promptInjectedEffortLevels.length > 0 &&
+    promptInjectedEffortLevels.length > 0 &&
     isClaudeUltrathinkPrompt(prompt);
 
   // Check if "ultrathink" appears in the body text (not just our prefix)
@@ -128,6 +137,7 @@ function getSelectedTraits(
     caps,
     effort,
     effortLevels,
+    promptInjectedEffortLevels,
     thinkingEnabled,
     fastModeEnabled,
     contextWindowOptions,
@@ -167,7 +177,14 @@ export const TraitsMenuContent = memo(function TraitsMenuContentImpl({
         persistence.onModelOptionsChange(nextOptions);
         return;
       }
-      setProviderModelOptions(persistence.threadId, provider, nextOptions, { persistSticky: true });
+      setProviderModelOptions(
+        persistence.threadId,
+        provider,
+        Array.isArray(nextOptions)
+          ? undefined
+          : (nextOptions as ProviderModelOptions[ProviderKind]),
+        { persistSticky: true },
+      );
     },
     [persistence, provider, setProviderModelOptions],
   );
@@ -175,6 +192,7 @@ export const TraitsMenuContent = memo(function TraitsMenuContentImpl({
     caps,
     effort,
     effortLevels,
+    promptInjectedEffortLevels,
     thinkingEnabled,
     fastModeEnabled,
     contextWindowOptions,
@@ -190,7 +208,7 @@ export const TraitsMenuContent = memo(function TraitsMenuContentImpl({
       if (!value) return;
       const nextOption = effortLevels.find((option) => option.value === value);
       if (!nextOption) return;
-      if (caps.promptInjectedEffortLevels.includes(nextOption.value)) {
+      if (promptInjectedEffortLevels.includes(nextOption.value)) {
         const nextPrompt =
           prompt.trim().length === 0
             ? ULTRATHINK_PROMPT_PREFIX
@@ -203,7 +221,8 @@ export const TraitsMenuContent = memo(function TraitsMenuContentImpl({
         const stripped = prompt.replace(/^Ultrathink:\s*/i, "");
         onPromptChange(stripped);
       }
-      const effortKey = provider === "codex" ? "reasoningEffort" : "effort";
+      const effortKey =
+        provider === "codex" ? "reasoningEffort" : provider === "cursor" ? "reasoning" : "effort";
       updateModelOptions(
         buildNextOptions(provider, modelOptions, { [effortKey]: nextOption.value }),
       );
@@ -216,7 +235,7 @@ export const TraitsMenuContent = memo(function TraitsMenuContentImpl({
       updateModelOptions,
       effortLevels,
       prompt,
-      caps.promptInjectedEffortLevels,
+      promptInjectedEffortLevels,
       provider,
     ],
   );

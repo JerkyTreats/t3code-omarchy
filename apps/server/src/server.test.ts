@@ -970,9 +970,12 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       );
 
       assert.equal(response.status, 204);
-      assert.equal(response.headers.get("access-control-allow-origin"), "*");
-      assert.equal(response.headers.get("access-control-allow-methods"), "POST, OPTIONS");
-      assert.equal(response.headers.get("access-control-allow-headers"), "content-type");
+      assert.equal(response.headers.get("access-control-allow-origin"), "http://localhost:5733");
+      assert.equal(response.headers.get("access-control-allow-methods"), "GET, POST, OPTIONS");
+      assert.equal(
+        response.headers.get("access-control-allow-headers"),
+        "authorization,b3,traceparent,content-type",
+      );
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 

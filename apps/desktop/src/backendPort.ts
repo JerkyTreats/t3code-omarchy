@@ -6,6 +6,7 @@ const MAX_TCP_PORT = 65_535;
 
 export interface ResolveDesktopBackendPortOptions {
   readonly host: string;
+  readonly requiredHosts?: ReadonlyArray<string>;
   readonly startPort?: number;
   readonly maxPort?: number;
   readonly canListenOnHost?: (port: number, host: string) => Promise<boolean>;
@@ -23,10 +24,13 @@ const isValidPort = (port: number): boolean =>
 
 export async function resolveDesktopBackendPort({
   host,
+  requiredHosts = [],
   startPort = DEFAULT_DESKTOP_BACKEND_PORT,
   maxPort = MAX_TCP_PORT,
   canListenOnHost = defaultCanListenOnHost,
 }: ResolveDesktopBackendPortOptions): Promise<number> {
+  const hosts = [host, ...requiredHosts.filter((candidate) => candidate !== host)];
+
   if (!isValidPort(startPort)) {
     throw new Error(`Invalid desktop backend start port: ${startPort}`);
   }
@@ -41,12 +45,20 @@ export async function resolveDesktopBackendPort({
 
   // Probe upward from a stable preferred port so restarts remain predictable.
   for (let port = startPort; port <= maxPort; port += 1) {
-    if (await canListenOnHost(port, host)) {
+    let isAvailable = true;
+    for (const candidateHost of hosts) {
+      if (!(await canListenOnHost(port, candidateHost))) {
+        isAvailable = false;
+        break;
+      }
+    }
+
+    if (isAvailable) {
       return port;
     }
   }
 
   throw new Error(
-    `No desktop backend port is available on ${host} between ${startPort} and ${maxPort}`,
+    `No desktop backend port is available on hosts ${hosts.join(", ")} between ${startPort} and ${maxPort}`,
   );
 }

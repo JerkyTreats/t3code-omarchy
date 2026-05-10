@@ -16,19 +16,19 @@ import {
   Queue,
   Ref,
   Scope,
-  ServiceMap,
+  Context,
 } from "effect";
 
-import { ServerConfig } from "./config";
-import { ServerEnvironment } from "./environment/Services/ServerEnvironment";
-import { Keybindings } from "./keybindings";
-import { Open } from "./open";
-import { OrchestrationEngineService } from "./orchestration/Services/OrchestrationEngine";
-import { ProjectionSnapshotQuery } from "./orchestration/Services/ProjectionSnapshotQuery";
-import { OrchestrationReactor } from "./orchestration/Services/OrchestrationReactor";
-import { ServerLifecycleEvents } from "./serverLifecycleEvents";
-import { ServerSettingsService } from "./serverSettings";
-import { AnalyticsService } from "./telemetry/Services/AnalyticsService";
+import { ServerConfig } from "./config.ts";
+import { ServerEnvironment } from "./environment/Services/ServerEnvironment.ts";
+import { Keybindings } from "./keybindings.ts";
+import { Open } from "./open.ts";
+import { OrchestrationEngineService } from "./orchestration/Services/OrchestrationEngine.ts";
+import { ProjectionSnapshotQuery } from "./orchestration/Services/ProjectionSnapshotQuery.ts";
+import { OrchestrationReactor } from "./orchestration/Services/OrchestrationReactor.ts";
+import { ServerLifecycleEvents } from "./serverLifecycleEvents.ts";
+import { ServerSettingsService } from "./serverSettings.ts";
+import { AnalyticsService } from "./telemetry/Services/AnalyticsService.ts";
 
 const isWildcardHost = (host: string | undefined): boolean =>
   host === "0.0.0.0" || host === "::" || host === "[::]";
@@ -49,7 +49,7 @@ export interface ServerRuntimeStartupShape {
   ) => Effect.Effect<A, E | ServerRuntimeStartupError>;
 }
 
-export class ServerRuntimeStartup extends ServiceMap.Service<
+export class ServerRuntimeStartup extends Context.Service<
   ServerRuntimeStartup,
   ServerRuntimeStartupShape
 >()("t3/serverRuntimeStartup") {}

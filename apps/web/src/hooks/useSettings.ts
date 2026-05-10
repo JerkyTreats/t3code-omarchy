@@ -30,6 +30,7 @@ import { ensureLocalApi } from "~/localApi";
 import { normalizeCustomModelSlugs } from "~/modelSelection";
 import { Predicate, Schema, Struct } from "effect";
 import { DeepMutable } from "effect/Types";
+import { normalizeProviderOptionSelections } from "@t3tools/shared/model";
 import { applyServerSettingsPatch } from "@t3tools/shared/serverSettings";
 import { applySettingsUpdated, getServerConfig, useServerSettings } from "~/rpc/serverState";
 
@@ -210,7 +211,14 @@ export function buildLegacyServerSettingsMigrationPatch(legacySettings: Record<s
   }
 
   if (Schema.is(ModelSelection)(legacySettings.textGenerationModelSelection)) {
-    patch.textGenerationModelSelection = legacySettings.textGenerationModelSelection;
+    const normalizedOptions = normalizeProviderOptionSelections(
+      legacySettings.textGenerationModelSelection.options,
+    );
+    patch.textGenerationModelSelection = {
+      provider: legacySettings.textGenerationModelSelection.provider,
+      model: legacySettings.textGenerationModelSelection.model,
+      ...(normalizedOptions ? { options: normalizedOptions.map((option) => ({ ...option })) } : {}),
+    };
   }
 
   if (typeof legacySettings.codexBinaryPath === "string") {

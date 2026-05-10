@@ -12,16 +12,16 @@ import {
   Stream,
 } from "effect";
 
-import { AuthSessionRepositoryLive } from "../../persistence/Layers/AuthSessions";
-import { AuthSessionRepository } from "../../persistence/Services/AuthSessions";
-import { ServerSecretStore } from "../Services/ServerSecretStore";
+import { AuthSessionRepositoryLive } from "../../persistence/Layers/AuthSessions.ts";
+import { AuthSessionRepository } from "../../persistence/Services/AuthSessions.ts";
+import { ServerSecretStore } from "../Services/ServerSecretStore.ts";
 import {
   SESSION_COOKIE_NAME,
   base64UrlDecodeUtf8,
   base64UrlEncode,
   signPayload,
   timingSafeEqualBase64Url,
-} from "../utils";
+} from "../utils.ts";
 import {
   SessionCredentialError,
   SessionCredentialService,
@@ -29,7 +29,7 @@ import {
   type SessionCredentialChange,
   type SessionCredentialServiceShape,
   type VerifiedSession,
-} from "../Services/SessionCredentialService";
+} from "../Services/SessionCredentialService.ts";
 
 const SIGNING_SECRET_NAME = "server-signing-key";
 const DEFAULT_SESSION_TTL = Duration.days(30);

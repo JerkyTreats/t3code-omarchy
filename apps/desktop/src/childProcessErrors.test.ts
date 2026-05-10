@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isIgnorableChildProcessStreamError } from "./childProcessErrors";
+import { isIgnorableChildProcessStreamError } from "./childProcessErrors.ts";
 
 describe("isIgnorableChildProcessStreamError", () => {
   it("returns true for child pipe disconnect errors", () => {

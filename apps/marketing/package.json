@@ -7,10 +7,10 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "typecheck": "astro check"
+    "typecheck": "node ./node_modules/astro/bin/astro.mjs check"
   },
   "dependencies": {
-    "astro": "^6.0.4"
+    "astro": "6.0.4"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.7",

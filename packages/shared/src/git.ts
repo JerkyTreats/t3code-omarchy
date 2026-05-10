@@ -6,6 +6,11 @@ import type {
   GitStatusResult,
   GitStatusStreamEvent,
 } from "@t3tools/contracts";
+import * as Effect from "effect/Effect";
+import * as Random from "effect/Random";
+
+export const WORKTREE_BRANCH_PREFIX = "t3code";
+const TEMP_WORKTREE_BRANCH_PATTERN = new RegExp(`^${WORKTREE_BRANCH_PREFIX}\\/[0-9a-f]{8}$`);
 
 /**
  * Sanitize an arbitrary string into a valid, lowercase git branch fragment.
@@ -27,97 +32,6 @@ export function sanitizeBranchFragment(raw: string): string {
     .replace(/[./_-]+$/g, "");
 
   return branchFragment.length > 0 ? branchFragment : "update";
-}
-
-export const MANAGED_WORKTREE_BRANCH_PREFIX = "t3code";
-
-const TEMP_MANAGED_WORKTREE_BRANCH_PATTERN = new RegExp(
-  `^${MANAGED_WORKTREE_BRANCH_PREFIX}/[0-9a-f]{8}$`,
-);
-
-function stripManagedWorktreePrefix(raw: string): string {
-  const normalized = raw
-    .trim()
-    .toLowerCase()
-    .replace(/^refs\/heads\//, "")
-    .replace(/['"`]/g, "");
-
-  if (normalized.startsWith(`${MANAGED_WORKTREE_BRANCH_PREFIX}/`)) {
-    return normalized.slice(`${MANAGED_WORKTREE_BRANCH_PREFIX}/`.length);
-  }
-
-  return normalized;
-}
-
-function resolveRandomBranchSeed(): string {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
-  }
-
-  return `${Date.now().toString(16)}${Math.random().toString(16).slice(2)}`;
-}
-
-function toTemporaryWorktreeToken(seed: string): string {
-  const hex = seed.toLowerCase().replace(/[^0-9a-f]+/g, "");
-  return hex.slice(0, 8).padEnd(8, "0");
-}
-
-function hashBranchName(value: string): string {
-  let hash = 2_166_136_261;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16_777_619);
-  }
-  return (hash >>> 0).toString(16).padStart(8, "0");
-}
-
-export function buildTemporaryWorktreeBranchName(seed = resolveRandomBranchSeed()): string {
-  return `${MANAGED_WORKTREE_BRANCH_PREFIX}/${toTemporaryWorktreeToken(seed)}`;
-}
-
-export function isTemporaryWorktreeBranchName(branch: string): boolean {
-  return TEMP_MANAGED_WORKTREE_BRANCH_PATTERN.test(branch.trim().toLowerCase());
-}
-
-export function buildManagedWorktreeBranchName(raw: string, namespace?: string): string {
-  const branchFragment = sanitizeBranchFragment(stripManagedWorktreePrefix(raw));
-  const namespaceFragment = namespace
-    ? sanitizeBranchFragment(namespace).replaceAll("/", "-")
-    : null;
-
-  return `${MANAGED_WORKTREE_BRANCH_PREFIX}/${namespaceFragment ? `${namespaceFragment}/` : ""}${branchFragment}`;
-}
-
-export function resolveUniqueBranchName(
-  existingBranchNames: readonly string[],
-  desiredBranch: string,
-): string {
-  const trimmedBranch = desiredBranch.trim();
-  if (trimmedBranch.length === 0) {
-    return desiredBranch;
-  }
-
-  const normalizedExistingNames = new Set(
-    existingBranchNames.map((branch) => branch.trim().toLowerCase()),
-  );
-  const normalizedDesiredBranch = trimmedBranch.toLowerCase();
-
-  if (!normalizedExistingNames.has(normalizedDesiredBranch)) {
-    return trimmedBranch;
-  }
-
-  let suffix = 2;
-  while (normalizedExistingNames.has(`${normalizedDesiredBranch}-${suffix}`)) {
-    suffix += 1;
-  }
-
-  return `${trimmedBranch}-${suffix}`;
-}
-
-export function buildWorktreeDirectoryName(branch: string): string {
-  const normalizedBranch = branch.trim().toLowerCase();
-  const slug = sanitizeBranchFragment(normalizedBranch).replaceAll("/", "-");
-  return `${slug}-${hashBranchName(normalizedBranch)}`;
 }
 
 /**
@@ -146,7 +60,18 @@ export function resolveAutoFeatureBranchName(
   const resolvedBase = sanitizeFeatureBranchName(
     preferred && preferred.length > 0 ? preferred : AUTO_FEATURE_BRANCH_FALLBACK,
   );
-  return resolveUniqueBranchName(existingBranchNames, resolvedBase);
+  const existingNames = new Set(existingBranchNames.map((branch) => branch.toLowerCase()));
+
+  if (!existingNames.has(resolvedBase)) {
+    return resolvedBase;
+  }
+
+  let suffix = 2;
+  while (existingNames.has(`${resolvedBase}-${suffix}`)) {
+    suffix += 1;
+  }
+
+  return `${resolvedBase}-${suffix}`;
 }
 
 /**
@@ -158,6 +83,65 @@ export function deriveLocalBranchNameFromRemoteRef(branchName: string): string {
     return branchName;
   }
   return branchName.slice(firstSeparatorIndex + 1);
+}
+
+export function buildTemporaryWorktreeBranchName(): string {
+  const token = Effect.runSync(Random.nextUUIDv4).replace(/-/g, "").slice(0, 8).toLowerCase();
+  return `${WORKTREE_BRANCH_PREFIX}/${token}`;
+}
+
+export function isTemporaryWorktreeBranch(branch: string): boolean {
+  return TEMP_WORKTREE_BRANCH_PATTERN.test(branch.trim().toLowerCase());
+}
+
+/**
+ * Normalize a git remote URL into a stable comparison key.
+ */
+export function normalizeGitRemoteUrl(value: string): string {
+  const normalized = value
+    .trim()
+    .replace(/\/+$/g, "")
+    .replace(/\.git$/i, "")
+    .toLowerCase();
+
+  if (/^(?:ssh|https?|git):\/\//i.test(normalized)) {
+    try {
+      const url = new URL(normalized);
+      const repositoryPath = url.pathname
+        .split("/")
+        .filter((segment) => segment.length > 0)
+        .join("/");
+      if (url.hostname && repositoryPath.includes("/")) {
+        return `${url.hostname}/${repositoryPath}`;
+      }
+    } catch {
+      return normalized;
+    }
+  }
+
+  const scpStyleHostAndPath = /^git@([^:/\s]+)[:/]([^/\s]+(?:\/[^/\s]+)+)$/i.exec(normalized);
+  if (scpStyleHostAndPath?.[1] && scpStyleHostAndPath[2]) {
+    return `${scpStyleHostAndPath[1]}/${scpStyleHostAndPath[2]}`;
+  }
+
+  return normalized;
+}
+
+/**
+ * Best-effort parse of a GitHub `owner/repo` identifier from common remote URL shapes.
+ */
+export function parseGitHubRepositoryNameWithOwnerFromRemoteUrl(url: string | null): string | null {
+  const trimmed = url?.trim() ?? "";
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  const match =
+    /^(?:git@github\.com:|ssh:\/\/git@github\.com\/|https:\/\/github\.com\/|git:\/\/github\.com\/)([^/\s]+\/[^/\s]+?)(?:\.git)?\/?$/i.exec(
+      trimmed,
+    );
+  const repositoryNameWithOwner = match?.[1]?.trim() ?? "";
+  return repositoryNameWithOwner.length > 0 ? repositoryNameWithOwner : null;
 }
 
 function deriveLocalBranchNameCandidatesFromRemoteRef(

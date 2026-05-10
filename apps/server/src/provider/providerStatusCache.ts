@@ -2,9 +2,12 @@ import * as nodePath from "node:path";
 import { type ServerProvider, ServerProvider as ServerProviderSchema } from "@t3tools/contracts";
 import { Cause, Effect, FileSystem, Path, Schema } from "effect";
 
-export const PROVIDER_CACHE_IDS = ["codex", "claudeAgent"] as const satisfies ReadonlyArray<
-  ServerProvider["provider"]
->;
+export const PROVIDER_CACHE_IDS = [
+  "codex",
+  "claudeAgent",
+  "opencode",
+  "cursor",
+] as const satisfies ReadonlyArray<ServerProvider["provider"]>;
 
 const decodeProviderStatusCache = Schema.decodeUnknownEffect(
   Schema.fromJsonString(ServerProviderSchema),
@@ -50,11 +53,39 @@ export const hydrateCachedProvider = (input: {
     status: input.cachedProvider.status,
     auth: input.cachedProvider.auth,
     checkedAt: input.cachedProvider.checkedAt,
+    slashCommands:
+      input.cachedProvider.slashCommands.length > 0
+        ? input.cachedProvider.slashCommands
+        : input.fallbackProvider.slashCommands,
+    skills:
+      input.cachedProvider.skills.length > 0
+        ? input.cachedProvider.skills
+        : input.fallbackProvider.skills,
   };
 
   return input.cachedProvider.message
     ? { ...hydratedProvider, message: input.cachedProvider.message }
     : hydratedProvider;
+};
+
+export const mergeProviderSnapshot = (
+  previousProvider: ServerProvider | undefined,
+  nextProvider: ServerProvider,
+): ServerProvider => {
+  if (!previousProvider) {
+    return nextProvider;
+  }
+
+  return {
+    ...previousProvider,
+    ...nextProvider,
+    models: nextProvider.models,
+    slashCommands: nextProvider.slashCommands,
+    skills: nextProvider.skills,
+    ...(nextProvider.binaryCandidates !== undefined
+      ? { binaryCandidates: nextProvider.binaryCandidates }
+      : {}),
+  };
 };
 
 export const resolveProviderStatusCachePath = (input: {

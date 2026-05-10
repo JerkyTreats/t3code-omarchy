@@ -19,7 +19,7 @@ import {
   THREAD_JUMP_KEYBINDING_COMMANDS,
   type ServerConfigIssue,
 } from "@t3tools/contracts";
-import { Mutable } from "effect/Types";
+import type { Mutable } from "effect/Types";
 import {
   Array,
   Cache,
@@ -39,12 +39,12 @@ import {
   SchemaIssue,
   SchemaTransformation,
   Ref,
-  ServiceMap,
+  Context,
   Scope,
   Stream,
 } from "effect";
 import * as Semaphore from "effect/Semaphore";
-import { ServerConfig } from "./config";
+import { ServerConfig } from "./config.ts";
 import { fromLenientJson } from "@t3tools/shared/schemaJson";
 
 type WhenToken =
@@ -521,7 +521,7 @@ export interface KeybindingsShape {
 /**
  * Keybindings - Service tag for keybinding configuration operations.
  */
-export class Keybindings extends ServiceMap.Service<Keybindings, KeybindingsShape>()(
+export class Keybindings extends Context.Service<Keybindings, KeybindingsShape>()(
   "t3/keybindings",
 ) {}
 

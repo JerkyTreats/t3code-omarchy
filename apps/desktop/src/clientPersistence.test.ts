@@ -5,7 +5,7 @@ import * as Path from "node:path";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_CLIENT_SETTINGS } from "@t3tools/contracts/settings";
 
-import { readClientSettings } from "./clientPersistence";
+import { readClientSettings } from "./clientPersistence.ts";
 
 describe("readClientSettings", () => {
   it("fills defaults for legacy partial client settings", () => {

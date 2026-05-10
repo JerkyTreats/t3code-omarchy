@@ -2,7 +2,7 @@ import type { ServerProvider } from "@t3tools/contracts";
 import { Duration, Effect, Equal, Fiber, PubSub, Ref, Scope, Stream } from "effect";
 import * as Semaphore from "effect/Semaphore";
 
-import type { ServerProviderShape } from "./Services/ServerProvider";
+import type { ServerProviderShape } from "./Services/ServerProvider.ts";
 import { ServerSettingsError } from "@t3tools/contracts";
 
 interface ProviderSnapshotState {
@@ -16,6 +16,7 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
   readonly getSettings: Effect.Effect<Settings>;
   readonly streamSettings: Stream.Stream<Settings>;
   readonly haveSettingsChanged: (previous: Settings, next: Settings) => boolean;
+  readonly initialSnapshot?: (settings: Settings) => ServerProvider;
   readonly checkProvider: Effect.Effect<ServerProvider, ServerSettingsError>;
   readonly enrichSnapshot?: (input: {
     readonly settings: Settings;
@@ -31,8 +32,11 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
     PubSub.shutdown,
   );
   const initialSettings = yield* input.getSettings;
-  const initialSnapshot = yield* input.checkProvider;
-  const snapshotRef = yield* Ref.make(initialSnapshot);
+  const initialSnapshot = input.initialSnapshot?.(initialSettings) ?? (yield* input.checkProvider);
+  const snapshotStateRef = yield* Ref.make<ProviderSnapshotState>({
+    snapshot: initialSnapshot,
+    enrichmentGeneration: 0,
+  });
   const settingsRef = yield* Ref.make(initialSettings);
   const enrichmentFiberRef = yield* Ref.make<Fiber.Fiber<void, unknown> | null>(null);
   const scope = yield* Effect.scope;

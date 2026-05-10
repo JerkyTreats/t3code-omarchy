@@ -8,6 +8,7 @@ import {
   DEFAULT_MODEL_BY_PROVIDER,
   EventId,
   MessageId,
+  type ProviderSession,
   ProjectId,
   ProviderKind,
   ThreadId,
@@ -66,6 +67,30 @@ function waitForSync<A>(
       const value = read();
       if (predicate(value)) {
         return value;
+      }
+      if (Date.now() >= deadline) {
+        return yield* Effect.die(new IntegrationWaitTimeoutError({ description }));
+      }
+      yield* Effect.sleep(10);
+    }
+  });
+}
+
+function waitForProviderSession(
+  harness: OrchestrationIntegrationHarness,
+  threadId: ThreadId,
+  predicate: (session: ProviderSession) => boolean,
+  description: string,
+  timeoutMs = 10_000,
+) {
+  return Effect.gen(function* () {
+    const deadline = Date.now() + timeoutMs;
+
+    while (true) {
+      const sessions = yield* harness.providerService.listSessions();
+      const session = sessions.find((entry) => entry.threadId === threadId);
+      if (session && predicate(session)) {
+        return session;
       }
       if (Date.now() >= deadline) {
         return yield* Effect.die(new IntegrationWaitTimeoutError({ description }));
@@ -253,7 +278,7 @@ it.live("runs a single turn end-to-end and persists checkpoint state in sqlite +
 );
 
 it.live.skipIf(!process.env.CODEX_BINARY_PATH)(
-  "keeps the same Codex provider thread across runtime mode switches",
+  "keeps Codex usable across runtime mode switches before the first rollout exists",
   () =>
     withRealCodexHarness((harness) =>
       Effect.gen(function* () {
@@ -289,44 +314,49 @@ it.live.skipIf(!process.env.CODEX_BINARY_PATH)(
           createdAt,
         });
 
-        yield* harness.engine.dispatch({
-          type: "thread.turn.start",
-          commandId: CommandId.makeUnsafe("cmd-turn-start-real-codex-1"),
+        const firstSession = yield* harness.providerService.startSession(THREAD_ID, {
           threadId: THREAD_ID,
-          message: {
-            messageId: asMessageId("msg-real-codex-1"),
-            role: "user",
-            text: "Reply with exactly ALPHA.",
-            attachments: [],
+          provider: "codex",
+          cwd: harness.workspaceDir,
+          modelSelection: {
+            provider: "codex",
+            model: "gpt-5.3-codex",
           },
-          interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
           runtimeMode: "full-access",
-          createdAt: nowIso(),
         });
+        const firstProviderThreadId =
+          (firstSession.resumeCursor as { readonly threadId?: string } | undefined)?.threadId ??
+          null;
+        assert.equal(typeof firstProviderThreadId, "string");
 
-        const firstThread = yield* harness.waitForThread(
+        yield* harness.engine.dispatch({
+          type: "thread.session.set",
+          commandId: CommandId.makeUnsafe("cmd-thread-session-set-real-codex-1"),
+          threadId: THREAD_ID,
+          session: {
+            threadId: THREAD_ID,
+            status: "ready",
+            providerName: "codex",
+            runtimeMode: "full-access",
+            activeTurnId: null,
+            lastError: null,
+            updatedAt: firstSession.updatedAt,
+          },
+          createdAt: firstSession.updatedAt,
+        });
+        yield* harness.waitForThread(
           THREAD_ID,
           (entry) =>
             entry.session?.status === "ready" &&
             entry.session.providerName === "codex" &&
-            entry.messages.some(
-              (message) => message.role === "assistant" && message.streaming === false,
-            ),
-          180_000,
+            entry.session.runtimeMode === "full-access",
+          30_000,
         );
-        assert.equal(firstThread.session?.threadId, "thread-1");
 
         yield* harness.engine.dispatch({
-          type: "thread.turn.start",
-          commandId: CommandId.makeUnsafe("cmd-turn-start-real-codex-2"),
+          type: "thread.runtime-mode.set",
+          commandId: CommandId.makeUnsafe("cmd-runtime-mode-set-real-codex-2"),
           threadId: THREAD_ID,
-          message: {
-            messageId: asMessageId("msg-real-codex-2"),
-            role: "user",
-            text: "Reply with exactly BETA.",
-            attachments: [],
-          },
-          interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
           runtimeMode: "approval-required",
           createdAt: nowIso(),
         });
@@ -336,15 +366,26 @@ it.live.skipIf(!process.env.CODEX_BINARY_PATH)(
           (entry) =>
             entry.session?.status === "ready" &&
             entry.session.providerName === "codex" &&
-            entry.session.runtimeMode === "approval-required" &&
-            entry.messages.some(
-              (message) => message.role === "assistant" && message.text.includes("BETA"),
-            ),
+            entry.session.runtimeMode === "approval-required",
           180_000,
         );
         assert.equal(secondThread.session?.threadId, "thread-1");
+
+        const secondSession = yield* waitForProviderSession(
+          harness,
+          THREAD_ID,
+          (session) => session.provider === "codex" && session.runtimeMode === "approval-required",
+          "real codex runtime-mode restart session",
+          30_000,
+        );
+        const secondProviderThreadId =
+          (secondSession.resumeCursor as { readonly threadId?: string } | undefined)?.threadId ??
+          null;
+        assert.equal(typeof secondProviderThreadId, "string");
+        assert.equal(secondSession.status, "ready");
       }),
     ),
+  180_000,
 );
 
 it.live("runs multi-turn file edits and persists checkpoint diffs", () =>

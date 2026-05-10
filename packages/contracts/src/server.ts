@@ -1,18 +1,18 @@
-import { Schema } from "effect";
-import { ServerAuthDescriptor } from "./auth";
-import { ExecutionEnvironmentDescriptor } from "./environment";
+import { Effect, Schema } from "effect";
+import { ServerAuthDescriptor } from "./auth.ts";
+import { ExecutionEnvironmentDescriptor } from "./environment.ts";
 import {
   IsoDateTime,
   NonNegativeInt,
   ProjectId,
   ThreadId,
   TrimmedNonEmptyString,
-} from "./baseSchemas";
-import { KeybindingRule, ResolvedKeybindingsConfig } from "./keybindings";
-import { EditorId } from "./editor";
-import { ModelCapabilities } from "./model";
-import { ProviderKind } from "./orchestration";
-import { ServerSettings } from "./settings";
+} from "./baseSchemas.ts";
+import { KeybindingRule, ResolvedKeybindingsConfig } from "./keybindings.ts";
+import { EditorId } from "./editor.ts";
+import { ModelCapabilities } from "./model.ts";
+import { ProviderKind } from "./orchestration.ts";
+import { ServerSettings } from "./settings.ts";
 
 const KeybindingsMalformedConfigIssue = Schema.Struct({
   kind: Schema.Literal("keybindings.malformed-config"),
@@ -53,6 +53,8 @@ export type ServerProviderAuth = typeof ServerProviderAuth.Type;
 export const ServerProviderModel = Schema.Struct({
   slug: TrimmedNonEmptyString,
   name: TrimmedNonEmptyString,
+  shortName: Schema.optional(TrimmedNonEmptyString),
+  subProvider: Schema.optional(TrimmedNonEmptyString),
   isCustom: Schema.Boolean,
   capabilities: Schema.NullOr(ModelCapabilities),
 });
@@ -65,8 +67,34 @@ export const ServerProviderBinaryCandidate = Schema.Struct({
 });
 export type ServerProviderBinaryCandidate = typeof ServerProviderBinaryCandidate.Type;
 
+export const ServerProviderSlashCommandInput = Schema.Struct({
+  hint: TrimmedNonEmptyString,
+});
+export type ServerProviderSlashCommandInput = typeof ServerProviderSlashCommandInput.Type;
+
+export const ServerProviderSlashCommand = Schema.Struct({
+  name: TrimmedNonEmptyString,
+  description: Schema.optional(TrimmedNonEmptyString),
+  input: Schema.optional(ServerProviderSlashCommandInput),
+});
+export type ServerProviderSlashCommand = typeof ServerProviderSlashCommand.Type;
+
+export const ServerProviderSkill = Schema.Struct({
+  name: TrimmedNonEmptyString,
+  description: Schema.optional(TrimmedNonEmptyString),
+  path: TrimmedNonEmptyString,
+  scope: Schema.optional(TrimmedNonEmptyString),
+  enabled: Schema.Boolean,
+  displayName: Schema.optional(TrimmedNonEmptyString),
+  shortDescription: Schema.optional(TrimmedNonEmptyString),
+});
+export type ServerProviderSkill = typeof ServerProviderSkill.Type;
+
 export const ServerProvider = Schema.Struct({
   provider: ProviderKind,
+  displayName: Schema.optional(TrimmedNonEmptyString),
+  badgeLabel: Schema.optional(TrimmedNonEmptyString),
+  showInteractionModeToggle: Schema.optional(Schema.Boolean),
   enabled: Schema.Boolean,
   installed: Schema.Boolean,
   version: Schema.NullOr(TrimmedNonEmptyString),
@@ -75,6 +103,10 @@ export const ServerProvider = Schema.Struct({
   checkedAt: IsoDateTime,
   message: Schema.optional(TrimmedNonEmptyString),
   models: Schema.Array(ServerProviderModel),
+  slashCommands: Schema.Array(ServerProviderSlashCommand).pipe(
+    Schema.withDecodingDefault(Effect.succeed([])),
+  ),
+  skills: Schema.Array(ServerProviderSkill).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
   binaryCandidates: Schema.optional(Schema.Array(ServerProviderBinaryCandidate)),
 });
 export type ServerProvider = typeof ServerProvider.Type;

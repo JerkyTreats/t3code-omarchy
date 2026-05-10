@@ -37,10 +37,16 @@ import {
   RuntimeTaskId,
   ThreadId,
   TurnId,
+  type ClaudeCodeEffort,
   type UserInputQuestion,
-  ClaudeCodeEffort,
 } from "@t3tools/contracts";
-import { applyClaudePromptEffortPrefix, resolveEffort, trimOrNull } from "@t3tools/shared/model";
+import {
+  applyClaudePromptEffortPrefix,
+  getModelSelectionBooleanOptionValue,
+  getModelSelectionStringOptionValue,
+  resolveEffort,
+  trimOrNull,
+} from "@t3tools/shared/model";
 import {
   Cause,
   DateTime,
@@ -508,7 +514,9 @@ const CLAUDE_SETTING_SOURCES = [
 
 function buildPromptText(input: ProviderSendTurnInput): string {
   const rawEffort =
-    input.modelSelection?.provider === "claudeAgent" ? input.modelSelection.options?.effort : null;
+    input.modelSelection?.provider === "claudeAgent"
+      ? getModelSelectionStringOptionValue(input.modelSelection, "effort")
+      : null;
   const claudeModel =
     input.modelSelection?.provider === "claudeAgent" ? input.modelSelection.model : undefined;
   const caps = getClaudeModelCapabilities(claudeModel);
@@ -517,7 +525,9 @@ function buildPromptText(input: ProviderSendTurnInput): string {
   // resolveEffort strips prompt-injected values (returning the default instead), so we check the raw value directly.
   const trimmedEffort = trimOrNull(rawEffort);
   const promptEffort =
-    trimmedEffort && caps.promptInjectedEffortLevels.includes(trimmedEffort) ? trimmedEffort : null;
+    trimmedEffort && (caps.promptInjectedEffortLevels ?? []).includes(trimmedEffort)
+      ? trimmedEffort
+      : null;
   return applyClaudePromptEffortPrefix(input.input?.trim() ?? "", promptEffort);
 }
 
@@ -2386,7 +2396,7 @@ const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         existingResumeSessionId === undefined ? yield* Random.nextUUIDv4 : undefined;
       const sessionId = existingResumeSessionId ?? newSessionId;
 
-      const services = yield* Effect.services();
+      const services = yield* Effect.context();
       const runFork = Effect.runForkWith(services);
       const runPromise = Effect.runPromiseWith(services);
 
@@ -2691,12 +2701,19 @@ const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         input.modelSelection?.provider === "claudeAgent" ? input.modelSelection : undefined;
       const caps = getClaudeModelCapabilities(modelSelection?.model);
       const apiModelId = modelSelection ? resolveClaudeApiModelId(modelSelection) : undefined;
-      const effort = (resolveEffort(caps, modelSelection?.options?.effort) ??
-        null) as ClaudeCodeEffort | null;
-      const fastMode = modelSelection?.options?.fastMode === true && caps.supportsFastMode;
+      const effort = (resolveEffort(
+        caps,
+        modelSelection ? getModelSelectionStringOptionValue(modelSelection, "effort") : null,
+      ) ?? null) as ClaudeCodeEffort | null;
+      const fastMode =
+        modelSelection && getModelSelectionBooleanOptionValue(modelSelection, "fastMode") === true
+          ? caps.supportsFastMode
+          : false;
       const thinking =
-        typeof modelSelection?.options?.thinking === "boolean" && caps.supportsThinkingToggle
-          ? modelSelection.options.thinking
+        modelSelection &&
+        typeof getModelSelectionBooleanOptionValue(modelSelection, "thinking") === "boolean" &&
+        caps.supportsThinkingToggle
+          ? getModelSelectionBooleanOptionValue(modelSelection, "thinking")
           : undefined;
       const effectiveEffort = getEffectiveClaudeCodeEffort(effort);
       const permissionMode = input.runtimeMode === "full-access" ? "bypassPermissions" : undefined;

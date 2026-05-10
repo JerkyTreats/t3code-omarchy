@@ -28,45 +28,45 @@ import { clamp } from "effect/Number";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 
-import { CheckpointDiffQuery } from "./checkpointing/Services/CheckpointDiffQuery";
-import { CheckpointFileQuery } from "./checkpointing/Services/CheckpointFileQuery";
-import { ServerConfig } from "./config";
-import { GitCore } from "./git/Services/GitCore";
-import { GitHubCli } from "./git/Services/GitHubCli";
-import { GitManager } from "./git/Services/GitManager";
-import { GitStatusBroadcaster } from "./git/Services/GitStatusBroadcaster";
-import { Keybindings } from "./keybindings";
-import { Open, resolveAvailableEditors } from "./open";
-import { normalizeDispatchCommand } from "./orchestration/Normalizer";
-import { OrchestrationEngineService } from "./orchestration/Services/OrchestrationEngine";
-import { ProjectionSnapshotQuery } from "./orchestration/Services/ProjectionSnapshotQuery";
+import { CheckpointDiffQuery } from "./checkpointing/Services/CheckpointDiffQuery.ts";
+import { CheckpointFileQuery } from "./checkpointing/Services/CheckpointFileQuery.ts";
+import { ServerConfig } from "./config.ts";
+import { GitCore } from "./git/Services/GitCore.ts";
+import { GitHubCli } from "./git/Services/GitHubCli.ts";
+import { GitManager } from "./git/Services/GitManager.ts";
+import { GitStatusBroadcaster } from "./git/Services/GitStatusBroadcaster.ts";
+import { Keybindings } from "./keybindings.ts";
+import { Open, resolveAvailableEditors } from "./open.ts";
+import { normalizeDispatchCommand } from "./orchestration/Normalizer.ts";
+import { OrchestrationEngineService } from "./orchestration/Services/OrchestrationEngine.ts";
+import { ProjectionSnapshotQuery } from "./orchestration/Services/ProjectionSnapshotQuery.ts";
 import {
   observeRpcEffect,
   observeRpcStream,
   observeRpcStreamEffect,
-} from "./observability/RpcInstrumentation";
-import { ProviderRegistry } from "./provider/Services/ProviderRegistry";
-import { ServerLifecycleEvents } from "./serverLifecycleEvents";
-import { ServerRuntimeStartup } from "./serverRuntimeStartup";
-import { ServerSettingsService } from "./serverSettings";
-import { TerminalManager } from "./terminal/Services/Manager";
-import { WorkspaceEntries } from "./workspace/Services/WorkspaceEntries";
-import { WorkspaceFileQuery } from "./workspace/Services/WorkspaceFileQuery";
-import { WorkspaceFileSystem } from "./workspace/Services/WorkspaceFileSystem";
-import { WorkspacePathOutsideRootError } from "./workspace/Services/WorkspacePaths";
-import { ProjectSetupScriptRunner } from "./project/Services/ProjectSetupScriptRunner";
-import { respondToAuthError } from "./auth/http";
-import { ServerAuth } from "./auth/Services/ServerAuth";
+} from "./observability/RpcInstrumentation.ts";
+import { ProviderRegistry } from "./provider/Services/ProviderRegistry.ts";
+import { ServerLifecycleEvents } from "./serverLifecycleEvents.ts";
+import { ServerRuntimeStartup } from "./serverRuntimeStartup.ts";
+import { ServerSettingsService } from "./serverSettings.ts";
+import { TerminalManager } from "./terminal/Services/Manager.ts";
+import { WorkspaceEntries } from "./workspace/Services/WorkspaceEntries.ts";
+import { WorkspaceFileQuery } from "./workspace/Services/WorkspaceFileQuery.ts";
+import { WorkspaceFileSystem } from "./workspace/Services/WorkspaceFileSystem.ts";
+import { WorkspacePathOutsideRootError } from "./workspace/Services/WorkspacePaths.ts";
+import { ProjectSetupScriptRunner } from "./project/Services/ProjectSetupScriptRunner.ts";
+import { respondToAuthError } from "./auth/http.ts";
+import { ServerAuth } from "./auth/Services/ServerAuth.ts";
 import {
   BootstrapCredentialService,
   type BootstrapCredentialChange,
-} from "./auth/Services/BootstrapCredentialService";
+} from "./auth/Services/BootstrapCredentialService.ts";
 import {
   SessionCredentialService,
   type SessionCredentialChange,
-} from "./auth/Services/SessionCredentialService";
-import { SESSION_COOKIE_NAME } from "./auth/utils";
-import { ServerEnvironment } from "./environment/Services/ServerEnvironment";
+} from "./auth/Services/SessionCredentialService.ts";
+import { SESSION_COOKIE_NAME } from "./auth/utils.ts";
+import { ServerEnvironment } from "./environment/Services/ServerEnvironment.ts";
 
 function toAuthAccessStreamEvent(
   change: BootstrapCredentialChange | SessionCredentialChange,

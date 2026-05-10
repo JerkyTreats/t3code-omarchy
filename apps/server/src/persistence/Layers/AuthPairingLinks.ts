@@ -6,7 +6,7 @@ import {
   type AuthPairingLinkRepositoryError,
   toPersistenceDecodeError,
   toPersistenceSqlError,
-} from "../Errors";
+} from "../Errors.ts";
 import {
   AuthPairingLinkRecord,
   AuthPairingLinkRepository,
@@ -16,7 +16,7 @@ import {
   GetAuthPairingLinkByCredentialInput,
   ListActiveAuthPairingLinksInput,
   RevokeAuthPairingLinkInput,
-} from "../Services/AuthPairingLinks";
+} from "../Services/AuthPairingLinks.ts";
 
 function toPersistenceSqlOrDecodeError(sqlOperation: string, decodeOperation: string) {
   return (cause: unknown): AuthPairingLinkRepositoryError =>

@@ -11,10 +11,13 @@ import { cli } from "./cli.ts";
 const CliRuntimeLayer = Layer.mergeAll(NodeServices.layer, NetService.layer);
 
 it.layer(NodeServices.layer)("cli log-level parsing", (it) => {
-  it.effect("accepts the built-in lowercase log-level flag values", () =>
-    Command.runWith(cli, { version: "0.0.0" })(["--log-level", "debug", "--version"]).pipe(
-      Effect.provide(CliRuntimeLayer),
-    ),
+  it.effect(
+    "accepts the built-in lowercase log-level flag values",
+    () =>
+      Effect.provide(
+        Command.runWith(cli, { version: "0.0.0" })(["--log-level", "debug", "--version"]),
+        CliRuntimeLayer,
+      ) as any,
   );
 
   it.effect("rejects invalid log-level casing before launching the server", () =>
@@ -22,7 +25,7 @@ it.layer(NodeServices.layer)("cli log-level parsing", (it) => {
       const error = yield* Command.runWith(cli, { version: "0.0.0" })([
         "--log-level",
         "Debug",
-      ]).pipe(Effect.provide(CliRuntimeLayer), Effect.flip);
+      ]).pipe((effect) => Effect.provide(effect, CliRuntimeLayer), Effect.flip);
 
       if (!CliError.isCliError(error)) {
         assert.fail(`Expected CliError, got ${String(error)}`);

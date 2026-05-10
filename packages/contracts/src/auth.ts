@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 
-import { AuthSessionId, TrimmedNonEmptyString } from "./baseSchemas";
+import { AuthSessionId, TrimmedNonEmptyString } from "./baseSchemas.ts";
 
 export const ServerAuthPolicy = Schema.Literals([
   "desktop-managed-local",

@@ -188,7 +188,7 @@ describe("captureDesktopScreenshot", () => {
       },
     );
 
-    const { captureDesktopScreenshot } = await import("./screenshotCapture");
+    const { captureDesktopScreenshot } = await import("./screenshotCapture.ts");
     const screenshot = await captureDesktopScreenshot();
 
     expect(screenshot).toMatchObject({
@@ -231,7 +231,7 @@ describe("captureDesktopScreenshot", () => {
       }),
     );
 
-    const { captureDesktopScreenshot } = await import("./screenshotCapture");
+    const { captureDesktopScreenshot } = await import("./screenshotCapture.ts");
     const screenshot = await captureDesktopScreenshot();
 
     expect(screenshot?.name).toBe("omarchy-created-dir.png");
@@ -275,7 +275,7 @@ describe("captureDesktopScreenshot", () => {
       }),
     );
 
-    const { captureDesktopScreenshot } = await import("./screenshotCapture");
+    const { captureDesktopScreenshot } = await import("./screenshotCapture.ts");
     const screenshot = await captureDesktopScreenshot();
 
     expect(screenshot?.name).toBe("omarchy-user-dirs.png");
@@ -307,7 +307,7 @@ describe("captureDesktopScreenshot", () => {
       .mockReturnValueOnce(clipboardImage(screenshotBytes));
     spawnMock.mockImplementation(() => createSpawnedChild());
 
-    const { captureDesktopScreenshot } = await import("./screenshotCapture");
+    const { captureDesktopScreenshot } = await import("./screenshotCapture.ts");
     const screenshot = await captureDesktopScreenshot();
 
     expect(screenshot?.mimeType).toBe("image/png");
@@ -360,7 +360,7 @@ describe("captureDesktopScreenshot", () => {
       }),
     );
 
-    const { captureDesktopScreenshot } = await import("./screenshotCapture");
+    const { captureDesktopScreenshot } = await import("./screenshotCapture.ts");
     const captureStartedAt = Date.now();
     const screenshot = await captureDesktopScreenshot();
     const elapsedMilliseconds = Date.now() - captureStartedAt;
@@ -422,7 +422,7 @@ describe("captureDesktopScreenshot", () => {
       }),
     );
 
-    const { captureDesktopScreenshot } = await import("./screenshotCapture");
+    const { captureDesktopScreenshot } = await import("./screenshotCapture.ts");
     const captureStartedAt = Date.now();
     const screenshot = await captureDesktopScreenshot();
     const elapsedMilliseconds = Date.now() - captureStartedAt;

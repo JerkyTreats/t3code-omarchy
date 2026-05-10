@@ -7,6 +7,7 @@ import type {
   ServerProviderAuth,
   ServerProviderState,
 } from "@t3tools/contracts";
+import { getModelSelectionStringOptionValue } from "@t3tools/shared/model";
 import { Cache, Duration, Effect, Equal, Layer, Option, Result, Schema, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { decodeJsonResult } from "@t3tools/shared/schemaJson";
@@ -22,10 +23,10 @@ import {
   providerModelsFromSettings,
   spawnAndCollect,
   type CommandResult,
-} from "../providerSnapshot";
-import { makeManagedServerProvider } from "../makeManagedServerProvider";
-import { ClaudeProvider } from "../Services/ClaudeProvider";
-import { ServerSettingsService } from "../../serverSettings";
+} from "../providerSnapshot.ts";
+import { makeManagedServerProvider } from "../makeManagedServerProvider.ts";
+import { ClaudeProvider } from "../Services/ClaudeProvider.ts";
+import { ServerSettingsService } from "../../serverSettings.ts";
 import { ServerSettingsError } from "@t3tools/contracts";
 
 const DEFAULT_CLAUDE_MODEL_CAPABILITIES: ModelCapabilities = {
@@ -102,7 +103,7 @@ export function getClaudeModelCapabilities(model: string | null | undefined): Mo
 }
 
 export function resolveClaudeApiModelId(modelSelection: ClaudeModelSelection): string {
-  switch (modelSelection.options?.contextWindow) {
+  switch (getModelSelectionStringOptionValue(modelSelection, "contextWindow")) {
     case "1m":
       return `${modelSelection.model}[1m]`;
     default:
@@ -376,13 +377,13 @@ export function adjustModelsForSubscription(
   // Flip 1M to be the default for premium users
   return baseModels.map((model) => {
     const caps = model.capabilities;
-    if (!caps || caps.contextWindowOptions.length === 0) return model;
+    if (!caps || (caps.contextWindowOptions?.length ?? 0) === 0) return model;
 
     return {
       ...model,
       capabilities: {
         ...caps,
-        contextWindowOptions: caps.contextWindowOptions.map((opt) =>
+        contextWindowOptions: (caps.contextWindowOptions ?? []).map((opt) =>
           opt.value === "1m"
             ? { value: opt.value, label: opt.label, isDefault: true as const }
             : { value: opt.value, label: opt.label },

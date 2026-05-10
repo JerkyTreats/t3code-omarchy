@@ -16,8 +16,7 @@ import {
   ThreadId,
   TurnId,
 } from "@t3tools/contracts";
-import { Option, Schema, ServiceMap } from "effect";
-import type { Effect } from "effect";
+import { Effect, Option, Schema, Context } from "effect";
 
 import type { ProjectionRepositoryError } from "../Errors.ts";
 
@@ -31,7 +30,7 @@ export const ProjectionThread = Schema.Struct({
   branch: Schema.NullOr(Schema.String),
   worktreePath: Schema.NullOr(Schema.String),
   issueLink: Schema.optional(Schema.NullOr(GitHubIssueLink)).pipe(
-    Schema.withDecodingDefault(() => null),
+    Schema.withDecodingDefault(Effect.succeed(null)),
   ),
   latestTurnId: Schema.NullOr(TurnId),
   createdAt: IsoDateTime,
@@ -94,7 +93,7 @@ export interface ProjectionThreadRepositoryShape {
 /**
  * ProjectionThreadRepository - Service tag for thread projection persistence.
  */
-export class ProjectionThreadRepository extends ServiceMap.Service<
+export class ProjectionThreadRepository extends Context.Service<
   ProjectionThreadRepository,
   ProjectionThreadRepositoryShape
 >()("t3/persistence/Services/ProjectionThreads/ProjectionThreadRepository") {}

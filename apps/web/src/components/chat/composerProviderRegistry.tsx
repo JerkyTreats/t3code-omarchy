@@ -4,13 +4,14 @@ import {
   type ServerProviderModel,
   type ThreadId,
 } from "@t3tools/contracts";
-import { isClaudeUltrathinkPrompt, resolveEffort } from "@t3tools/shared/model";
+import { isClaudeUltrathinkPrompt, resolveEffort, trimOrNull } from "@t3tools/shared/model";
 import type { ReactNode } from "react";
 import { getProviderModelCapabilities } from "../../providerModels";
 import { TraitsMenuContent, TraitsPicker } from "./TraitsPicker";
 import {
   normalizeClaudeModelOptionsWithCapabilities,
   normalizeCodexModelOptionsWithCapabilities,
+  normalizeCursorModelOptionsWithCapabilities,
 } from "@t3tools/shared/model";
 
 export type ComposerProviderStateInput = {
@@ -61,10 +62,18 @@ function getProviderStateFromCapabilities(
   // Resolve effort
   const rawEffort = providerOptions
     ? "effort" in providerOptions
-      ? providerOptions.effort
-      : "reasoningEffort" in providerOptions
-        ? providerOptions.reasoningEffort
+      ? typeof providerOptions.effort === "string"
+        ? trimOrNull(providerOptions.effort)
         : null
+      : "reasoningEffort" in providerOptions
+        ? typeof providerOptions.reasoningEffort === "string"
+          ? trimOrNull(providerOptions.reasoningEffort)
+          : null
+        : "reasoning" in providerOptions
+          ? typeof providerOptions.reasoning === "string"
+            ? trimOrNull(providerOptions.reasoning)
+            : null
+          : null
     : null;
 
   const promptEffort = resolveEffort(caps, rawEffort) ?? null;
@@ -73,11 +82,13 @@ function getProviderStateFromCapabilities(
   const normalizedOptions =
     provider === "codex"
       ? normalizeCodexModelOptionsWithCapabilities(caps, providerOptions)
-      : normalizeClaudeModelOptionsWithCapabilities(caps, providerOptions);
+      : provider === "cursor"
+        ? normalizeCursorModelOptionsWithCapabilities(caps, providerOptions)
+        : normalizeClaudeModelOptionsWithCapabilities(caps, providerOptions);
 
   // Ultrathink styling (driven by capabilities data, not provider identity)
   const ultrathinkActive =
-    caps.promptInjectedEffortLevels.length > 0 && isClaudeUltrathinkPrompt(prompt);
+    (caps.promptInjectedEffortLevels ?? []).length > 0 && isClaudeUltrathinkPrompt(prompt);
 
   return {
     provider,
@@ -155,6 +166,47 @@ const composerProviderRegistry: Record<ProviderKind, ProviderRegistryEntry> = {
         onPromptChange={onPromptChange}
       />
     ),
+  },
+  cursor: {
+    getState: (input) => getProviderStateFromCapabilities(input),
+    renderTraitsMenuContent: ({
+      threadId,
+      model,
+      models,
+      modelOptions,
+      prompt,
+      onPromptChange,
+    }) => (
+      <TraitsMenuContent
+        provider="cursor"
+        models={models ?? []}
+        threadId={threadId}
+        model={model}
+        modelOptions={modelOptions}
+        prompt={prompt}
+        onPromptChange={onPromptChange}
+      />
+    ),
+    renderTraitsPicker: ({ threadId, model, models, modelOptions, prompt, onPromptChange }) => (
+      <TraitsPicker
+        provider="cursor"
+        models={models ?? []}
+        threadId={threadId}
+        model={model}
+        modelOptions={modelOptions}
+        prompt={prompt}
+        onPromptChange={onPromptChange}
+      />
+    ),
+  },
+  opencode: {
+    getState: (input) => ({
+      provider: input.provider,
+      promptEffort: null,
+      modelOptionsForDispatch: undefined,
+    }),
+    renderTraitsMenuContent: () => null,
+    renderTraitsPicker: () => null,
   },
 };
 

@@ -6,7 +6,10 @@ import { it, assert } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Path, Queue, Stream } from "effect";
 
 import { ProviderUnsupportedError } from "../src/provider/Errors.ts";
-import { ProviderAdapterRegistry } from "../src/provider/Services/ProviderAdapterRegistry.ts";
+import {
+  ProviderAdapterRegistry,
+  type ProviderAdapterRegistryShape,
+} from "../src/provider/Services/ProviderAdapterRegistry.ts";
 import { ProviderSessionDirectoryLive } from "../src/provider/Layers/ProviderSessionDirectory.ts";
 import { makeProviderServiceLive } from "../src/provider/Layers/ProviderService.ts";
 import {
@@ -47,7 +50,7 @@ const makeIntegrationFixture = Effect.gen(function* () {
   const cwd = yield* makeWorkspaceDirectory;
   const harness = yield* makeTestProviderAdapterHarness();
 
-  const registry: typeof ProviderAdapterRegistry.Service = {
+  const registry: ProviderAdapterRegistryShape = {
     getByProvider: (provider) =>
       provider === "codex"
         ? Effect.succeed(harness.adapter)

@@ -3,12 +3,12 @@ import * as Crypto from "node:crypto";
 import { Effect, FileSystem, Layer, Path, Predicate } from "effect";
 import * as PlatformError from "effect/PlatformError";
 
-import { ServerConfig } from "../../config";
+import { ServerConfig } from "../../config.ts";
 import {
   SecretStoreError,
   ServerSecretStore,
   type ServerSecretStoreShape,
-} from "../Services/ServerSecretStore";
+} from "../Services/ServerSecretStore.ts";
 
 export const makeServerSecretStore = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;

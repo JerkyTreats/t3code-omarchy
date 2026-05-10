@@ -9,9 +9,9 @@ import {
 import { DateTime, Effect, Schema } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 
-import { deriveAuthClientMetadata } from "./utils";
-import { AuthError, ServerAuth } from "./Services/ServerAuth";
-import { SessionCredentialService } from "./Services/SessionCredentialService";
+import { deriveAuthClientMetadata } from "./utils.ts";
+import { AuthError, ServerAuth } from "./Services/ServerAuth.ts";
+import { SessionCredentialService } from "./Services/SessionCredentialService.ts";
 
 function redactHeader(value: string | undefined): string {
   if (!value) return "missing";

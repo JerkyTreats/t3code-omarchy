@@ -1,10 +1,10 @@
 import { EnvironmentId, type ExecutionEnvironmentDescriptor } from "@t3tools/contracts";
 import { Effect, FileSystem, Layer, Path, Random } from "effect";
 
-import { ServerConfig } from "../../config";
-import { version } from "../../../package.json" with { type: "json" };
-import { ServerEnvironment, type ServerEnvironmentShape } from "../Services/ServerEnvironment";
-import { resolveServerEnvironmentLabel } from "./ServerEnvironmentLabel";
+import { ServerConfig } from "../../config.ts";
+import packageJson from "../../../package.json" with { type: "json" };
+import { ServerEnvironment, type ServerEnvironmentShape } from "../Services/ServerEnvironment.ts";
+import { resolveServerEnvironmentLabel } from "./ServerEnvironmentLabel.ts";
 
 function platformOs(): ExecutionEnvironmentDescriptor["platform"]["os"] {
   switch (process.platform) {
@@ -77,7 +77,7 @@ export const makeServerEnvironment = Effect.fn("makeServerEnvironment")(function
       os: platformOs(),
       arch: platformArch(),
     },
-    serverVersion: version,
+    serverVersion: packageJson.version,
     capabilities: {
       repositoryIdentity: true,
     },

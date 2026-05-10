@@ -1,6 +1,6 @@
 import { Schema } from "effect";
-import { PositiveInt, TrimmedNonEmptyString } from "./baseSchemas";
-import { OrchestrationGetCheckpointFileResult } from "./orchestration";
+import { PositiveInt, TrimmedNonEmptyString } from "./baseSchemas.ts";
+import { OrchestrationGetCheckpointFileResult } from "./orchestration.ts";
 
 const PROJECT_SEARCH_ENTRIES_MAX_LIMIT = 200;
 const PROJECT_LIST_DIRECTORY_MAX_LIMIT = 500;

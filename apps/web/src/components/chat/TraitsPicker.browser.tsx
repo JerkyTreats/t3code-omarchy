@@ -24,6 +24,7 @@ import {
   useEffectiveComposerModelState,
 } from "../../composerDraftStore";
 import { DEFAULT_CLIENT_SETTINGS } from "@t3tools/contracts/settings";
+import { createModelSelection, normalizeProviderOptionSelections } from "@t3tools/shared/model";
 
 // ── Claude TraitsPicker tests ─────────────────────────────────────────
 
@@ -37,6 +38,8 @@ const TEST_PROVIDERS: ReadonlyArray<ServerProvider> = [
     status: "ready",
     auth: { status: "authenticated" },
     checkedAt: "2026-01-01T00:00:00.000Z",
+    slashCommands: [],
+    skills: [],
     models: [
       {
         slug: "gpt-5.4",
@@ -63,6 +66,8 @@ const TEST_PROVIDERS: ReadonlyArray<ServerProvider> = [
     status: "ready",
     auth: { status: "authenticated" },
     checkedAt: "2026-01-01T00:00:00.000Z",
+    slashCommands: [],
+    skills: [],
     models: [
       {
         slug: "claude-opus-4-6",
@@ -178,13 +183,11 @@ async function mountClaudePicker(props?: {
       modelSelectionByProvider: props?.skipDraftModelOptions
         ? {}
         : {
-            claudeAgent: {
-              provider: "claudeAgent",
+            claudeAgent: createModelSelection(
+              "claudeAgent",
               model,
-              ...(claudeOptions && Object.keys(claudeOptions).length > 0
-                ? { options: claudeOptions }
-                : {}),
-            },
+              normalizeProviderOptionSelections(claudeOptions),
+            ),
           },
       activeProvider: "claudeAgent",
       runtimeMode: null,
@@ -380,11 +383,11 @@ async function mountCodexPicker(props: { model?: string; options?: CodexModelOpt
       persistedAttachments: [],
       terminalContexts: [],
       modelSelectionByProvider: {
-        codex: {
-          provider: "codex",
+        codex: createModelSelection(
+          "codex",
           model,
-          ...(props.options ? { options: props.options } : {}),
-        },
+          normalizeProviderOptionSelections(props.options),
+        ),
       },
       activeProvider: "codex",
       runtimeMode: null,

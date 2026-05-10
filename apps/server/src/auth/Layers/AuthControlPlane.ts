@@ -1,7 +1,7 @@
 import type { AuthClientSession, AuthPairingLink } from "@t3tools/contracts";
 import { DateTime, Effect, Layer } from "effect";
 
-import { layerConfig as SqlitePersistenceLayerLive } from "../../persistence/Layers/Sqlite";
+import { layerConfig as SqlitePersistenceLayerLive } from "../../persistence/Layers/Sqlite.ts";
 import {
   AuthControlPlane,
   AuthControlPlaneError,
@@ -9,12 +9,12 @@ import {
   DEFAULT_SESSION_SUBJECT,
   type IssuedBearerSession,
   type IssuedPairingLink,
-} from "../Services/AuthControlPlane";
-import { BootstrapCredentialServiceLive } from "./BootstrapCredentialService";
-import { ServerSecretStoreLive } from "./ServerSecretStore";
-import { SessionCredentialServiceLive } from "./SessionCredentialService";
-import { BootstrapCredentialService } from "../Services/BootstrapCredentialService";
-import { SessionCredentialService } from "../Services/SessionCredentialService";
+} from "../Services/AuthControlPlane.ts";
+import { BootstrapCredentialServiceLive } from "./BootstrapCredentialService.ts";
+import { ServerSecretStoreLive } from "./ServerSecretStore.ts";
+import { SessionCredentialServiceLive } from "./SessionCredentialService.ts";
+import { BootstrapCredentialService } from "../Services/BootstrapCredentialService.ts";
+import { SessionCredentialService } from "../Services/SessionCredentialService.ts";
 
 const bySessionPriority = (left: AuthClientSession, right: AuthClientSession) => {
   if (left.role !== right.role) {

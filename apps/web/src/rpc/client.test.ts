@@ -140,6 +140,12 @@ describe("WsRpcAtomClient", () => {
           ...DEFAULT_SERVER_SETTINGS.providers.claudeAgent,
           enabled: false,
         },
+        cursor: {
+          ...DEFAULT_SERVER_SETTINGS.providers.cursor,
+        },
+        opencode: {
+          ...DEFAULT_SERVER_SETTINGS.providers.opencode,
+        },
       },
     };
     const requestPromise = runRpc((client) => client(WS_METHODS.serverGetSettings, {}));
@@ -189,6 +195,12 @@ describe("WsRpcAtomClient", () => {
         claudeAgent: {
           ...DEFAULT_SERVER_SETTINGS.providers.claudeAgent,
           enabled: false,
+        },
+        cursor: {
+          ...DEFAULT_SERVER_SETTINGS.providers.cursor,
+        },
+        opencode: {
+          ...DEFAULT_SERVER_SETTINGS.providers.opencode,
         },
       },
     };

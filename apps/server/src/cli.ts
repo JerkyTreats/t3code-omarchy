@@ -11,10 +11,10 @@ import {
   ServerConfig,
   RuntimeMode,
   type ServerConfigShape,
-} from "./config";
-import { readBootstrapEnvelope } from "./bootstrap";
-import { expandHomePath, resolveBaseDir } from "./os-jank";
-import { runServer } from "./server";
+} from "./config.ts";
+import { readBootstrapEnvelope } from "./bootstrap.ts";
+import { expandHomePath, resolveBaseDir } from "./os-jank.ts";
+import { runServer } from "./server.ts";
 
 const PortSchema = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 }));
 

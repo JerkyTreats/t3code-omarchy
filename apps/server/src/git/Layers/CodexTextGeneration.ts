@@ -31,7 +31,10 @@ import {
 import { resolveSupportedCodexCliBinaryPath } from "../../provider/codexCliBinary.ts";
 import { getCodexModelCapabilities } from "../../provider/Layers/CodexProvider.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
-import { normalizeCodexModelOptionsWithCapabilities } from "@t3tools/shared/model";
+import {
+  getModelSelectionStringOptionValue,
+  normalizeCodexModelOptionsWithCapabilities,
+} from "@t3tools/shared/model";
 
 const CODEX_GIT_TEXT_GENERATION_REASONING_EFFORT = "low";
 const CODEX_TIMEOUT_MS = 180_000;
@@ -161,7 +164,8 @@ const makeCodexTextGeneration = Effect.gen(function* () {
         modelSelection.options,
       );
       const reasoningEffort =
-        modelSelection.options?.reasoningEffort ?? CODEX_GIT_TEXT_GENERATION_REASONING_EFFORT;
+        getModelSelectionStringOptionValue(modelSelection, "reasoningEffort") ??
+        CODEX_GIT_TEXT_GENERATION_REASONING_EFFORT;
       const binaryPath = yield* Effect.try({
         try: () =>
           resolveSupportedCodexCliBinaryPath({

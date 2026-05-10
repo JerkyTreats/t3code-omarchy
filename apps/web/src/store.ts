@@ -3,15 +3,13 @@ import {
   type OrchestrationMessage,
   type OrchestrationProposedPlan,
   type ProjectId,
-  type ProviderKind,
-  ThreadId,
+  ProviderKind,
   type OrchestrationReadModel,
   type OrchestrationSession,
   type OrchestrationCheckpointSummary,
   type OrchestrationThread,
   type OrchestrationSessionStatus,
 } from "@t3tools/contracts";
-import { ProviderKind } from "@t3tools/contracts";
 import type { ThreadId, TurnId } from "@t3tools/contracts";
 import { Schema } from "effect";
 import { resolveModelSlugForProvider } from "@t3tools/shared/model";
@@ -85,7 +83,7 @@ function updateProject(
   return changed ? next : projects;
 }
 
-function normalizeModelSelection<T extends { provider: "codex" | "claudeAgent"; model: string }>(
+function normalizeModelSelection<T extends { provider: ProviderKind; model: string }>(
   selection: T,
 ): T {
   return {

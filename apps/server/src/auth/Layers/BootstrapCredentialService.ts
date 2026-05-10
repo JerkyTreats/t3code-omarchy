@@ -1,9 +1,9 @@
 import type { AuthPairingLink } from "@t3tools/contracts";
 import { DateTime, Duration, Effect, Layer, Option, PubSub, Ref, Stream } from "effect";
 
-import { ServerConfig } from "../../config";
-import { AuthPairingLinkRepositoryLive } from "../../persistence/Layers/AuthPairingLinks";
-import { AuthPairingLinkRepository } from "../../persistence/Services/AuthPairingLinks";
+import { ServerConfig } from "../../config.ts";
+import { AuthPairingLinkRepositoryLive } from "../../persistence/Layers/AuthPairingLinks.ts";
+import { AuthPairingLinkRepository } from "../../persistence/Services/AuthPairingLinks.ts";
 import {
   BootstrapCredentialError,
   BootstrapCredentialService,
@@ -11,7 +11,7 @@ import {
   type BootstrapCredentialServiceShape,
   type BootstrapGrant,
   type IssuedBootstrapCredential,
-} from "../Services/BootstrapCredentialService";
+} from "../Services/BootstrapCredentialService.ts";
 
 interface StoredBootstrapGrant extends BootstrapGrant {
   readonly remainingUses: number | "unbounded";

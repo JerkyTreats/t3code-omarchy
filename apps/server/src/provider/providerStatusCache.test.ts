@@ -8,7 +8,7 @@ import {
   readProviderStatusCache,
   resolveProviderStatusCachePath,
   writeProviderStatusCache,
-} from "./providerStatusCache";
+} from "./providerStatusCache.ts";
 
 const makeProvider = (
   provider: ServerProvider["provider"],
@@ -22,6 +22,8 @@ const makeProvider = (
   auth: { status: "authenticated" },
   checkedAt: "2026-04-11T00:00:00.000Z",
   models: [],
+  slashCommands: [],
+  skills: [],
   ...overrides,
 });
 
@@ -62,6 +64,8 @@ it.layer(NodeServices.layer)("providerStatusCache", (it) => {
         auth: codexProvider.auth,
         checkedAt: codexProvider.checkedAt,
         models: codexProvider.models,
+        slashCommands: codexProvider.slashCommands,
+        skills: codexProvider.skills,
       });
       assert.deepStrictEqual(yield* readProviderStatusCache(claudePath), {
         provider: claudeProvider.provider,
@@ -72,6 +76,8 @@ it.layer(NodeServices.layer)("providerStatusCache", (it) => {
         auth: claudeProvider.auth,
         checkedAt: claudeProvider.checkedAt,
         models: claudeProvider.models,
+        slashCommands: claudeProvider.slashCommands,
+        skills: claudeProvider.skills,
       });
     }),
   );

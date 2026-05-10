@@ -84,6 +84,8 @@ function createBaseServerConfig(): ServerConfig {
         auth: { status: "authenticated" },
         checkedAt: NOW_ISO,
         models: [],
+        slashCommands: [],
+        skills: [],
       },
     ],
     availableEditors: [],
@@ -100,7 +102,19 @@ function createBaseServerConfig(): ServerConfig {
       textGenerationModelSelection: { provider: "codex" as const, model: "gpt-5.4-mini" },
       providers: {
         codex: { enabled: true, binaryPath: "", homePath: "", customModels: [] },
-        claudeAgent: { enabled: true, binaryPath: "", customModels: [] },
+        claudeAgent: { enabled: true, binaryPath: "", customModels: [], launchArgs: "" },
+        cursor: {
+          ...DEFAULT_SERVER_SETTINGS.providers.cursor,
+          enabled: false,
+          binaryPath: "",
+          customModels: [],
+        },
+        opencode: {
+          ...DEFAULT_SERVER_SETTINGS.providers.opencode,
+          enabled: false,
+          binaryPath: "",
+          customModels: [],
+        },
       },
     },
   };

@@ -1,5 +1,5 @@
 import type { GitHubIssue } from "@t3tools/contracts";
-import { buildManagedWorktreeBranchName, resolveUniqueBranchName } from "@t3tools/shared/git";
+import { sanitizeBranchFragment } from "@t3tools/shared/git";
 
 import { truncateTitle } from "./truncateTitle";
 
@@ -20,10 +20,16 @@ export function buildIssueWorkspaceBranchName(
   issue: Pick<GitHubIssue, "number" | "title">,
   existingBranchNames: readonly string[],
 ): string {
-  return resolveUniqueBranchName(
-    existingBranchNames,
-    buildManagedWorktreeBranchName(issue.title, `issue-${issue.number}`),
-  );
+  const baseBranch = `t3code/issue-${issue.number}/${sanitizeBranchFragment(issue.title)}`;
+  const existing = new Set(existingBranchNames.map((branch) => branch.toLowerCase()));
+  if (!existing.has(baseBranch.toLowerCase())) {
+    return baseBranch;
+  }
+  let suffix = 2;
+  while (existing.has(`${baseBranch}-${suffix}`.toLowerCase())) {
+    suffix += 1;
+  }
+  return `${baseBranch}-${suffix}`;
 }
 
 export function buildIssueThreadTitle(issue: Pick<GitHubIssue, "number" | "title">): string {

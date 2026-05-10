@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { selectStorageConfig } from "./storageConfig";
+import { selectStorageConfig } from "./storageConfig.ts";
 
 describe("selectStorageConfig", () => {
   it("prefers explicit home directories over legacy state directories", () => {

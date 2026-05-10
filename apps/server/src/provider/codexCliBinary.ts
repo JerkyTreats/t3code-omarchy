@@ -6,7 +6,7 @@ import {
   formatCodexCliUpgradeMessage,
   isCodexCliVersionSupported,
   parseCodexCliVersion,
-} from "./codexCliVersion";
+} from "./codexCliVersion.ts";
 
 const CODEX_VERSION_CHECK_TIMEOUT_MS = 4_000;
 

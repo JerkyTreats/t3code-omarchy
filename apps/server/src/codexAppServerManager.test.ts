@@ -15,7 +15,7 @@ import {
   normalizeCodexModelSlug,
   readCodexAccountSnapshot,
   resolveCodexModelForAccount,
-} from "./codexAppServerManager";
+} from "./codexAppServerManager.ts";
 
 const asThreadId = (value: string): ThreadId => ThreadId.makeUnsafe(value);
 
@@ -263,6 +263,14 @@ describe("isRecoverableThreadResumeError", () => {
   it("matches not-found resume errors", () => {
     expect(
       isRecoverableThreadResumeError(new Error("thread/resume failed: thread not found")),
+    ).toBe(true);
+  });
+
+  it("matches no-rollout resume errors", () => {
+    expect(
+      isRecoverableThreadResumeError(
+        new Error("thread/resume failed: no rollout found for thread id abc"),
+      ),
     ).toBe(true);
   });
 
@@ -1103,7 +1111,10 @@ describe.skipIf(!process.env.CODEX_BINARY_PATH)("startSession live Codex resume"
         },
       });
 
-      expect(resumedSession.threadId).toBe(originalThreadId);
+      expect(resumedSession.threadId).toBe(firstSession.threadId);
+      expect(
+        (resumedSession.resumeCursor as { readonly threadId?: string } | undefined)?.threadId,
+      ).toBe(originalThreadId);
 
       const resumedSnapshotBeforeTurn = await manager.readThread(resumedSession.threadId);
       expect(resumedSnapshotBeforeTurn.threadId).toBe(originalThreadId);

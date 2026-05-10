@@ -140,7 +140,7 @@ const makeEventStore = Effect.gen(function* () {
           ${request.metadataJson}
         )
         RETURNING
-          sequence,
+          CAST(sequence AS INTEGER) AS sequence,
           event_id AS "eventId",
           event_type AS "type",
           aggregate_kind AS "aggregateKind",
@@ -160,7 +160,7 @@ const makeEventStore = Effect.gen(function* () {
     execute: (request) =>
       sql`
         SELECT
-          sequence,
+          CAST(sequence AS INTEGER) AS sequence,
           event_id AS "eventId",
           event_type AS "type",
           aggregate_kind AS "aggregateKind",

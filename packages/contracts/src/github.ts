@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 
-import { IsoDateTime, PositiveInt, TrimmedNonEmptyString } from "./baseSchemas";
+import { IsoDateTime, PositiveInt, TrimmedNonEmptyString } from "./baseSchemas.ts";
 
 const GitHubHostname = TrimmedNonEmptyString;
 const GitHubProtocol = Schema.Literals(["https", "ssh"]);

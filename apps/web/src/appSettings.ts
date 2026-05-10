@@ -105,6 +105,8 @@ export function getCustomModelsByProvider(
   return {
     codex: settings.customCodexModels,
     claudeAgent: settings.customClaudeModels,
+    cursor: [],
+    opencode: [],
   };
 }
 
@@ -128,6 +130,8 @@ export function getCustomModelOptionsByProvider(
   return {
     codex: buildOptions("codex", settings.customCodexModels),
     claudeAgent: buildOptions("claudeAgent", settings.customClaudeModels),
+    cursor: [],
+    opencode: [],
   };
 }
 

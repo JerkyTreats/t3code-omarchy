@@ -32,27 +32,27 @@ import {
   providerModelsFromSettings,
   spawnAndCollect,
   type CommandResult,
-} from "../providerSnapshot";
-import { makeManagedServerProvider } from "../makeManagedServerProvider";
+} from "../providerSnapshot.ts";
+import { makeManagedServerProvider } from "../makeManagedServerProvider.ts";
 import {
   compareCodexCliVersions,
   formatCodexCliUpgradeMessage,
   isCodexCliVersionSupported,
   parseCodexCliVersion,
-} from "../codexCliVersion";
+} from "../codexCliVersion.ts";
 import {
   adjustCodexModelsForAccount,
   codexAuthSubLabel,
   codexAuthSubType,
   type CodexAccountSnapshot,
-} from "../codexAccount";
-import { probeCodexAppServerSnapshot, type CodexAppServerSnapshot } from "../codexAppServer";
+} from "../codexAccount.ts";
+import { probeCodexAppServerSnapshot, type CodexAppServerSnapshot } from "../codexAppServer.ts";
 import {
   resolveSupportedCodexCliBinaries,
   resolveSupportedCodexCliBinaryPath,
-} from "../codexCliBinary";
-import { CodexProvider } from "../Services/CodexProvider";
-import { ServerSettingsService } from "../../serverSettings";
+} from "../codexCliBinary.ts";
+import { CodexProvider } from "../Services/CodexProvider.ts";
+import { ServerSettingsService } from "../../serverSettings.ts";
 import { ServerSettingsError } from "@t3tools/contracts";
 
 const DEFAULT_CODEX_MODEL_CAPABILITIES: ModelCapabilities = {

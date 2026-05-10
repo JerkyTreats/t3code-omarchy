@@ -1,6 +1,6 @@
 import type { DesktopRuntimeInfo, DesktopUpdateState } from "@t3tools/contracts";
 
-import { getCanRetryAfterDownloadFailure, nextStatusAfterDownloadFailure } from "./updateState";
+import { getCanRetryAfterDownloadFailure, nextStatusAfterDownloadFailure } from "./updateState.ts";
 
 export function createInitialDesktopUpdateState(
   currentVersion: string,

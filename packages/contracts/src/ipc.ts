@@ -26,7 +26,7 @@ import type {
   GitStatusInput,
   GitStatusResult,
   GitCreateBranchResult,
-} from "./git";
+} from "./git.ts";
 import type {
   GitHubCreateIssueInput,
   GitHubCreateIssueResult,
@@ -37,7 +37,7 @@ import type {
   GitHubLoginInput,
   GitHubStatusInput,
   GitHubStatusResult,
-} from "./github";
+} from "./github.ts";
 import type {
   ProjectListDirectoryInput,
   ProjectListDirectoryResult,
@@ -47,12 +47,12 @@ import type {
   ProjectSearchEntriesResult,
   ProjectWriteFileInput,
   ProjectWriteFileResult,
-} from "./project";
+} from "./project.ts";
 import type {
   ServerConfig,
   ServerProviderUpdatedPayload,
   ServerUpsertKeybindingResult,
-} from "./server";
+} from "./server.ts";
 import type {
   TerminalClearInput,
   TerminalCloseInput,
@@ -62,8 +62,8 @@ import type {
   TerminalRestartInput,
   TerminalSessionSnapshot,
   TerminalWriteInput,
-} from "./terminal";
-import type { ServerUpsertKeybindingInput } from "./server";
+} from "./terminal.ts";
+import type { ServerUpsertKeybindingInput } from "./server.ts";
 import type {
   ClientOrchestrationCommand,
   OrchestrationGetFullThreadDiffInput,
@@ -74,10 +74,11 @@ import type {
   OrchestrationGetTurnDiffResult,
   OrchestrationEvent,
   OrchestrationReadModel,
-} from "./orchestration";
-import type { EnvironmentId } from "./baseSchemas";
-import { EditorId } from "./editor";
-import { ClientSettings, ServerSettings, ServerSettingsPatch } from "./settings";
+} from "./orchestration.ts";
+import type { EnvironmentId } from "./baseSchemas.ts";
+import { EditorId } from "./editor.ts";
+import { ServerSettings } from "./settings.ts";
+import type { ClientSettings, ServerSettingsPatch } from "./settings.ts";
 
 export interface ContextMenuItem<T extends string = string> {
   id: T;

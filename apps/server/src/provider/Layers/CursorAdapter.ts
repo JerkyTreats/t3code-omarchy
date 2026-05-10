@@ -35,6 +35,7 @@ import {
   Stream,
   SynchronizedRef,
 } from "effect";
+import { normalizeCursorModelOptions } from "@t3tools/shared/model";
 import { ChildProcessSpawner } from "effect/unstable/process";
 import type * as EffectAcpSchema from "effect-acp/schema";
 
@@ -658,7 +659,12 @@ function makeCursorAdapter(options?: CursorAdapterLiveOptions) {
             runtime: acp,
             runtimeMode: input.runtimeMode,
             interactionMode: undefined,
-            modelSelection: cursorModelSelection,
+            modelSelection: cursorModelSelection
+              ? {
+                  model: cursorModelSelection.model,
+                  options: normalizeCursorModelOptions(cursorModelSelection.options),
+                }
+              : undefined,
             mapError: ({ cause, method }) =>
               mapAcpToAdapterError(PROVIDER, input.threadId, method, cause),
           });
@@ -827,7 +833,7 @@ function makeCursorAdapter(options?: CursorAdapterLiveOptions) {
               ? undefined
               : {
                   model,
-                  options: turnModelSelection?.options,
+                  options: normalizeCursorModelOptions(turnModelSelection?.options),
                 },
           mapError: ({ cause, method }) =>
             mapAcpToAdapterError(PROVIDER, input.threadId, method, cause),

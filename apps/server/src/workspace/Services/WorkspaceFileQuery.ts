@@ -1,4 +1,4 @@
-import { Schema, ServiceMap } from "effect";
+import { Schema, Context } from "effect";
 import type { Effect } from "effect";
 
 import type { ProjectReadFileInput, ProjectReadFileResult } from "@t3tools/contracts";
@@ -24,7 +24,7 @@ export interface WorkspaceFileQueryShape {
   >;
 }
 
-export class WorkspaceFileQuery extends ServiceMap.Service<
+export class WorkspaceFileQuery extends Context.Service<
   WorkspaceFileQuery,
   WorkspaceFileQueryShape
 >()("t3/workspace/Services/WorkspaceFileQuery") {}

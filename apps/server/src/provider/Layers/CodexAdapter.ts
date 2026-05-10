@@ -22,7 +22,11 @@ import {
   TurnId,
   ProviderSendTurnInput,
 } from "@t3tools/contracts";
-import { Effect, FileSystem, Layer, Queue, Schema, ServiceMap, Stream } from "effect";
+import { Effect, FileSystem, Layer, Queue, Schema, Context, Stream } from "effect";
+import {
+  getModelSelectionBooleanOptionValue,
+  getModelSelectionStringOptionValue,
+} from "@t3tools/shared/model";
 
 import {
   ProviderAdapterProcessError,
@@ -46,7 +50,7 @@ const PROVIDER = "codex" as const;
 
 export interface CodexAdapterLiveOptions {
   readonly manager?: CodexAppServerManager;
-  readonly makeManager?: (services?: ServiceMap.ServiceMap<never>) => CodexAppServerManager;
+  readonly makeManager?: (services?: Context.Context<never>) => CodexAppServerManager;
   readonly nativeEventLogPath?: string;
   readonly nativeEventLogger?: EventNdjsonLogger;
 }
@@ -1639,7 +1643,7 @@ const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     if (options?.manager) {
       return options.manager;
     }
-    const services = yield* Effect.services<never>();
+    const services = yield* Effect.context();
     return options?.makeManager?.(services) ?? new CodexAppServerManager(services);
   });
 
@@ -1691,7 +1695,8 @@ const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
         ...(input.modelSelection?.provider === "codex"
           ? { model: input.modelSelection.model }
           : {}),
-        ...(input.modelSelection?.provider === "codex" && input.modelSelection.options?.fastMode
+        ...(input.modelSelection?.provider === "codex" &&
+        getModelSelectionBooleanOptionValue(input.modelSelection, "fastMode") === true
           ? { serviceTier: "fast" }
           : {}),
       };
@@ -1750,17 +1755,19 @@ const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
 
     return yield* Effect.tryPromise({
       try: () => {
+        const effort =
+          input.modelSelection?.provider === "codex"
+            ? getModelSelectionStringOptionValue(input.modelSelection, "reasoningEffort")
+            : undefined;
         const managerInput = {
           threadId: input.threadId,
           ...(input.input !== undefined ? { input: input.input } : {}),
           ...(input.modelSelection?.provider === "codex"
             ? { model: input.modelSelection.model }
             : {}),
+          ...(effort !== undefined ? { effort } : {}),
           ...(input.modelSelection?.provider === "codex" &&
-          input.modelSelection.options?.reasoningEffort !== undefined
-            ? { effort: input.modelSelection.options.reasoningEffort }
-            : {}),
-          ...(input.modelSelection?.provider === "codex" && input.modelSelection.options?.fastMode
+          getModelSelectionBooleanOptionValue(input.modelSelection, "fastMode") === true
             ? { serviceTier: "fast" }
             : {}),
           ...(input.interactionMode !== undefined
@@ -1862,7 +1869,7 @@ const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
   });
 
   const registerListener = Effect.fn("registerListener")(function* () {
-    const services = yield* Effect.services<never>();
+    const services = yield* Effect.context();
     const listenerEffect = Effect.fn("listener")(function* (event: ProviderEvent) {
       yield* writeNativeEvent(event);
       const runtimeEvents = mapToRuntimeEvents(event, event.threadId, tokenUsageTracker);

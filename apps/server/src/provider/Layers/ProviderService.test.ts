@@ -30,7 +30,10 @@ import {
   type ProviderAdapterError,
 } from "../Errors.ts";
 import type { ProviderAdapterShape } from "../Services/ProviderAdapter.ts";
-import { ProviderAdapterRegistry } from "../Services/ProviderAdapterRegistry.ts";
+import {
+  ProviderAdapterRegistry,
+  type ProviderAdapterRegistryShape,
+} from "../Services/ProviderAdapterRegistry.ts";
 import { ProviderService } from "../Services/ProviderService.ts";
 import { ProviderSessionDirectory } from "../Services/ProviderSessionDirectory.ts";
 import { makeProviderServiceLive } from "./ProviderService.ts";
@@ -247,7 +250,7 @@ function makeProviderServiceLayer() {
   const codex = makeFakeCodexAdapter();
   const claude = makeFakeCodexAdapter("claudeAgent");
   const cursor = makeFakeCodexAdapter("cursor");
-  const registry: typeof ProviderAdapterRegistry.Service = {
+  const registry: ProviderAdapterRegistryShape = {
     getByProvider: (provider) =>
       provider === "codex"
         ? Effect.succeed(codex.adapter)
@@ -292,7 +295,7 @@ it.effect("ProviderServiceLive rejects new sessions for disabled providers", () 
   Effect.gen(function* () {
     const codex = makeFakeCodexAdapter();
     const claude = makeFakeCodexAdapter("claudeAgent");
-    const registry: typeof ProviderAdapterRegistry.Service = {
+    const registry: ProviderAdapterRegistryShape = {
       getByProvider: (provider) =>
         provider === "codex"
           ? Effect.succeed(codex.adapter)
@@ -344,7 +347,7 @@ it.effect("ProviderServiceLive keeps persisted resumable sessions on startup", (
     const dbPath = path.join(tempDir, "orchestration.sqlite");
 
     const codex = makeFakeCodexAdapter();
-    const registry: typeof ProviderAdapterRegistry.Service = {
+    const registry: ProviderAdapterRegistryShape = {
       getByProvider: (provider) =>
         provider === "codex"
           ? Effect.succeed(codex.adapter)
@@ -415,7 +418,7 @@ it.effect(
       );
 
       const firstCodex = makeFakeCodexAdapter();
-      const firstRegistry: typeof ProviderAdapterRegistry.Service = {
+      const firstRegistry: ProviderAdapterRegistryShape = {
         getByProvider: (provider) =>
           provider === "codex"
             ? Effect.succeed(firstCodex.adapter)
@@ -468,7 +471,7 @@ it.effect(
       }
 
       const secondCodex = makeFakeCodexAdapter();
-      const secondRegistry: typeof ProviderAdapterRegistry.Service = {
+      const secondRegistry: ProviderAdapterRegistryShape = {
         getByProvider: (provider) =>
           provider === "codex"
             ? Effect.succeed(secondCodex.adapter)
@@ -829,7 +832,7 @@ routing.layer("ProviderServiceLive routing", (it) => {
       );
 
       const firstClaude = makeFakeCodexAdapter("claudeAgent");
-      const firstRegistry: typeof ProviderAdapterRegistry.Service = {
+      const firstRegistry: ProviderAdapterRegistryShape = {
         getByProvider: (provider) =>
           provider === "claudeAgent"
             ? Effect.succeed(firstClaude.adapter)
@@ -862,7 +865,7 @@ routing.layer("ProviderServiceLive routing", (it) => {
       }).pipe(Effect.provide(firstProviderLayer));
 
       const secondClaude = makeFakeCodexAdapter("claudeAgent");
-      const secondRegistry: typeof ProviderAdapterRegistry.Service = {
+      const secondRegistry: ProviderAdapterRegistryShape = {
         getByProvider: (provider) =>
           provider === "claudeAgent"
             ? Effect.succeed(secondClaude.adapter)

@@ -28,12 +28,12 @@ import {
   hasCustomModelProvider,
   parseAuthStatusFromOutput,
   readCodexConfigModelProvider,
-} from "./CodexProvider";
-import { checkClaudeProviderStatus, parseClaudeAuthStatusFromOutput } from "./ClaudeProvider";
-import { haveProvidersChanged, ProviderRegistryLive } from "./ProviderRegistry";
-import { ServerConfig } from "../../config";
-import { ServerSettingsService, type ServerSettingsShape } from "../../serverSettings";
-import { ProviderRegistry } from "../Services/ProviderRegistry";
+} from "./CodexProvider.ts";
+import { checkClaudeProviderStatus, parseClaudeAuthStatusFromOutput } from "./ClaudeProvider.ts";
+import { haveProvidersChanged, ProviderRegistryLive } from "./ProviderRegistry.ts";
+import { ServerConfig } from "../../config.ts";
+import { ServerSettingsService, type ServerSettingsShape } from "../../serverSettings.ts";
+import { ProviderRegistry } from "../Services/ProviderRegistry.ts";
 
 process.env.T3CODE_CURSOR_ENABLED = "1";
 
@@ -53,7 +53,7 @@ function mockHandle(result: { stdout: string; stderr: string; code: number }) {
     all: Stream.empty,
     getInputFd: () => Sink.drain,
     getOutputFd: () => Stream.empty,
-  });
+  } as any);
 }
 
 function mockSpawnerLayer(
@@ -551,6 +551,8 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
             checkedAt: "2026-03-25T00:00:00.000Z",
             version: "1.0.0",
             models: [],
+            slashCommands: [],
+            skills: [],
           },
           {
             provider: "claudeAgent",
@@ -561,6 +563,8 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
             checkedAt: "2026-03-25T00:00:00.000Z",
             version: "1.0.0",
             models: [],
+            slashCommands: [],
+            skills: [],
           },
         ] as const satisfies ReadonlyArray<ServerProvider>;
 

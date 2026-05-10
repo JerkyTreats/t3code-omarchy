@@ -18,7 +18,7 @@ import {
   shell,
 } from "electron";
 import type { MenuItemConstructorOptions } from "electron";
-import {
+import type {
   ClientSettings,
   DesktopEnvironmentBootstrap,
   DesktopScreenshotCapture,
@@ -35,8 +35,8 @@ import { autoUpdater } from "electron-updater";
 import type { ContextMenuItem } from "@t3tools/contracts";
 import { RotatingFileSink } from "@t3tools/shared/logging";
 import { parsePersistedServerObservabilitySettings } from "@t3tools/shared/serverSettings";
-import { DEFAULT_DESKTOP_BACKEND_PORT, resolveDesktopBackendPort } from "./backendPort";
-import { isBackendReadinessAborted, waitForHttpReady } from "./backendReadiness";
+import { DEFAULT_DESKTOP_BACKEND_PORT, resolveDesktopBackendPort } from "./backendPort.ts";
+import { isBackendReadinessAborted, waitForHttpReady } from "./backendReadiness.ts";
 import {
   readClientSettings,
   readSavedEnvironmentRegistry,
@@ -45,11 +45,11 @@ import {
   writeClientSettings,
   writeSavedEnvironmentRegistry,
   writeSavedEnvironmentSecret,
-} from "./clientPersistence";
-import { showDesktopConfirmDialog } from "./confirmDialog";
-import { ServerListeningDetector } from "./serverListeningDetector";
-import { syncShellEnvironment } from "./syncShellEnvironment";
-import { getAutoUpdateDisabledReason, shouldBroadcastDownloadProgress } from "./updateState";
+} from "./clientPersistence.ts";
+import { showDesktopConfirmDialog } from "./confirmDialog.ts";
+import { ServerListeningDetector } from "./serverListeningDetector.ts";
+import { syncShellEnvironment } from "./syncShellEnvironment.ts";
+import { getAutoUpdateDisabledReason, shouldBroadcastDownloadProgress } from "./updateState.ts";
 import {
   createInitialDesktopUpdateState,
   reduceDesktopUpdateStateOnCheckFailure,
@@ -61,11 +61,11 @@ import {
   reduceDesktopUpdateStateOnInstallFailure,
   reduceDesktopUpdateStateOnNoUpdate,
   reduceDesktopUpdateStateOnUpdateAvailable,
-} from "./updateMachine";
-import { isArm64HostRunningIntelBuild, resolveDesktopRuntimeInfo } from "./runtimeArch";
-import { captureDesktopScreenshot } from "./screenshotCapture";
-import { readDesktopSystemTheme, watchDesktopSystemTheme } from "./omarchyTheme";
-import { isIgnorableChildProcessStreamError } from "./childProcessErrors";
+} from "./updateMachine.ts";
+import { isArm64HostRunningIntelBuild, resolveDesktopRuntimeInfo } from "./runtimeArch.ts";
+import { captureDesktopScreenshot } from "./screenshotCapture.ts";
+import { readDesktopSystemTheme, watchDesktopSystemTheme } from "./omarchyTheme.ts";
+import { isIgnorableChildProcessStreamError } from "./childProcessErrors.ts";
 
 syncShellEnvironment();
 
@@ -1865,7 +1865,7 @@ function createWindow(): BrowserWindow {
     titleBarStyle: "hiddenInset",
     trafficLightPosition: { x: 16, y: 18 },
     webPreferences: {
-      preload: Path.join(__dirname, "preload.js"),
+      preload: Path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,

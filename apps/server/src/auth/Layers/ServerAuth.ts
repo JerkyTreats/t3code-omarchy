@@ -9,19 +9,19 @@ import {
 import { DateTime, Effect, Layer, Option } from "effect";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 
-import { AuthControlPlane } from "../Services/AuthControlPlane";
-import { BootstrapCredentialService } from "../Services/BootstrapCredentialService";
-import { type BootstrapCredentialError } from "../Services/BootstrapCredentialService";
+import { AuthControlPlane } from "../Services/AuthControlPlane.ts";
+import { BootstrapCredentialService } from "../Services/BootstrapCredentialService.ts";
+import { type BootstrapCredentialError } from "../Services/BootstrapCredentialService.ts";
 import {
   AuthError,
   type AuthenticatedSession,
   ServerAuth,
   type ServerAuthShape,
-} from "../Services/ServerAuth";
-import { ServerAuthPolicy } from "../Services/ServerAuthPolicy";
-import { SessionCredentialService } from "../Services/SessionCredentialService";
-import { AuthControlPlaneLive, AuthCoreLive } from "./AuthControlPlane";
-import { ServerAuthPolicyLive } from "./ServerAuthPolicy";
+} from "../Services/ServerAuth.ts";
+import { ServerAuthPolicy } from "../Services/ServerAuthPolicy.ts";
+import { SessionCredentialService } from "../Services/SessionCredentialService.ts";
+import { AuthControlPlaneLive, AuthCoreLive } from "./AuthControlPlane.ts";
+import { ServerAuthPolicyLive } from "./ServerAuthPolicy.ts";
 
 type BootstrapExchangeResult = {
   readonly response: AuthBootstrapResult;

@@ -1,6 +1,9 @@
-import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+#!/usr/bin/env node
+
+import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { Config, Effect, FileSystem, Option, Path } from "effect";
+import { Argument, Command, Flag } from "effect/unstable/cli";
 
 export const releasePackageFiles = [
   "apps/server/package.json",
@@ -10,103 +13,80 @@ export const releasePackageFiles = [
 ] as const;
 
 interface UpdateReleasePackageVersionsOptions {
-  readonly rootDir?: string;
+  readonly rootDir?: string | undefined;
 }
 
-interface MutablePackageJson {
-  version?: string;
-  [key: string]: unknown;
-}
+type PackageJsonRecord = Record<string, unknown> & {
+  readonly version?: unknown;
+};
 
-export function updateReleasePackageVersions(
+const parsePackageJson = (raw: string): PackageJsonRecord => JSON.parse(raw) as PackageJsonRecord;
+const encodePackageJson = (value: PackageJsonRecord): string => JSON.stringify(value, null, 2);
+
+export const updateReleasePackageVersions = Effect.fn("updateReleasePackageVersions")(function* (
   version: string,
   options: UpdateReleasePackageVersionsOptions = {},
-): { changed: boolean } {
-  const rootDir = resolve(options.rootDir ?? process.cwd());
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const rootDir = path.resolve(options.rootDir ?? process.cwd());
   let changed = false;
 
   for (const relativePath of releasePackageFiles) {
-    const filePath = resolve(rootDir, relativePath);
-    const packageJson = JSON.parse(readFileSync(filePath, "utf8")) as MutablePackageJson;
+    const filePath = path.join(rootDir, relativePath);
+    const packageJson = parsePackageJson(yield* fs.readFileString(filePath));
     if (packageJson.version === version) {
       continue;
     }
 
-    packageJson.version = version;
-    writeFileSync(filePath, `${JSON.stringify(packageJson, null, 2)}\n`);
+    yield* fs.writeFileString(filePath, `${encodePackageJson({ ...packageJson, version })}\n`);
     changed = true;
   }
 
-  return { changed };
-}
+  return { changed } as const;
+});
 
-function parseArgs(argv: ReadonlyArray<string>): {
-  version: string;
-  rootDir: string | undefined;
-  writeGithubOutput: boolean;
-} {
-  let version: string | undefined;
-  let rootDir: string | undefined;
-  let writeGithubOutput = false;
-
-  for (let index = 0; index < argv.length; index += 1) {
-    const argument = argv[index];
-    if (argument === undefined) {
-      continue;
-    }
-
-    if (argument === "--github-output") {
-      writeGithubOutput = true;
-      continue;
-    }
-
-    if (argument === "--root") {
-      rootDir = argv[index + 1];
-      if (!rootDir) {
-        throw new Error("Missing value for --root.");
-      }
-      index += 1;
-      continue;
-    }
-
-    if (argument.startsWith("--")) {
-      throw new Error(`Unknown argument: ${argument}`);
-    }
-
-    if (version !== undefined) {
-      throw new Error("Only one release version can be provided.");
-    }
-    version = argument;
+const writeChangedOutput = Effect.fn("writeChangedOutput")(function* (
+  changed: boolean,
+  writeGithubOutput: boolean,
+) {
+  if (writeGithubOutput) {
+    const fs = yield* FileSystem.FileSystem;
+    const githubOutputPath = yield* Config.nonEmptyString("GITHUB_OUTPUT");
+    yield* fs.writeFileString(githubOutputPath, `changed=${changed}\n`, { flag: "a" });
+    return;
   }
-
-  if (!version) {
-    throw new Error(
-      "Usage: node scripts/update-release-package-versions.ts <version> [--root <path>] [--github-output]",
-    );
-  }
-
-  return { version, rootDir, writeGithubOutput };
-}
-
-const isMain =
-  process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
-
-if (isMain) {
-  const { version, rootDir, writeGithubOutput } = parseArgs(process.argv.slice(2));
-  const { changed } = updateReleasePackageVersions(
-    version,
-    rootDir === undefined ? {} : { rootDir },
-  );
 
   if (!changed) {
-    console.log("All package.json versions already match release version.");
+    yield* Effect.log("All package.json versions already match release version.");
   }
+});
 
-  if (writeGithubOutput) {
-    const githubOutputPath = process.env.GITHUB_OUTPUT;
-    if (!githubOutputPath) {
-      throw new Error("GITHUB_OUTPUT is required when --github-output is set.");
-    }
-    appendFileSync(githubOutputPath, `changed=${changed}\n`);
-  }
+export const updateReleasePackageVersionsCommand = Command.make(
+  "update-release-package-versions",
+  {
+    version: Argument.string("version").pipe(
+      Argument.withDescription("Release version to apply to tracked package.json files."),
+    ),
+    rootDir: Flag.string("root").pipe(
+      Flag.withDescription("Repository root to update. Defaults to the current working directory."),
+      Flag.optional,
+    ),
+    githubOutput: Flag.boolean("github-output").pipe(
+      Flag.withDescription("Append changed output to GITHUB_OUTPUT instead of logging."),
+      Flag.withDefault(false),
+    ),
+  },
+  ({ version, rootDir, githubOutput }) =>
+    updateReleasePackageVersions(version, {
+      rootDir: Option.getOrUndefined(rootDir),
+    }).pipe(Effect.flatMap(({ changed }) => writeChangedOutput(changed, githubOutput))),
+).pipe(Command.withDescription("Update tracked release package.json versions for a release cut."));
+
+if (import.meta.main) {
+  Command.run(updateReleasePackageVersionsCommand, { version: "0.0.0" }).pipe(
+    Effect.scoped,
+    Effect.provide(NodeServices.layer),
+    NodeRuntime.runMain,
+  );
 }
