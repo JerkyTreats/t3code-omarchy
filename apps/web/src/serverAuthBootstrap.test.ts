@@ -4,6 +4,7 @@ import {
   __readServerAuthGateStateForTests,
   __resetServerAuthGateBootstrapForTests,
   startServerAuthGateBootstrap,
+  submitServerAuthCredential,
 } from "./serverAuthBootstrap";
 
 const originalFetch = globalThis.fetch;
@@ -42,5 +43,25 @@ describe("server auth bootstrap", () => {
       errorMessage: "Failed to load server auth session state 500.",
     });
     expect(__readServerAuthGateStateForTests()).toEqual(state);
+  });
+
+  it("shows a friendly message for an invalid pairing token", async () => {
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/auth/bootstrap")) {
+        return new Response(JSON.stringify({ error: "Invalid bootstrap credential." }), {
+          status: 401,
+          headers: {
+            "content-type": "application/json",
+          },
+        });
+      }
+
+      throw new Error(`Unexpected fetch ${url}`);
+    });
+
+    await expect(submitServerAuthCredential("bad-token")).rejects.toThrow(
+      "Invalid pairing token. Check the token and try again.",
+    );
   });
 });

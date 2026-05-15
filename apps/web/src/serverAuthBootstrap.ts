@@ -305,6 +305,11 @@ export class BootstrapHttpError extends Data.TaggedError("BootstrapHttpError")<{
 const isBootstrapHttpError = (u: unknown): u is BootstrapHttpError =>
   Predicate.isTagged(u, "BootstrapHttpError");
 
+const INVALID_BOOTSTRAP_CREDENTIAL_MESSAGES = new Set([
+  "Invalid bootstrap credential.",
+  "Unknown bootstrap credential.",
+]);
+
 function isTransientBootstrapError(error: unknown): boolean {
   if (isBootstrapHttpError(error)) {
     return TRANSIENT_BOOTSTRAP_STATUS_CODES.has(error.status);
@@ -460,7 +465,7 @@ async function exchangeBootstrapCredential(credential: string): Promise<AuthBoot
     });
 
     if (!response.ok) {
-      const message = await response.text();
+      const message = toFriendlyBootstrapErrorMessage(response.status, await response.text());
       throw new BootstrapHttpError({
         message: message || `Failed to bootstrap auth session ${response.status}.`,
         status: response.status,
@@ -469,6 +474,35 @@ async function exchangeBootstrapCredential(credential: string): Promise<AuthBoot
 
     return (await response.json()) as AuthBootstrapResult;
   });
+}
+
+function parseBootstrapErrorMessage(message: string): string {
+  const trimmed = message.trim();
+  if (trimmed.length === 0) {
+    return "";
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed) as {
+      readonly error?: unknown;
+    };
+    if (typeof parsed.error === "string" && parsed.error.trim().length > 0) {
+      return parsed.error.trim();
+    }
+  } catch {
+    // Plain text response.
+  }
+
+  return trimmed;
+}
+
+function toFriendlyBootstrapErrorMessage(status: number, message: string): string {
+  const parsedMessage = parseBootstrapErrorMessage(message);
+  if (status === 401 && INVALID_BOOTSTRAP_CREDENTIAL_MESSAGES.has(parsedMessage)) {
+    return "Invalid pairing token. Check the token and try again.";
+  }
+
+  return parsedMessage;
 }
 
 async function waitForAuthenticatedSessionAfterBootstrap(): Promise<AuthSessionState> {
