@@ -1,3 +1,5 @@
+export { addSavedEnvironment, connectDesktopSshEnvironment } from "./actions";
+
 export {
   getEnvironmentHttpBaseUrl,
   getSavedEnvironmentRecord,
