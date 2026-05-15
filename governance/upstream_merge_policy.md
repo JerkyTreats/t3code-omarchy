@@ -99,6 +99,21 @@ Classify each meaningful upstream change into one of these outcomes:
 - Prefer small integration commits or pull requests that clearly describe what was adopted, adapted, and rejected.
 - When a divergence becomes long lived, isolate the fork seam so future upstream sync work stays cheaper and safer.
 
+## Structured Upstream Take Workflow
+
+Use this workflow for any non-trivial upstream release take or commit range.
+
+- Create or update one controlling intake note under `.plans/` before implementation starts.
+- Inventory the upstream commits in the target range before broad code changes begin.
+- Group the upstream commits into ordered slices with a declared `adopt`, `adapt`, or `reject` outcome for each slice.
+- Record the fork seam or owner module for each slice before landing code.
+- Prefer one local commit per slice by default.
+- Cite the upstream commit refs covered by the slice in the local commit body.
+- If a take has already drifted into local adaptation without clear upstream mapping, create one explicit checkpoint commit first, then resume the remaining work as commit-mapped slices.
+- Do not continue a large upstream take as freeform implementation after the checkpoint unless the user explicitly requests that deviation.
+- When a slice mixes low-overlap substrate import with higher-risk fork seam adaptation, split the substrate checkpoint from the seam adaptation when practical.
+- Keep commit order aligned to the execution order in the active intake note so later review can compare branch history to the plan directly.
+
 ## Required Fork Preservation Gate
 
 Before an upstream sync, merge, or divergence update is ready for review or merge, complete this gate:
@@ -138,7 +153,9 @@ If this gate is not completed, the upstream merge is not ready.
 - Review upstream releases regularly.
 - Use the external watch workflow to surface new upstream releases.
 - Review `patch.md` before each upstream sync and keep it current as fork behavior evolves.
+- For each non-trivial upstream take, prepare the upstream commit inventory and slice map in the active intake note before broad implementation starts.
 - For each upstream sync, record the adopted, adapted, and rejected changes in the pull request or commit body.
+- For each upstream sync, record which upstream commits or commit groups each local checkpoint or slice commit covers.
 - For each upstream sync, explicitly record which protected fork features were checked and whether any were intentionally changed.
 - For each change that modifies a fork owned feature, update `patch.md` in the same change.
 - Call out compatibility impact for desktop IPC, WebSocket contracts, persisted browser state, server side state, and user visible workflow.
