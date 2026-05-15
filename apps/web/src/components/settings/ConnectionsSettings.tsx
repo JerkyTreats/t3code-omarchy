@@ -10,9 +10,15 @@ import type {
 import { useCallback, useMemo, useState } from "react";
 
 import { ensureLocalApi } from "../../localApi";
-import { connectDesktopSshEnvironment, removeSavedEnvironment } from "../../environments/runtime";
+import {
+  addSavedEnvironment,
+  connectDesktopSshEnvironment,
+  removeSavedEnvironment,
+} from "../../environments/runtime";
 import { Button } from "../ui/button";
+import { Input } from "../ui/input";
 import { Switch } from "../ui/switch";
+import { Textarea } from "../ui/textarea";
 import { cn } from "../../lib/utils";
 import { SettingsPageContainer, SettingsRow, SettingsSection } from "./settingsLayout";
 
@@ -88,6 +94,10 @@ export function ConnectionsSettings() {
   const [isUpdatingExposure, setIsUpdatingExposure] = useState(false);
   const [isUpdatingTailscale, setIsUpdatingTailscale] = useState(false);
   const [connectingSshHostKey, setConnectingSshHostKey] = useState<string | null>(null);
+  const [isAddingRemote, setIsAddingRemote] = useState(false);
+  const [pairingLabel, setPairingLabel] = useState("");
+  const [pairingUrl, setPairingUrl] = useState("");
+  const [pairingErrorMessage, setPairingErrorMessage] = useState<string | null>(null);
   const [sshErrorMessage, setSshErrorMessage] = useState<string | null>(null);
   const [reconnectingEnvironmentId, setReconnectingEnvironmentId] = useState<string | null>(null);
   const [removingEnvironmentId, setRemovingEnvironmentId] = useState<string | null>(null);
@@ -133,6 +143,30 @@ export function ConnectionsSettings() {
     },
     [snapshotQuery],
   );
+
+  const connectPairingUrl = useCallback(async () => {
+    const trimmedPairingUrl = pairingUrl.trim();
+    if (!trimmedPairingUrl) {
+      setPairingErrorMessage("Paste a pairing link to add a remote environment.");
+      return;
+    }
+
+    setPairingErrorMessage(null);
+    setIsAddingRemote(true);
+    try {
+      await addSavedEnvironment({
+        label: pairingLabel.trim(),
+        pairingUrl: trimmedPairingUrl,
+      });
+      setPairingLabel("");
+      setPairingUrl("");
+      await snapshotQuery.refetch();
+    } catch (error) {
+      setPairingErrorMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsAddingRemote(false);
+    }
+  }, [pairingLabel, pairingUrl, snapshotQuery]);
 
   const forgetSavedEnvironment = useCallback(
     async (environmentId: string) => {
@@ -407,6 +441,47 @@ export function ConnectionsSettings() {
             />
           }
         />
+      </SettingsSection>
+
+      <SettingsSection title="Pair Remote Environment" icon={<LinkIcon className="size-3.5" />}>
+        <SettingsRow
+          title="Add by pairing link"
+          description="Paste a desktop or hosted pairing link to save a remote environment."
+          status={pairingErrorMessage ?? undefined}
+          control={
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isAddingRemote || pairingUrl.trim().length === 0}
+              onClick={() => void connectPairingUrl()}
+            >
+              {isAddingRemote ? "Adding..." : "Add environment"}
+            </Button>
+          }
+        >
+          <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,12rem)_minmax(0,1fr)]">
+            <div className="space-y-1">
+              <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+                Label
+              </p>
+              <Input
+                value={pairingLabel}
+                onChange={(event) => setPairingLabel(event.target.value)}
+                placeholder="Optional display name"
+              />
+            </div>
+            <div className="space-y-1">
+              <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+                Pairing link
+              </p>
+              <Textarea
+                value={pairingUrl}
+                onChange={(event) => setPairingUrl(event.target.value)}
+                placeholder="https://.../pair#token=..."
+              />
+            </div>
+          </div>
+        </SettingsRow>
       </SettingsSection>
 
       <SettingsSection title="Advertised Endpoints" icon={<GlobeIcon className="size-3.5" />}>
