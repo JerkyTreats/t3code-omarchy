@@ -6,12 +6,17 @@ import type {
 } from "@t3tools/contracts";
 
 import { ensureLocalApi } from "../../localApi";
-import { bootstrapRemoteBearerSession, fetchRemoteEnvironmentDescriptor } from "../remote/api";
+import {
+  bootstrapRemoteBearerSession,
+  fetchRemoteEnvironmentDescriptor,
+  fetchRemoteSessionState,
+} from "../remote/api";
 import { resolveRemotePairingTarget } from "../remote/target";
 import {
   getSavedEnvironmentRecord,
   listSavedEnvironmentRecords,
   persistSavedEnvironmentRecord,
+  readSavedEnvironmentBearerToken,
   removeSavedEnvironmentBearerToken,
   toPersistedSavedEnvironmentRecord,
   type SavedEnvironmentRecord,
@@ -236,4 +241,48 @@ export async function connectDesktopSshEnvironment(
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`${message} ${detail ? `(${detail})` : ""}`.trim());
   });
+}
+
+export async function reconnectSavedEnvironment(
+  environmentId: EnvironmentId,
+): Promise<SavedEnvironmentRecord> {
+  const record = getSavedEnvironmentRecord(environmentId);
+  if (!record) {
+    throw new Error("Saved environment was not found.");
+  }
+
+  if (record.desktopSsh) {
+    return connectDesktopSshEnvironment(record.desktopSsh, {
+      label: record.label,
+    });
+  }
+
+  const bearerToken = await readSavedEnvironmentBearerToken(environmentId);
+  if (!bearerToken) {
+    throw new Error("Saved environment credentials are missing. Add a new pairing link.");
+  }
+
+  const session = await fetchRemoteSessionState({
+    httpBaseUrl: record.httpBaseUrl,
+    bearerToken,
+  });
+  if (!session.authenticated) {
+    throw new Error("Saved environment credentials expired. Add a new pairing link.");
+  }
+
+  const descriptor = await fetchRemoteEnvironmentDescriptor({
+    httpBaseUrl: record.httpBaseUrl,
+  });
+  if (descriptor.environmentId !== record.environmentId) {
+    throw new Error(
+      "Saved environment points to a different remote server. Add a new pairing link.",
+    );
+  }
+
+  const refreshedRecord: SavedEnvironmentRecord = {
+    ...record,
+    lastConnectedAt: isoNow(),
+  };
+  useSavedEnvironmentRegistryStore.getState().upsert(refreshedRecord);
+  return refreshedRecord;
 }

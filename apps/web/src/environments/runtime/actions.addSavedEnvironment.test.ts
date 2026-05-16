@@ -6,8 +6,10 @@ let mockSavedRecords: Array<Record<string, unknown>> = [];
 const mockResolveRemotePairingTarget = vi.fn();
 const mockFetchRemoteEnvironmentDescriptor = vi.fn();
 const mockBootstrapRemoteBearerSession = vi.fn();
+const mockFetchRemoteSessionState = vi.fn();
 const mockPersistSavedEnvironmentRecord = vi.fn();
 const mockWriteSavedEnvironmentBearerToken = vi.fn();
+const mockReadSavedEnvironmentBearerToken = vi.fn();
 const mockSetSavedEnvironmentRegistry = vi.fn();
 const mockGetSavedEnvironmentRecord = vi.fn((environmentId: string) => {
   return mockSavedRecords.find((record) => record.environmentId === environmentId) ?? null;
@@ -39,6 +41,7 @@ vi.mock("../remote/target", () => ({
 vi.mock("../remote/api", () => ({
   bootstrapRemoteBearerSession: mockBootstrapRemoteBearerSession,
   fetchRemoteEnvironmentDescriptor: mockFetchRemoteEnvironmentDescriptor,
+  fetchRemoteSessionState: mockFetchRemoteSessionState,
 }));
 
 vi.mock("~/localApi", () => ({
@@ -53,6 +56,7 @@ vi.mock("./catalog", () => ({
   getSavedEnvironmentRecord: mockGetSavedEnvironmentRecord,
   listSavedEnvironmentRecords: mockListSavedEnvironmentRecords,
   persistSavedEnvironmentRecord: mockPersistSavedEnvironmentRecord,
+  readSavedEnvironmentBearerToken: mockReadSavedEnvironmentBearerToken,
   removeSavedEnvironmentBearerToken: mockRemoveSavedEnvironmentBearerToken,
   toPersistedSavedEnvironmentRecord: mockToPersistedSavedEnvironmentRecord,
   useSavedEnvironmentRegistryStore: {
@@ -104,8 +108,16 @@ describe("saved environment actions", () => {
     });
     mockPersistSavedEnvironmentRecord.mockResolvedValue(undefined);
     mockWriteSavedEnvironmentBearerToken.mockResolvedValue(false);
+    mockReadSavedEnvironmentBearerToken.mockResolvedValue("saved-bearer-token");
     mockSetSavedEnvironmentRegistry.mockResolvedValue(undefined);
     mockRemoveSavedEnvironmentBearerToken.mockResolvedValue(undefined);
+    mockFetchRemoteSessionState.mockResolvedValue({
+      authenticated: true,
+      auth: {
+        kind: "bearer",
+      },
+      role: "owner",
+    });
     mockDisconnectSshEnvironment.mockResolvedValue(undefined);
     mockFetchSshEnvironmentDescriptor.mockResolvedValue({
       environmentId: EnvironmentId.make("environment-ssh"),
@@ -229,5 +241,90 @@ describe("saved environment actions", () => {
     expect(mockRemoveSavedEnvironmentBearerToken).toHaveBeenCalledWith(
       EnvironmentId.make("environment-ssh"),
     );
+  });
+
+  it("reconnects a saved non-SSH environment with persisted credentials", async () => {
+    mockSavedRecords = [
+      {
+        environmentId: EnvironmentId.make("environment-1"),
+        label: "Remote environment",
+        httpBaseUrl: "https://remote.example.com/",
+        wsBaseUrl: "wss://remote.example.com/",
+        createdAt: "2026-05-15T00:00:00.000Z",
+        lastConnectedAt: "2026-05-15T00:01:00.000Z",
+      },
+    ];
+
+    const { reconnectSavedEnvironment } = await import("./actions");
+
+    const record = await reconnectSavedEnvironment(EnvironmentId.make("environment-1"));
+
+    expect(mockReadSavedEnvironmentBearerToken).toHaveBeenCalledWith(
+      EnvironmentId.make("environment-1"),
+    );
+    expect(mockFetchRemoteSessionState).toHaveBeenCalledWith({
+      httpBaseUrl: "https://remote.example.com/",
+      bearerToken: "saved-bearer-token",
+    });
+    expect(mockFetchRemoteEnvironmentDescriptor).toHaveBeenCalledWith({
+      httpBaseUrl: "https://remote.example.com/",
+    });
+    expect(record.lastConnectedAt).not.toBe("2026-05-15T00:01:00.000Z");
+    expect(mockUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        environmentId: EnvironmentId.make("environment-1"),
+        label: "Remote environment",
+      }),
+    );
+  });
+
+  it("fails clearly when a saved non-SSH environment is missing credentials", async () => {
+    mockSavedRecords = [
+      {
+        environmentId: EnvironmentId.make("environment-1"),
+        label: "Remote environment",
+        httpBaseUrl: "https://remote.example.com/",
+        wsBaseUrl: "wss://remote.example.com/",
+        createdAt: "2026-05-15T00:00:00.000Z",
+        lastConnectedAt: null,
+      },
+    ];
+    mockReadSavedEnvironmentBearerToken.mockResolvedValue(null);
+
+    const { reconnectSavedEnvironment } = await import("./actions");
+
+    await expect(reconnectSavedEnvironment(EnvironmentId.make("environment-1"))).rejects.toThrow(
+      "Saved environment credentials are missing. Add a new pairing link.",
+    );
+
+    expect(mockFetchRemoteSessionState).not.toHaveBeenCalled();
+  });
+
+  it("fails clearly when a saved non-SSH environment session is unauthenticated", async () => {
+    mockSavedRecords = [
+      {
+        environmentId: EnvironmentId.make("environment-1"),
+        label: "Remote environment",
+        httpBaseUrl: "https://remote.example.com/",
+        wsBaseUrl: "wss://remote.example.com/",
+        createdAt: "2026-05-15T00:00:00.000Z",
+        lastConnectedAt: null,
+      },
+    ];
+    mockFetchRemoteSessionState.mockResolvedValue({
+      authenticated: false,
+      auth: {
+        kind: "bearer",
+      },
+      role: "owner",
+    });
+
+    const { reconnectSavedEnvironment } = await import("./actions");
+
+    await expect(reconnectSavedEnvironment(EnvironmentId.make("environment-1"))).rejects.toThrow(
+      "Saved environment credentials expired. Add a new pairing link.",
+    );
+
+    expect(mockFetchRemoteEnvironmentDescriptor).not.toHaveBeenCalled();
   });
 });

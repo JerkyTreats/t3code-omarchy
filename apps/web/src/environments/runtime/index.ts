@@ -1,6 +1,7 @@
 export {
   addSavedEnvironment,
   connectDesktopSshEnvironment,
+  reconnectSavedEnvironment,
   removeSavedEnvironment,
 } from "./actions";
 

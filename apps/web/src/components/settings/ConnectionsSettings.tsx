@@ -13,6 +13,7 @@ import { ensureLocalApi } from "../../localApi";
 import {
   addSavedEnvironment,
   connectDesktopSshEnvironment,
+  reconnectSavedEnvironment as reconnectSavedEnvironmentRecord,
   removeSavedEnvironment,
 } from "../../environments/runtime";
 import { Button } from "../ui/button";
@@ -188,16 +189,10 @@ export function ConnectionsSettings() {
 
   const reconnectSavedEnvironment = useCallback(
     async (record: PersistedSavedEnvironmentRecord) => {
-      if (!record.desktopSsh) {
-        return;
-      }
-
       setSavedEnvironmentErrorMessage(null);
       setReconnectingEnvironmentId(record.environmentId);
       try {
-        await connectDesktopSshEnvironment(record.desktopSsh, {
-          label: record.label,
-        });
+        await reconnectSavedEnvironmentRecord(record.environmentId);
         await snapshotQuery.refetch();
       } catch (error) {
         setSavedEnvironmentErrorMessage(error instanceof Error ? error.message : String(error));
@@ -266,18 +261,16 @@ export function ConnectionsSettings() {
           }
           control={
             <div className="flex items-center gap-2">
-              {record.desktopSsh ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={reconnectingEnvironmentId !== null || removingEnvironmentId !== null}
-                  onClick={() => void reconnectSavedEnvironment(record)}
-                >
-                  {reconnectingEnvironmentId === record.environmentId
-                    ? "Reconnecting..."
-                    : "Reconnect"}
-                </Button>
-              ) : null}
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={reconnectingEnvironmentId !== null || removingEnvironmentId !== null}
+                onClick={() => void reconnectSavedEnvironment(record)}
+              >
+                {reconnectingEnvironmentId === record.environmentId
+                  ? "Reconnecting..."
+                  : "Reconnect"}
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
