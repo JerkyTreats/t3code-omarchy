@@ -641,6 +641,26 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
     };
   };
 
+  const getGitHubRepositoryCloneUrls = Effect.fn("getGitHubRepositoryCloneUrls")(function* (
+    cwd: string,
+    repository: string,
+  ) {
+    const provider = yield* sourceControlProviderRegistry.get("github");
+    const cloneUrlsExit = yield* Effect.exit(
+      provider.getRepositoryCloneUrls({
+        cwd,
+        repository,
+      }),
+    );
+    if (Exit.isSuccess(cloneUrlsExit)) {
+      return cloneUrlsExit.value;
+    }
+    return yield* gitHubCli.getRepositoryCloneUrls({
+      cwd,
+      repository,
+    });
+  });
+
   const configurePullRequestHeadUpstreamBase = Effect.fn("configurePullRequestHeadUpstream")(
     function* (
       cwd: string,
@@ -652,10 +672,7 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
         return;
       }
 
-      const cloneUrls = yield* gitHubCli.getRepositoryCloneUrls({
-        cwd,
-        repository: repositoryNameWithOwner,
-      });
+      const cloneUrls = yield* getGitHubRepositoryCloneUrls(cwd, repositoryNameWithOwner);
       const originRemoteUrl = yield* gitCore.readConfigValue(cwd, "remote.origin.url");
       const remoteUrl = shouldPreferSshRemote(originRemoteUrl) ? cloneUrls.sshUrl : cloneUrls.url;
       const preferredRemoteName =
@@ -707,10 +724,7 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
         return;
       }
 
-      const cloneUrls = yield* gitHubCli.getRepositoryCloneUrls({
-        cwd,
-        repository: repositoryNameWithOwner,
-      });
+      const cloneUrls = yield* getGitHubRepositoryCloneUrls(cwd, repositoryNameWithOwner);
       const originRemoteUrl = yield* gitCore.readConfigValue(cwd, "remote.origin.url");
       const remoteUrl = shouldPreferSshRemote(originRemoteUrl) ? cloneUrls.sshUrl : cloneUrls.url;
       const preferredRemoteName =

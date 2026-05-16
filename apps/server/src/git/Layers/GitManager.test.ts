@@ -56,6 +56,7 @@ interface FakeGhScenario {
 
 interface FakeSourceControlScenario {
   defaultBranch?: string | null;
+  repositoryCloneUrls?: Record<string, { url: string; sshUrl: string }>;
 }
 
 function createFakeSourceControlProviderRegistry(
@@ -66,7 +67,16 @@ function createFakeSourceControlProviderRegistry(
     listChangeRequests: () => Effect.succeed([]),
     getChangeRequest: () => Effect.die("not implemented in test"),
     createChangeRequest: () => Effect.void,
-    getRepositoryCloneUrls: () => Effect.die("not implemented in test"),
+    getRepositoryCloneUrls: (input: { repository: string }) => {
+      const cloneUrls = scenario?.repositoryCloneUrls?.[input.repository];
+      return cloneUrls
+        ? Effect.succeed({
+            nameWithOwner: input.repository,
+            url: cloneUrls.url,
+            sshUrl: cloneUrls.sshUrl,
+          })
+        : Effect.die("not implemented in test");
+    },
     createRepository: () => Effect.die("not implemented in test"),
     getDefaultBranch: () => Effect.succeed(scenario?.defaultBranch ?? null),
     checkoutChangeRequest: () => Effect.void,
@@ -2408,6 +2418,8 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
             headRepositoryNameWithOwner: "octocat/codething-mvp",
             headRepositoryOwnerLogin: "octocat",
           },
+        },
+        sourceControlScenario: {
           repositoryCloneUrls: {
             "octocat/codething-mvp": {
               url: forkDir,
