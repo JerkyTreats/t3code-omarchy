@@ -243,10 +243,20 @@ const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(AuthLayerLive),
   Layer.provideMerge(ServerEnvironmentLive),
   Layer.provideMerge(VcsProcessLive),
-  Layer.provideMerge(SourceControlProviderRegistryLive.pipe(Layer.provide(VcsProcessLive))),
+  Layer.provideMerge(
+    SourceControlProviderRegistryLive.pipe(
+      Layer.provide(GitHubCliLive),
+      Layer.provide(VcsProcessLive),
+    ),
+  ),
   Layer.provideMerge(
     SourceControlDiscoveryLive.pipe(
-      Layer.provide(SourceControlProviderRegistryLive.pipe(Layer.provide(VcsProcessLive))),
+      Layer.provide(
+        SourceControlProviderRegistryLive.pipe(
+          Layer.provide(GitHubCliLive),
+          Layer.provide(VcsProcessLive),
+        ),
+      ),
       Layer.provide(VcsProcessLive),
     ),
   ),

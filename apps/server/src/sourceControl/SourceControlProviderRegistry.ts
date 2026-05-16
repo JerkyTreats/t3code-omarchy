@@ -1,13 +1,21 @@
-import { Cache, Context, Duration, Effect, Exit, Layer } from "effect";
+import { Cache, Context, Duration, Effect, Exit, Layer, Option } from "effect";
 import type {
+  ChangeRequest,
   SourceControlProviderAuth,
   SourceControlProviderDiscoveryItem,
   SourceControlProviderError,
   SourceControlProviderKind,
+  SourceControlRepositoryCloneUrls,
 } from "@t3tools/contracts";
 import { SourceControlProviderError as SourceControlProviderErrorClass } from "@t3tools/contracts";
 import { detectSourceControlProviderFromRemoteUrl } from "@t3tools/shared/sourceControl";
 import { ServerConfig } from "../config.ts";
+import {
+  GitHubCli,
+  type GitHubCliShape,
+  type GitHubPullRequestSummary,
+  type GitHubRepositoryCloneUrls,
+} from "../git/Services/GitHubCli.ts";
 import * as SourceControlProvider from "./SourceControlProvider.ts";
 import * as SourceControlProviderDiscovery from "./SourceControlProviderDiscovery.ts";
 import * as VcsProcess from "../vcs/VcsProcess.ts";
@@ -79,6 +87,137 @@ function providerAuth(input: {
     ...(input.account ? { account: input.account } : {}),
     ...(input.host ? { host: input.host } : {}),
     ...(input.detail ? { detail: input.detail } : {}),
+  });
+}
+
+function mapProviderError(
+  provider: SourceControlProviderKind,
+  operation:
+    | "listChangeRequests"
+    | "getChangeRequest"
+    | "createChangeRequest"
+    | "getRepositoryCloneUrls"
+    | "createRepository"
+    | "getDefaultBranch"
+    | "checkoutChangeRequest",
+  cause: unknown,
+): SourceControlProviderError {
+  const detail =
+    cause instanceof Error && "detail" in cause && typeof cause.detail === "string"
+      ? cause.detail
+      : cause instanceof Error
+        ? cause.message
+        : `Source control provider ${provider} failed.`;
+
+  return new SourceControlProviderErrorClass({
+    provider,
+    operation,
+    detail,
+    cause,
+  });
+}
+
+function toChangeRequest(input: GitHubPullRequestSummary): ChangeRequest {
+  return {
+    provider: "github",
+    number: input.number,
+    title: input.title,
+    url: input.url,
+    baseRefName: input.baseRefName,
+    headRefName: input.headRefName,
+    state: input.state ?? "open",
+    updatedAt: Option.none(),
+    ...(input.isCrossRepository === undefined
+      ? {}
+      : { isCrossRepository: input.isCrossRepository }),
+    ...(input.headRepositoryNameWithOwner === undefined
+      ? {}
+      : { headRepositoryNameWithOwner: input.headRepositoryNameWithOwner }),
+    ...(input.headRepositoryOwnerLogin === undefined
+      ? {}
+      : { headRepositoryOwnerLogin: input.headRepositoryOwnerLogin }),
+  };
+}
+
+function toRepositoryCloneUrls(input: GitHubRepositoryCloneUrls): SourceControlRepositoryCloneUrls {
+  return {
+    nameWithOwner: input.nameWithOwner,
+    url: input.url,
+    sshUrl: input.sshUrl,
+  };
+}
+
+function makeGitHubProvider(
+  gitHubCli: GitHubCliShape,
+): SourceControlProvider.SourceControlProviderShape {
+  return SourceControlProvider.SourceControlProvider.of({
+    kind: "github",
+    listChangeRequests: (input) =>
+      gitHubCli
+        .listOpenPullRequests({
+          cwd: input.cwd,
+          headSelector: input.headSelector,
+          ...(input.limit === undefined ? {} : { limit: input.limit }),
+        })
+        .pipe(
+          Effect.map((pullRequests) => pullRequests.map(toChangeRequest)),
+          Effect.mapError((cause) => mapProviderError("github", "listChangeRequests", cause)),
+        ),
+    getChangeRequest: (input) =>
+      gitHubCli
+        .getPullRequest({
+          cwd: input.cwd,
+          reference: input.reference,
+        })
+        .pipe(
+          Effect.map(toChangeRequest),
+          Effect.mapError((cause) => mapProviderError("github", "getChangeRequest", cause)),
+        ),
+    createChangeRequest: (input) =>
+      gitHubCli
+        .createPullRequest({
+          cwd: input.cwd,
+          baseBranch: input.baseRefName,
+          headSelector: input.headSelector,
+          title: input.title,
+          bodyFile: input.bodyFile,
+        })
+        .pipe(Effect.mapError((cause) => mapProviderError("github", "createChangeRequest", cause))),
+    getRepositoryCloneUrls: (input) =>
+      gitHubCli
+        .getRepositoryCloneUrls({
+          cwd: input.cwd,
+          repository: input.repository,
+        })
+        .pipe(
+          Effect.map(toRepositoryCloneUrls),
+          Effect.mapError((cause) => mapProviderError("github", "getRepositoryCloneUrls", cause)),
+        ),
+    createRepository: () =>
+      Effect.fail(
+        new SourceControlProviderErrorClass({
+          provider: "github",
+          operation: "createRepository",
+          detail:
+            "GitHub repository creation is not wired through the source control registry yet.",
+        }),
+      ),
+    getDefaultBranch: (input) =>
+      gitHubCli
+        .getDefaultBranch({
+          cwd: input.cwd,
+        })
+        .pipe(Effect.mapError((cause) => mapProviderError("github", "getDefaultBranch", cause))),
+    checkoutChangeRequest: (input) =>
+      gitHubCli
+        .checkoutPullRequest({
+          cwd: input.cwd,
+          reference: input.reference,
+          ...(input.force === undefined ? {} : { force: input.force }),
+        })
+        .pipe(
+          Effect.mapError((cause) => mapProviderError("github", "checkoutChangeRequest", cause)),
+        ),
   });
 }
 
@@ -349,10 +488,12 @@ export const makeWithProviders = Effect.fn("makeSourceControlProviderRegistryWit
 );
 
 export const make = Effect.fn("makeSourceControlProviderRegistry")(function* () {
+  const gitHubCli = yield* GitHubCli;
+
   return yield* makeWithProviders([
     {
       kind: "github",
-      provider: makeStubProvider("github"),
+      provider: makeGitHubProvider(gitHubCli),
       discovery: GITHUB_DISCOVERY,
     },
     {
