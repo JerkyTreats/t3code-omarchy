@@ -559,7 +559,7 @@ const makeGitHubCli = Effect.sync(() => {
           "--head",
           input.headSelector,
           "--state",
-          "open",
+          input.state ?? "open",
           "--limit",
           String(input.limit ?? 1),
           "--json",

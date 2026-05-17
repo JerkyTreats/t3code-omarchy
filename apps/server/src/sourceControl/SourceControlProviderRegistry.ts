@@ -157,6 +157,7 @@ function makeGitHubProvider(
         .listOpenPullRequests({
           cwd: input.cwd,
           headSelector: input.headSelector,
+          ...(input.state === "all" ? { state: "all" as const } : {}),
           ...(input.limit === undefined ? {} : { limit: input.limit }),
         })
         .pipe(

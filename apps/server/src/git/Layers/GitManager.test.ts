@@ -60,6 +60,23 @@ interface FakeSourceControlScenario {
   repositoryCloneUrls?: Record<string, { url: string; sshUrl: string }>;
   pullRequest?: ChangeRequest;
   checkoutReferences?: string[];
+  listChangeRequests?: (input: {
+    headSelector: string;
+    state: "open" | "closed" | "merged" | "all";
+    limit?: number;
+  }) => ReadonlyArray<ChangeRequest>;
+  createChangeRequestCalls?: Array<{
+    baseRefName: string;
+    headSelector: string;
+    title: string;
+    bodyFile: string;
+  }>;
+  onCreateChangeRequest?: (input: {
+    baseRefName: string;
+    headSelector: string;
+    title: string;
+    bodyFile: string;
+  }) => void;
 }
 
 function createFakeSourceControlProviderRegistry(
@@ -67,12 +84,25 @@ function createFakeSourceControlProviderRegistry(
 ): SourceControlProviderRegistry["Service"] {
   const provider = {
     kind: "github" as const,
-    listChangeRequests: () => Effect.succeed([]),
+    listChangeRequests: (input: {
+      headSelector: string;
+      state: "open" | "closed" | "merged" | "all";
+      limit?: number;
+    }) => Effect.succeed(scenario?.listChangeRequests?.(input) ?? []),
     getChangeRequest: () =>
       scenario?.pullRequest
         ? Effect.succeed(scenario.pullRequest)
         : Effect.die("not implemented in test"),
-    createChangeRequest: () => Effect.void,
+    createChangeRequest: (input: {
+      baseRefName: string;
+      headSelector: string;
+      title: string;
+      bodyFile: string;
+    }) =>
+      Effect.sync(() => {
+        scenario?.createChangeRequestCalls?.push(input);
+        scenario?.onCreateChangeRequest?.(input);
+      }),
     getRepositoryCloneUrls: (input: { repository: string }) => {
       const cloneUrls = scenario?.repositoryCloneUrls?.[input.repository];
       return cloneUrls
@@ -765,17 +795,27 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
 
       const { manager } = yield* makeManager({
         ghScenario: {
-          prListSequence: [
-            JSON.stringify([
-              {
-                number: 13,
-                title: "Existing PR",
-                url: "https://github.com/pingdotgg/codething-mvp/pull/13",
-                baseRefName: "main",
-                headRefName: "feature/status-open-pr",
-              },
-            ]),
-          ],
+          failWith: new GitHubCliError({
+            operation: "execute",
+            detail: "GitHub CLI should not be used in this test.",
+          }),
+        },
+        sourceControlScenario: {
+          listChangeRequests: ({ headSelector, state }) =>
+            headSelector === "feature/status-open-pr" && state === "all"
+              ? [
+                  {
+                    provider: "github",
+                    number: 13,
+                    title: "Existing PR",
+                    url: "https://github.com/pingdotgg/codething-mvp/pull/13",
+                    baseRefName: "main",
+                    headRefName: "feature/status-open-pr",
+                    state: "open",
+                    updatedAt: Option.none(),
+                  },
+                ]
+              : [],
         },
       });
 
@@ -1640,6 +1680,121 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
           call.includes("pr create --base trunk --head feature/create-pr-registry-base"),
         ),
       ).toBe(true);
+    }),
+  );
+
+  it.effect("returns existing PR metadata through the source control registry", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("t3code-git-manager-");
+      yield* initRepo(repoDir);
+      yield* runGit(repoDir, ["checkout", "-b", "feature/existing-pr-registry"]);
+      const remoteDir = yield* createBareRemote();
+      yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "feature/existing-pr-registry"]);
+
+      const { manager, ghCalls } = yield* makeManager({
+        ghScenario: {
+          failWith: new GitHubCliError({
+            operation: "execute",
+            detail: "GitHub CLI should not be used in this test.",
+          }),
+        },
+        sourceControlScenario: {
+          listChangeRequests: ({ headSelector, state, limit }) =>
+            headSelector === "feature/existing-pr-registry" && state === "open" && limit === 1
+              ? [
+                  {
+                    provider: "github",
+                    number: 420,
+                    title: "Existing PR",
+                    url: "https://github.com/pingdotgg/codething-mvp/pull/420",
+                    baseRefName: "main",
+                    headRefName: "feature/existing-pr-registry",
+                    state: "open",
+                    updatedAt: Option.none(),
+                  },
+                ]
+              : [],
+        },
+      });
+
+      const result = yield* runStackedAction(manager, {
+        cwd: repoDir,
+        action: "commit_push_pr",
+      });
+
+      expect(result.pr.status).toBe("opened_existing");
+      expect(result.pr.number).toBe(420);
+      expect(ghCalls).toEqual([]);
+    }),
+  );
+
+  it.effect("creates PRs through the source control registry", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("t3code-git-manager-");
+      yield* initRepo(repoDir);
+      yield* runGit(repoDir, ["checkout", "-b", "feature/create-pr-registry"]);
+      const remoteDir = yield* createBareRemote();
+      yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
+      fs.writeFileSync(path.join(repoDir, "changes-registry.txt"), "change\n");
+      yield* runGit(repoDir, ["add", "changes-registry.txt"]);
+      yield* runGit(repoDir, ["commit", "-m", "Feature commit"]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "feature/create-pr-registry"]);
+      yield* runGit(repoDir, ["config", "branch.feature-create-pr-registry.gh-merge-base", "main"]);
+
+      let created = false;
+      const createChangeRequestCalls: Array<{
+        baseRefName: string;
+        headSelector: string;
+        title: string;
+        bodyFile: string;
+      }> = [];
+      const { manager, ghCalls } = yield* makeManager({
+        ghScenario: {
+          failWith: new GitHubCliError({
+            operation: "execute",
+            detail: "GitHub CLI should not be used in this test.",
+          }),
+        },
+        sourceControlScenario: {
+          defaultBranch: "main",
+          createChangeRequestCalls,
+          listChangeRequests: ({ headSelector, state, limit }) => {
+            if (headSelector !== "feature/create-pr-registry" || state !== "open" || limit !== 1) {
+              return [];
+            }
+            return created
+              ? [
+                  {
+                    provider: "github",
+                    number: 521,
+                    title: "Add stacked git actions",
+                    url: "https://github.com/pingdotgg/codething-mvp/pull/521",
+                    baseRefName: "main",
+                    headRefName: "feature/create-pr-registry",
+                    state: "open",
+                    updatedAt: Option.none(),
+                  },
+                ]
+              : [];
+          },
+          onCreateChangeRequest: () => {
+            created = true;
+          },
+        },
+      });
+
+      const result = yield* runStackedAction(manager, {
+        cwd: repoDir,
+        action: "commit_push_pr",
+      });
+
+      expect(result.pr.status).toBe("created");
+      expect(result.pr.number).toBe(521);
+      expect(createChangeRequestCalls).toHaveLength(1);
+      expect(createChangeRequestCalls[0]?.baseRefName).toBe("main");
+      expect(createChangeRequestCalls[0]?.headSelector).toBe("feature/create-pr-registry");
+      expect(ghCalls).toEqual([]);
     }),
   );
 
