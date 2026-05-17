@@ -13,8 +13,10 @@ import { ensureLocalApi } from "../../localApi";
 import {
   addSavedEnvironment,
   connectDesktopSshEnvironment,
+  disconnectSavedEnvironment as disconnectSavedEnvironmentRecord,
   reconnectSavedEnvironment as reconnectSavedEnvironmentRecord,
   removeSavedEnvironment,
+  useActiveRemoteEnvironmentStore,
 } from "../../environments/runtime";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -101,12 +103,14 @@ export function ConnectionsSettings() {
   const [pairingErrorMessage, setPairingErrorMessage] = useState<string | null>(null);
   const [sshErrorMessage, setSshErrorMessage] = useState<string | null>(null);
   const [reconnectingEnvironmentId, setReconnectingEnvironmentId] = useState<string | null>(null);
+  const [disconnectingEnvironmentId, setDisconnectingEnvironmentId] = useState<string | null>(null);
   const [removingEnvironmentId, setRemovingEnvironmentId] = useState<string | null>(null);
   const [savedEnvironmentErrorMessage, setSavedEnvironmentErrorMessage] = useState<string | null>(
     null,
   );
 
   const snapshotData = snapshotQuery.data;
+  const activeRemoteEnvironment = useActiveRemoteEnvironmentStore((state) => state.session);
   const exposure = snapshotData?.exposure ?? createExposureStateFallback();
   const advertisedEndpoints = snapshotData?.advertisedEndpoints ?? EMPTY_ADVERTISED_ENDPOINTS;
   const registry = snapshotData?.registry ?? EMPTY_SAVED_ENVIRONMENTS;
@@ -135,7 +139,7 @@ export function ConnectionsSettings() {
           },
           { label: host.alias },
         );
-        await snapshotQuery.refetch();
+        window.location.reload();
       } catch (error) {
         setSshErrorMessage(error instanceof Error ? error.message : String(error));
       } finally {
@@ -161,7 +165,7 @@ export function ConnectionsSettings() {
       });
       setPairingLabel("");
       setPairingUrl("");
-      await snapshotQuery.refetch();
+      window.location.reload();
     } catch (error) {
       setPairingErrorMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -174,9 +178,14 @@ export function ConnectionsSettings() {
       setSavedEnvironmentErrorMessage(null);
       setRemovingEnvironmentId(environmentId);
       try {
+        const removedActiveEnvironment = activeRemoteEnvironment?.environmentId === environmentId;
         await removeSavedEnvironment(
           environmentId as PersistedSavedEnvironmentRecord["environmentId"],
         );
+        if (removedActiveEnvironment) {
+          window.location.reload();
+          return;
+        }
         await snapshotQuery.refetch();
       } catch (error) {
         setSavedEnvironmentErrorMessage(error instanceof Error ? error.message : String(error));
@@ -184,23 +193,36 @@ export function ConnectionsSettings() {
         setRemovingEnvironmentId(null);
       }
     },
-    [snapshotQuery],
+    [activeRemoteEnvironment?.environmentId, snapshotQuery],
   );
 
-  const reconnectSavedEnvironment = useCallback(
+  const reconnectSavedEnvironment = useCallback(async (record: PersistedSavedEnvironmentRecord) => {
+    setSavedEnvironmentErrorMessage(null);
+    setReconnectingEnvironmentId(record.environmentId);
+    try {
+      await reconnectSavedEnvironmentRecord(record.environmentId);
+      window.location.reload();
+    } catch (error) {
+      setSavedEnvironmentErrorMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setReconnectingEnvironmentId(null);
+    }
+  }, []);
+
+  const disconnectSavedEnvironment = useCallback(
     async (record: PersistedSavedEnvironmentRecord) => {
       setSavedEnvironmentErrorMessage(null);
-      setReconnectingEnvironmentId(record.environmentId);
+      setDisconnectingEnvironmentId(record.environmentId);
       try {
-        await reconnectSavedEnvironmentRecord(record.environmentId);
-        await snapshotQuery.refetch();
+        await disconnectSavedEnvironmentRecord(record.environmentId);
+        window.location.reload();
       } catch (error) {
         setSavedEnvironmentErrorMessage(error instanceof Error ? error.message : String(error));
       } finally {
-        setReconnectingEnvironmentId(null);
+        setDisconnectingEnvironmentId(null);
       }
     },
-    [snapshotQuery],
+    [],
   );
 
   const setExposureMode = useCallback(
@@ -264,17 +286,41 @@ export function ConnectionsSettings() {
               <Button
                 variant="outline"
                 size="sm"
-                disabled={reconnectingEnvironmentId !== null || removingEnvironmentId !== null}
+                disabled={
+                  reconnectingEnvironmentId !== null ||
+                  disconnectingEnvironmentId !== null ||
+                  removingEnvironmentId !== null
+                }
                 onClick={() => void reconnectSavedEnvironment(record)}
               >
                 {reconnectingEnvironmentId === record.environmentId
                   ? "Reconnecting..."
                   : "Reconnect"}
               </Button>
+              {activeRemoteEnvironment?.environmentId === record.environmentId ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={
+                    reconnectingEnvironmentId !== null ||
+                    disconnectingEnvironmentId !== null ||
+                    removingEnvironmentId !== null
+                  }
+                  onClick={() => void disconnectSavedEnvironment(record)}
+                >
+                  {disconnectingEnvironmentId === record.environmentId
+                    ? "Disconnecting..."
+                    : "Disconnect"}
+                </Button>
+              ) : null}
               <Button
                 variant="outline"
                 size="sm"
-                disabled={reconnectingEnvironmentId !== null || removingEnvironmentId !== null}
+                disabled={
+                  reconnectingEnvironmentId !== null ||
+                  disconnectingEnvironmentId !== null ||
+                  removingEnvironmentId !== null
+                }
                 onClick={() => void forgetSavedEnvironment(record.environmentId)}
               >
                 {removingEnvironmentId === record.environmentId ? "Forgetting..." : "Forget"}
@@ -284,6 +330,9 @@ export function ConnectionsSettings() {
         />
       )),
     [
+      activeRemoteEnvironment?.environmentId,
+      disconnectSavedEnvironment,
+      disconnectingEnvironmentId,
       forgetSavedEnvironment,
       reconnectSavedEnvironment,
       reconnectingEnvironmentId,
@@ -337,7 +386,9 @@ export function ConnectionsSettings() {
                   <span className="block text-[11px] text-muted-foreground">{host.source}</span>
                   {savedRecord ? (
                     <span className="mt-1 block text-[11px] text-muted-foreground">
-                      Saved as {savedRecord.label}
+                      {savedRecord.environmentId === activeRemoteEnvironment?.environmentId
+                        ? `Active as ${savedRecord.label}`
+                        : `Saved as ${savedRecord.label}`}
                     </span>
                   ) : null}
                 </>
@@ -360,7 +411,13 @@ export function ConnectionsSettings() {
           );
         })(),
       ),
-    [connectSshHost, connectingSshHostKey, registry, sshHosts],
+    [
+      activeRemoteEnvironment?.environmentId,
+      connectSshHost,
+      connectingSshHostKey,
+      registry,
+      sshHosts,
+    ],
   );
 
   return (
@@ -489,6 +546,27 @@ export function ConnectionsSettings() {
       </SettingsSection>
 
       <SettingsSection title="Saved Environments" icon={<LinkIcon className="size-3.5" />}>
+        {activeRemoteEnvironment ? (
+          <SettingsRow
+            title="Active environment"
+            description={activeRemoteEnvironment.label}
+            status={
+              <>
+                <span className="block break-all font-mono text-[11px] text-foreground">
+                  {activeRemoteEnvironment.httpBaseUrl}
+                </span>
+                <span className="mt-1 block text-[11px] text-muted-foreground">
+                  Environment id: {activeRemoteEnvironment.environmentId}
+                </span>
+              </>
+            }
+          />
+        ) : (
+          <SettingsRow
+            title="Active environment"
+            description="Local desktop or browser primary environment"
+          />
+        )}
         {savedEnvironmentErrorMessage ? (
           <SettingsRow
             title="Saved environment update failed"

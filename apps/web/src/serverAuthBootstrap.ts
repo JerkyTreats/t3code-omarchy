@@ -8,6 +8,12 @@ import type {
 import { Data, Predicate } from "effect";
 import { create } from "zustand";
 
+import {
+  readActiveRemoteEnvironmentSession,
+  setActiveRemoteEnvironmentSession,
+} from "./environments/runtime/active";
+import { fetchRemoteSessionState, issueRemoteWebSocketToken } from "./environments/remote/api";
+
 export type ServerAuthGateState =
   | { status: "booting" }
   | { status: "authenticated" }
@@ -121,6 +127,7 @@ export interface AuthBootstrapEnvironmentSnapshot {
 }
 
 export function readAuthBootstrapEnvironmentSnapshot(): AuthBootstrapEnvironmentSnapshot {
+  const activeRemoteEnvironment = readActiveRemoteEnvironmentSession();
   const bridgePresent = Boolean(window.desktopBridge);
   const bootstrap = peekDesktopEnvironmentBootstrap();
   const resolvedHttpBaseUrl = resolveServerHttpBaseUrl(bootstrap);
@@ -130,6 +137,7 @@ export function readAuthBootstrapEnvironmentSnapshot(): AuthBootstrapEnvironment
   sessionUrl.hash = "";
 
   const wsBaseUrl =
+    activeRemoteEnvironment?.wsBaseUrl ??
     (typeof bootstrap?.wsBaseUrl === "string" && bootstrap.wsBaseUrl.length > 0
       ? bootstrap.wsBaseUrl
       : null) ??
@@ -141,7 +149,9 @@ export function readAuthBootstrapEnvironmentSnapshot(): AuthBootstrapEnvironment
     wsBaseUrl,
     pageOrigin: window.location.origin,
     pageHref: window.location.href,
-    desktopLabel: typeof bootstrap?.label === "string" ? bootstrap.label : null,
+    desktopLabel:
+      activeRemoteEnvironment?.label ??
+      (typeof bootstrap?.label === "string" ? bootstrap.label : null),
     desktopBridgePresent: bridgePresent,
     desktopBootstrapCredentialPresent: Boolean(
       bootstrap &&
@@ -169,8 +179,12 @@ function swapBaseUrlProtocol(
 
 function resolveServerHttpBaseUrl(desktopBootstrap?: DesktopEnvironmentBootstrap | null): string {
   const env = import.meta.env as Record<string, string | undefined>;
+  const activeRemoteEnvironment = readActiveRemoteEnvironmentSession();
   const resolvedBootstrap =
     desktopBootstrap === undefined ? getDesktopEnvironmentBootstrap() : desktopBootstrap;
+  if (activeRemoteEnvironment?.httpBaseUrl) {
+    return normalizeBaseUrl(activeRemoteEnvironment.httpBaseUrl);
+  }
   if (resolvedBootstrap?.httpBaseUrl) {
     return normalizeBaseUrl(resolvedBootstrap.httpBaseUrl);
   }
@@ -269,7 +283,7 @@ function updateDesktopBearerSessionTokenFromBootstrap(
 }
 
 export function getDesktopWebSocketToken(): string | null {
-  return desktopWebSocketToken;
+  return readActiveRemoteEnvironmentSession()?.webSocketToken ?? desktopWebSocketToken;
 }
 
 async function waitFor(delayMs: number): Promise<void> {
@@ -349,6 +363,19 @@ async function retryTransientBootstrap<T>(operation: () => Promise<T>): Promise<
 }
 
 export async function fetchSessionState(): Promise<AuthSessionState> {
+  const activeRemoteEnvironment = readActiveRemoteEnvironmentSession();
+  if (activeRemoteEnvironment) {
+    appendAuthDiagnostic({
+      level: "info",
+      message: "Checking saved remote auth session.",
+      detail: `${activeRemoteEnvironment.httpBaseUrl} bearer=present`,
+    });
+    return await fetchRemoteSessionState({
+      httpBaseUrl: activeRemoteEnvironment.httpBaseUrl,
+      bearerToken: activeRemoteEnvironment.bearerToken,
+    });
+  }
+
   return retryTransientBootstrap(async () => {
     const sessionUrl = resolveServerHttpUrl("/api/auth/session");
     const bearerToken = getDesktopBearerSessionToken();
@@ -394,6 +421,25 @@ export async function fetchSessionState(): Promise<AuthSessionState> {
 }
 
 async function issueDesktopWebSocketToken(): Promise<void> {
+  const activeRemoteEnvironment = readActiveRemoteEnvironmentSession();
+  if (activeRemoteEnvironment) {
+    appendAuthDiagnostic({
+      level: "info",
+      message: "Requesting saved remote WebSocket token.",
+      detail: activeRemoteEnvironment.httpBaseUrl,
+    });
+    const result = await issueRemoteWebSocketToken({
+      httpBaseUrl: activeRemoteEnvironment.httpBaseUrl,
+      bearerToken: activeRemoteEnvironment.bearerToken,
+    });
+    setActiveRemoteEnvironmentSession({
+      ...activeRemoteEnvironment,
+      webSocketToken: result.token,
+    });
+    desktopWebSocketToken = null;
+    return;
+  }
+
   const bearerToken = getDesktopBearerSessionToken();
   if (!bearerToken) {
     desktopWebSocketToken = null;
@@ -536,6 +582,36 @@ async function bootstrapServerAuth(): Promise<ServerAuthGateState> {
     message: "Starting server auth bootstrap.",
     detail: environmentDiagnosticDetail(),
   });
+  const activeRemoteEnvironment = readActiveRemoteEnvironmentSession();
+  if (activeRemoteEnvironment) {
+    try {
+      const currentSession = await fetchRemoteSessionState({
+        httpBaseUrl: activeRemoteEnvironment.httpBaseUrl,
+        bearerToken: activeRemoteEnvironment.bearerToken,
+      });
+      if (currentSession.authenticated) {
+        await issueDesktopWebSocketToken();
+        appendAuthDiagnostic({
+          level: "success",
+          message: "Auth bootstrap finished with saved remote environment.",
+        });
+        return setServerAuthGateState({ status: "authenticated" });
+      }
+      setActiveRemoteEnvironmentSession(null);
+      appendAuthDiagnostic({
+        level: "warning",
+        message: "Saved remote environment requires a new pairing credential.",
+      });
+    } catch (error) {
+      setActiveRemoteEnvironmentSession(null);
+      appendAuthDiagnostic({
+        level: "warning",
+        message: "Saved remote environment bootstrap failed. Falling back to local bootstrap.",
+        detail: errorMessageFromUnknown(error),
+      });
+    }
+  }
+
   const currentSession = await fetchSessionState();
   if (currentSession.authenticated) {
     await issueDesktopWebSocketToken();

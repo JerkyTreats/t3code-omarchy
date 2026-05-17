@@ -4,6 +4,7 @@ import { type CxOptions, cx } from "class-variance-authority";
 import { twMerge } from "tailwind-merge";
 import * as Random from "effect/Random";
 import * as Effect from "effect/Effect";
+import { readActiveRemoteEnvironmentSession } from "../environments/runtime/active";
 import { getDesktopWebSocketToken } from "../serverAuthBootstrap";
 
 export function cn(...inputs: CxOptions) {
@@ -53,10 +54,12 @@ export const resolveServerUrl = (options?: {
   pathname?: string | undefined;
   searchParams?: Record<string, string> | undefined;
 }): string => {
+  const activeRemoteEnvironment = readActiveRemoteEnvironmentSession();
   const desktopEnvironmentWsUrl =
     window.desktopBridge?.getLocalEnvironmentBootstrap?.()?.wsBaseUrl ?? undefined;
   const rawUrl = firstNonEmptyString(
     options?.url,
+    activeRemoteEnvironment?.wsBaseUrl,
     desktopEnvironmentWsUrl,
     window.desktopBridge?.getWsUrl(),
     import.meta.env.VITE_WS_URL,
@@ -75,14 +78,15 @@ export const resolveServerUrl = (options?: {
   if (options?.searchParams) {
     parsedUrl.search = new URLSearchParams(options.searchParams).toString();
   }
-  const desktopWebSocketToken = getDesktopWebSocketToken();
+  const activeWebSocketToken =
+    activeRemoteEnvironment?.webSocketToken ?? getDesktopWebSocketToken();
   if (
-    desktopWebSocketToken &&
+    activeWebSocketToken &&
     (parsedUrl.protocol === "ws:" || parsedUrl.protocol === "wss:") &&
     parsedUrl.pathname === "/ws" &&
     !parsedUrl.searchParams.has("wsToken")
   ) {
-    parsedUrl.searchParams.set("wsToken", desktopWebSocketToken);
+    parsedUrl.searchParams.set("wsToken", activeWebSocketToken);
   }
   return parsedUrl.toString();
 };

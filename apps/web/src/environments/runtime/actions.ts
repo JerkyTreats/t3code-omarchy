@@ -10,8 +10,10 @@ import {
   bootstrapRemoteBearerSession,
   fetchRemoteEnvironmentDescriptor,
   fetchRemoteSessionState,
+  issueRemoteWebSocketToken,
 } from "../remote/api";
 import { resolveRemotePairingTarget } from "../remote/target";
+import { readActiveRemoteEnvironmentSession, setActiveRemoteEnvironmentSession } from "./active";
 import {
   getSavedEnvironmentRecord,
   listSavedEnvironmentRecords,
@@ -20,7 +22,9 @@ import {
   removeSavedEnvironmentBearerToken,
   toPersistedSavedEnvironmentRecord,
   type SavedEnvironmentRecord,
+  type SavedEnvironmentRuntimeState,
   useSavedEnvironmentRegistryStore,
+  useSavedEnvironmentRuntimeStore,
   writeSavedEnvironmentBearerToken,
 } from "./catalog";
 
@@ -34,7 +38,8 @@ type DesktopSshBridge = DesktopBridge &
       DesktopBridge,
       "ensureSshEnvironment" | "fetchSshEnvironmentDescriptor" | "bootstrapSshBearerSession"
     >
-  >;
+  > &
+  Pick<DesktopBridge, "issueSshWebSocketToken">;
 
 function isDesktopSshTargetEqual(
   left: DesktopSshEnvironmentTarget | undefined,
@@ -138,6 +143,93 @@ async function removeSavedEnvironmentRecord(environmentId: EnvironmentId): Promi
   await removeSavedEnvironmentBearerToken(environmentId);
 }
 
+function patchSavedEnvironmentRuntimeState(
+  environmentId: EnvironmentId,
+  patch: Partial<SavedEnvironmentRuntimeState>,
+): void {
+  const runtimeStore = useSavedEnvironmentRuntimeStore.getState();
+  runtimeStore.ensure(environmentId);
+  runtimeStore.patch(environmentId, patch);
+}
+
+function disconnectSavedEnvironmentRuntime(
+  environmentId: EnvironmentId,
+  errorMessage?: string,
+): void {
+  const disconnectedAt = isoNow();
+  const connectedAt = getSavedEnvironmentRuntimeState(environmentId)?.connectedAt ?? null;
+  patchSavedEnvironmentRuntimeState(environmentId, {
+    connectionState: errorMessage ? "error" : "disconnected",
+    authState: errorMessage ? "requires-auth" : "unknown",
+    lastError: errorMessage ?? null,
+    lastErrorAt: errorMessage ? disconnectedAt : null,
+    connectedAt: errorMessage ? connectedAt : null,
+    descriptor: null,
+    disconnectedAt,
+    role: null,
+    serverConfig: null,
+  });
+}
+
+function getSavedEnvironmentRuntimeState(environmentId: EnvironmentId) {
+  return useSavedEnvironmentRuntimeStore.getState().byId[environmentId];
+}
+
+async function issueSavedEnvironmentWebSocketToken(input: {
+  readonly record: SavedEnvironmentRecord;
+  readonly bearerToken: string;
+}): Promise<string> {
+  if (
+    input.record.desktopSsh &&
+    typeof window.desktopBridge?.issueSshWebSocketToken === "function"
+  ) {
+    const result = await window.desktopBridge.issueSshWebSocketToken(
+      input.record.httpBaseUrl,
+      input.bearerToken,
+    );
+    return result.token;
+  }
+
+  const result = await issueRemoteWebSocketToken({
+    httpBaseUrl: input.record.httpBaseUrl,
+    bearerToken: input.bearerToken,
+  });
+  return result.token;
+}
+
+async function activateSavedEnvironment(input: {
+  readonly record: SavedEnvironmentRecord;
+  readonly bearerToken: string;
+}): Promise<void> {
+  const descriptor = input.record.desktopSsh
+    ? await fetchDesktopSshEnvironmentDescriptor(input.record.httpBaseUrl)
+    : await fetchRemoteEnvironmentDescriptor({
+        httpBaseUrl: input.record.httpBaseUrl,
+      });
+  const webSocketToken = await issueSavedEnvironmentWebSocketToken(input);
+  const connectedAt = isoNow();
+
+  patchSavedEnvironmentRuntimeState(input.record.environmentId, {
+    authState: "authenticated",
+    connectedAt,
+    connectionState: "connected",
+    descriptor,
+    disconnectedAt: null,
+    lastError: null,
+    lastErrorAt: null,
+    role: "owner",
+  });
+  setActiveRemoteEnvironmentSession({
+    activatedAt: connectedAt,
+    bearerToken: input.bearerToken,
+    environmentId: input.record.environmentId,
+    httpBaseUrl: input.record.httpBaseUrl,
+    label: input.record.label,
+    webSocketToken,
+    wsBaseUrl: input.record.wsBaseUrl,
+  });
+}
+
 export async function removeSavedEnvironment(environmentId: EnvironmentId): Promise<void> {
   const record = getSavedEnvironmentRecord(environmentId);
   if (!record) {
@@ -148,6 +240,10 @@ export async function removeSavedEnvironment(environmentId: EnvironmentId): Prom
     await window.desktopBridge.disconnectSshEnvironment(record.desktopSsh);
   }
 
+  if (readActiveRemoteEnvironmentSession()?.environmentId === environmentId) {
+    setActiveRemoteEnvironmentSession(null);
+  }
+  useSavedEnvironmentRuntimeStore.getState().clear(environmentId);
   await removeSavedEnvironmentRecord(environmentId);
 }
 
@@ -210,8 +306,29 @@ export async function addSavedEnvironment(input: {
   if (staleDesktopSshRecord) {
     await removeSavedEnvironmentRecord(staleDesktopSshRecord.environmentId);
   }
+  await activateSavedEnvironment({
+    record,
+    bearerToken: bearerSession.sessionToken,
+  });
 
   return record;
+}
+
+export async function disconnectSavedEnvironment(environmentId: EnvironmentId): Promise<void> {
+  const record = getSavedEnvironmentRecord(environmentId);
+  if (!record) {
+    return;
+  }
+
+  if (record.desktopSsh && typeof window.desktopBridge?.disconnectSshEnvironment === "function") {
+    await window.desktopBridge.disconnectSshEnvironment(record.desktopSsh);
+  }
+
+  if (readActiveRemoteEnvironmentSession()?.environmentId === environmentId) {
+    setActiveRemoteEnvironmentSession(null);
+  }
+
+  disconnectSavedEnvironmentRuntime(environmentId);
 }
 
 export async function connectDesktopSshEnvironment(
@@ -284,5 +401,9 @@ export async function reconnectSavedEnvironment(
     lastConnectedAt: isoNow(),
   };
   useSavedEnvironmentRegistryStore.getState().upsert(refreshedRecord);
+  await activateSavedEnvironment({
+    record: refreshedRecord,
+    bearerToken,
+  });
   return refreshedRecord;
 }

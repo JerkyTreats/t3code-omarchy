@@ -7,6 +7,7 @@ const mockResolveRemotePairingTarget = vi.fn();
 const mockFetchRemoteEnvironmentDescriptor = vi.fn();
 const mockBootstrapRemoteBearerSession = vi.fn();
 const mockFetchRemoteSessionState = vi.fn();
+const mockIssueRemoteWebSocketToken = vi.fn();
 const mockPersistSavedEnvironmentRecord = vi.fn();
 const mockWriteSavedEnvironmentBearerToken = vi.fn();
 const mockReadSavedEnvironmentBearerToken = vi.fn();
@@ -18,6 +19,9 @@ const mockRemoveSavedEnvironmentBearerToken = vi.fn();
 const mockRegistrySetState = vi.fn((next: { byId: Record<string, Record<string, unknown>> }) => {
   mockSavedRecords = Object.values(next.byId);
 });
+const mockRuntimeEnsure = vi.fn();
+const mockRuntimePatch = vi.fn();
+const mockRuntimeClear = vi.fn();
 const mockRemove = vi.fn((environmentId: string) => {
   mockSavedRecords = mockSavedRecords.filter((record) => record.environmentId !== environmentId);
 });
@@ -32,7 +36,9 @@ const mockEnsureSshEnvironment = vi.fn();
 const mockDisconnectSshEnvironment = vi.fn();
 const mockFetchSshEnvironmentDescriptor = vi.fn();
 const mockBootstrapSshBearerSession = vi.fn();
+const mockIssueSshWebSocketToken = vi.fn();
 const mockToPersistedSavedEnvironmentRecord = vi.fn((record) => record);
+const mockSetActiveRemoteEnvironmentSession = vi.fn();
 
 vi.mock("../remote/target", () => ({
   resolveRemotePairingTarget: mockResolveRemotePairingTarget,
@@ -42,6 +48,12 @@ vi.mock("../remote/api", () => ({
   bootstrapRemoteBearerSession: mockBootstrapRemoteBearerSession,
   fetchRemoteEnvironmentDescriptor: mockFetchRemoteEnvironmentDescriptor,
   fetchRemoteSessionState: mockFetchRemoteSessionState,
+  issueRemoteWebSocketToken: mockIssueRemoteWebSocketToken,
+}));
+
+vi.mock("./active", () => ({
+  readActiveRemoteEnvironmentSession: vi.fn(() => null),
+  setActiveRemoteEnvironmentSession: mockSetActiveRemoteEnvironmentSession,
 }));
 
 vi.mock("~/localApi", () => ({
@@ -66,6 +78,14 @@ vi.mock("./catalog", () => ({
     }),
     setState: mockRegistrySetState,
   },
+  useSavedEnvironmentRuntimeStore: {
+    getState: () => ({
+      byId: {},
+      ensure: mockRuntimeEnsure,
+      patch: mockRuntimePatch,
+      clear: mockRuntimeClear,
+    }),
+  },
   writeSavedEnvironmentBearerToken: mockWriteSavedEnvironmentBearerToken,
 }));
 
@@ -80,6 +100,7 @@ describe("saved environment actions", () => {
         disconnectSshEnvironment: mockDisconnectSshEnvironment,
         fetchSshEnvironmentDescriptor: mockFetchSshEnvironmentDescriptor,
         bootstrapSshBearerSession: mockBootstrapSshBearerSession,
+        issueSshWebSocketToken: mockIssueSshWebSocketToken,
       },
     });
 
@@ -118,6 +139,9 @@ describe("saved environment actions", () => {
       },
       role: "owner",
     });
+    mockIssueRemoteWebSocketToken.mockResolvedValue({
+      token: "remote-ws-token",
+    });
     mockDisconnectSshEnvironment.mockResolvedValue(undefined);
     mockFetchSshEnvironmentDescriptor.mockResolvedValue({
       environmentId: EnvironmentId.make("environment-ssh"),
@@ -126,6 +150,9 @@ describe("saved environment actions", () => {
     mockBootstrapSshBearerSession.mockResolvedValue({
       sessionToken: "ssh-bearer-token",
       role: "owner",
+    });
+    mockIssueSshWebSocketToken.mockResolvedValue({
+      token: "ssh-ws-token",
     });
     mockEnsureSshEnvironment.mockResolvedValue({
       target: {
@@ -207,6 +234,12 @@ describe("saved environment actions", () => {
         },
       }),
     );
+    expect(mockSetActiveRemoteEnvironmentSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        environmentId: EnvironmentId.make("environment-ssh"),
+        webSocketToken: "ssh-ws-token",
+      }),
+    );
   });
 
   it("disconnects desktop SSH state before forgetting a saved environment", async () => {
@@ -274,6 +307,12 @@ describe("saved environment actions", () => {
       expect.objectContaining({
         environmentId: EnvironmentId.make("environment-1"),
         label: "Remote environment",
+      }),
+    );
+    expect(mockSetActiveRemoteEnvironmentSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        environmentId: EnvironmentId.make("environment-1"),
+        webSocketToken: "remote-ws-token",
       }),
     );
   });
