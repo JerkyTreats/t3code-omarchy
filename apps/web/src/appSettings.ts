@@ -51,6 +51,9 @@ export function useAppSettings() {
       if ("diffWordWrap" in patch) {
         nextPatch.diffWordWrap = patch.diffWordWrap;
       }
+      if ("diffIgnoreWhitespace" in patch) {
+        nextPatch.diffIgnoreWhitespace = patch.diffIgnoreWhitespace;
+      }
       if ("sidebarProjectSortOrder" in patch) {
         nextPatch.sidebarProjectSortOrder = patch.sidebarProjectSortOrder;
       }

@@ -252,7 +252,15 @@ const makeCheckpointStore = Effect.gen(function* () {
       const result = yield* git.execute({
         operation,
         cwd: input.cwd,
-        args: ["diff", "--patch", "--minimal", "--no-color", fromCommitOid, toCommitOid],
+        args: [
+          "diff",
+          "--patch",
+          "--minimal",
+          "--no-color",
+          ...(input.ignoreWhitespace ? ["--ignore-all-space"] : []),
+          fromCommitOid,
+          toCommitOid,
+        ],
         maxOutputBytes: CHECKPOINT_DIFF_MAX_OUTPUT_BYTES,
       });
 

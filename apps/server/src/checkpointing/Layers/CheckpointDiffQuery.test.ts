@@ -48,6 +48,7 @@ describe("CheckpointDiffQueryLive", () => {
       readonly fromCheckpointRef: CheckpointRef;
       readonly toCheckpointRef: CheckpointRef;
       readonly cwd: string;
+      readonly ignoreWhitespace: boolean;
     }> = [];
 
     const threadCheckpointContext = makeThreadCheckpointContext({
@@ -68,9 +69,9 @@ describe("CheckpointDiffQueryLive", () => {
           return true;
         }),
       restoreCheckpoint: () => Effect.succeed(true),
-      diffCheckpoints: ({ fromCheckpointRef, toCheckpointRef, cwd }) =>
+      diffCheckpoints: ({ fromCheckpointRef, toCheckpointRef, cwd, ignoreWhitespace }) =>
         Effect.sync(() => {
-          diffCheckpointsCalls.push({ fromCheckpointRef, toCheckpointRef, cwd });
+          diffCheckpointsCalls.push({ fromCheckpointRef, toCheckpointRef, cwd, ignoreWhitespace });
           return "diff patch";
         }),
       statCheckpointFile: () => Effect.succeed(null),
@@ -111,6 +112,7 @@ describe("CheckpointDiffQueryLive", () => {
         cwd: "/tmp/workspace",
         fromCheckpointRef: expectedFromRef,
         toCheckpointRef,
+        ignoreWhitespace: true,
       },
     ]);
     expect(result).toEqual({
@@ -162,5 +164,67 @@ describe("CheckpointDiffQueryLive", () => {
         }).pipe(Effect.provide(layer)),
       ),
     ).rejects.toThrow("Thread 'thread-missing' not found.");
+  });
+
+  it("passes explicit whitespace filtering through to the checkpoint store", async () => {
+    const projectId = ProjectId.makeUnsafe("project-whitespace");
+    const threadId = ThreadId.makeUnsafe("thread-whitespace");
+    const toCheckpointRef = checkpointRefForThreadTurn(threadId, 1);
+    const diffCheckpointsCalls: Array<{
+      readonly ignoreWhitespace: boolean;
+    }> = [];
+
+    const threadCheckpointContext = makeThreadCheckpointContext({
+      projectId,
+      threadId,
+      workspaceRoot: "/tmp/workspace",
+      worktreePath: null,
+      checkpointTurnCount: 1,
+      checkpointRef: toCheckpointRef,
+    });
+
+    const checkpointStore: CheckpointStoreShape = {
+      isGitRepository: () => Effect.succeed(true),
+      captureCheckpoint: () => Effect.void,
+      hasCheckpointRef: () => Effect.succeed(true),
+      restoreCheckpoint: () => Effect.succeed(true),
+      diffCheckpoints: ({ ignoreWhitespace }) =>
+        Effect.sync(() => {
+          diffCheckpointsCalls.push({ ignoreWhitespace });
+          return "diff patch";
+        }),
+      statCheckpointFile: () => Effect.succeed(null),
+      readCheckpointFileText: () => Effect.succeed(null),
+      readCheckpointFileBytes: () => Effect.succeed(null),
+      deleteCheckpointRefs: () => Effect.void,
+    };
+
+    const layer = CheckpointDiffQueryLive.pipe(
+      Layer.provideMerge(Layer.succeed(CheckpointStore, checkpointStore)),
+      Layer.provideMerge(
+        Layer.succeed(ProjectionSnapshotQuery, {
+          getSnapshot: () =>
+            Effect.die("CheckpointDiffQuery should not request the full orchestration snapshot"),
+          getCounts: () => Effect.succeed({ projectCount: 0, threadCount: 0 }),
+          getActiveProjectByWorkspaceRoot: () => Effect.succeed(Option.none()),
+          getFirstActiveThreadIdByProjectId: () => Effect.succeed(Option.none()),
+          getThreadCheckpointContext: () => Effect.succeed(Option.some(threadCheckpointContext)),
+        }),
+      ),
+    );
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const query = yield* CheckpointDiffQuery;
+        return yield* query.getTurnDiff({
+          threadId,
+          fromTurnCount: 0,
+          toTurnCount: 1,
+          ignoreWhitespace: false,
+        });
+      }).pipe(Effect.provide(layer)),
+    );
+
+    expect(diffCheckpointsCalls).toEqual([{ ignoreWhitespace: false }]);
   });
 });

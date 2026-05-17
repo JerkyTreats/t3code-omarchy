@@ -8,6 +8,7 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   Columns2Icon,
+  PilcrowIcon,
   Rows3Icon,
   TextWrapIcon,
 } from "lucide-react";
@@ -186,6 +187,7 @@ export default function DiffPanel({ mode = "inline", showPanelTab = true }: Diff
   const { resolvedTheme } = useTheme();
   const settings = useSettings();
   const [diffRenderMode, setDiffRenderMode] = useState<DiffRenderMode>("stacked");
+  const [diffIgnoreWhitespace, setDiffIgnoreWhitespace] = useState(settings.diffIgnoreWhitespace);
   const [diffWordWrap, setDiffWordWrap] = useState(settings.diffWordWrap);
   const [collapsedDiffFileKeys, setCollapsedDiffFileKeys] = useState<ReadonlySet<string>>(
     () => new Set(),
@@ -290,6 +292,7 @@ export default function DiffPanel({ mode = "inline", showPanelTab = true }: Diff
       threadId: activeThreadId,
       fromTurnCount: activeCheckpointRange?.fromTurnCount ?? null,
       toTurnCount: activeCheckpointRange?.toTurnCount ?? null,
+      ignoreWhitespace: diffIgnoreWhitespace,
       cacheScope: selectedTurn ? `turn:${selectedTurn.turnId}` : conversationCacheScope,
       enabled: isGitRepo,
     }),
@@ -342,10 +345,11 @@ export default function DiffPanel({ mode = "inline", showPanelTab = true }: Diff
 
   useEffect(() => {
     if (diffOpen && !previousDiffOpenRef.current) {
+      setDiffIgnoreWhitespace(settings.diffIgnoreWhitespace);
       setDiffWordWrap(settings.diffWordWrap);
     }
     previousDiffOpenRef.current = diffOpen;
-  }, [diffOpen, settings.diffWordWrap]);
+  }, [diffOpen, settings.diffIgnoreWhitespace, settings.diffWordWrap]);
 
   useEffect(() => {
     if (!selectedFilePath || !patchViewportRef.current) {
@@ -636,6 +640,24 @@ export default function DiffPanel({ mode = "inline", showPanelTab = true }: Diff
             </Toggle>
           </ToggleGroup>
         ) : null}
+        <Toggle
+          aria-label={
+            diffIgnoreWhitespace
+              ? "Show whitespace-only diff changes"
+              : "Hide whitespace-only diff changes"
+          }
+          title={
+            diffIgnoreWhitespace ? "Show whitespace-only changes" : "Hide whitespace-only changes"
+          }
+          variant="outline"
+          size="xs"
+          pressed={diffIgnoreWhitespace}
+          onPressedChange={(pressed) => {
+            setDiffIgnoreWhitespace(Boolean(pressed));
+          }}
+        >
+          <PilcrowIcon className="size-3" />
+        </Toggle>
         <Toggle
           aria-label={diffWordWrap ? "Disable diff line wrapping" : "Enable diff line wrapping"}
           title={diffWordWrap ? "Disable line wrapping" : "Enable line wrapping"}

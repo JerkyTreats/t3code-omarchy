@@ -111,11 +111,50 @@ it.layer(TestLayer)("CheckpointStoreLive", (it) => {
           cwd: tmp,
           fromCheckpointRef,
           toCheckpointRef,
+          ignoreWhitespace: true,
         });
 
         expect(diff).toContain("diff --git");
         expect(diff).not.toContain("[truncated]");
         expect(diff).toContain("+line 04999");
+      }),
+    );
+
+    it.effect("ignores whitespace-only changes when requested", () =>
+      Effect.gen(function* () {
+        const tmp = yield* makeTmpDir();
+        yield* initRepoWithCommit(tmp);
+        const checkpointStore = yield* CheckpointStore;
+        const threadId = ThreadId.makeUnsafe("thread-checkpoint-whitespace");
+        const fromCheckpointRef = checkpointRefForThreadTurn(threadId, 0);
+        const toCheckpointRef = checkpointRefForThreadTurn(threadId, 1);
+
+        yield* writeTextFile(path.join(tmp, "README.md"), "alpha\nbeta\n");
+        yield* checkpointStore.captureCheckpoint({
+          cwd: tmp,
+          checkpointRef: fromCheckpointRef,
+        });
+        yield* writeTextFile(path.join(tmp, "README.md"), "alpha \n beta\n");
+        yield* checkpointStore.captureCheckpoint({
+          cwd: tmp,
+          checkpointRef: toCheckpointRef,
+        });
+
+        const diffWithWhitespace = yield* checkpointStore.diffCheckpoints({
+          cwd: tmp,
+          fromCheckpointRef,
+          toCheckpointRef,
+          ignoreWhitespace: false,
+        });
+        const diffIgnoringWhitespace = yield* checkpointStore.diffCheckpoints({
+          cwd: tmp,
+          fromCheckpointRef,
+          toCheckpointRef,
+          ignoreWhitespace: true,
+        });
+
+        expect(diffWithWhitespace).toContain("diff --git");
+        expect(diffIgnoringWhitespace.trim()).toBe("");
       }),
     );
   });

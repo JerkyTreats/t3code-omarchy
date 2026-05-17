@@ -279,6 +279,10 @@ export function buildLegacyClientSettingsMigrationPatch(
     patch.diffWordWrap = legacySettings.diffWordWrap;
   }
 
+  if (Predicate.isBoolean(legacySettings.diffIgnoreWhitespace)) {
+    patch.diffIgnoreWhitespace = legacySettings.diffIgnoreWhitespace;
+  }
+
   if (Schema.is(SidebarProjectSortOrder)(legacySettings.sidebarProjectSortOrder)) {
     patch.sidebarProjectSortOrder = legacySettings.sidebarProjectSortOrder;
   }
