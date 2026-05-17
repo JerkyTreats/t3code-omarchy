@@ -241,7 +241,7 @@ Remote and hosted completion criteria now satisfied on branch:
 Status:
 
 - `adapt`
-- current branch status: `partial`
+- current branch status: `complete`
 
 Primary upstream work:
 
@@ -271,6 +271,14 @@ Required fork behavior to preserve:
 - fork-owned diff and panel access behavior
 - composer ownership and screenshot controls
 
+Current branch outcome:
+
+- file-collapse behavior landed earlier in the branch and remained intact through the shell intake
+- whitespace-aware checkpoint diff filtering landed in `31a27fdb`
+- markdown highlight render stability landed in `4e6dd1a5`
+- mobile composer default collapse and narrower diff panel sizing landed in `968307a9`
+- existing plan preview, screenshot attach, and shell ownership behavior were preserved through the adaptation
+
 ## Execution Ledger
 
 Completed upstream slices on this branch:
@@ -291,10 +299,14 @@ Completed upstream slices on this branch:
   - upstream coverage: `08e6d4cf`, `460d9c3e`
   - local checkpoints: `d9adce2b`, `d4617491`, `7406295e`
 
-Still open in `0.22`:
+- shell, diff, markdown, and mobile completion
+  - upstream coverage: `f4c9418d`, `f7748a0d`, `623e471a`, `92e340d8`, `f54f4385`
+  - local checkpoints: `31a27fdb`, `4e6dd1a5`, `968307a9`
 
-- broader shell, diff, markdown, and mobile intake for `f4c9418d`, `f7748a0d`, `623e471a`, `92e340d8`, and `f54f4385`
-- final release-line reconciliation after those UI slices land
+Current `0.22` state:
+
+- all planned lanes are complete on branch
+- the release-line reconciliation is recorded in this note
 
 ## Implementation Order
 
@@ -302,6 +314,7 @@ Still open in `0.22`:
 2. complete source control and VCS substrate
 3. complete remote connectivity and hosted flows
 4. finish diff, mobile shell, and markdown presentation changes
+5. record final parity outcome in this intake note
 
 ## Verification Focus
 
@@ -315,6 +328,6 @@ Still open in `0.22`:
 
 `v0.0.21 -> v0.0.22` should be integrated in staged slices with explicit seam ownership.
 
-The source control, remote-hosted, and multi-provider shell lanes are now complete on branch.
+The source control, remote-hosted, multi-provider shell, and protected shell-presentation lanes are now complete on branch.
 
-The remaining high-risk seam is the protected shell and presentation lane.
+`v0.0.21 -> v0.0.22` is complete on this branch.
