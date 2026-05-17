@@ -12,7 +12,6 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  PROVIDER_DISPLAY_NAMES,
   type ProviderKind,
   type ServerProvider,
   type ServerProviderModel,
@@ -53,6 +52,10 @@ import { ensureNativeApi, readNativeApi } from "../../nativeApi";
 import { useStore } from "../../store";
 import { formatRelativeTime, formatRelativeTimeLabel } from "../../timestampFormat";
 import { cn } from "../../lib/utils";
+import {
+  deriveProviderInstanceEntries,
+  type ProviderInstanceAvailability,
+} from "../../providerInstances";
 import { Button } from "../ui/button";
 import { Collapsible, CollapsibleContent } from "../ui/collapsible";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "../ui/empty";
@@ -266,6 +269,22 @@ const PROVIDER_STATUS_STYLES = {
     dot: "bg-warning",
   },
 } as const;
+
+function resolveProviderStatusKey(
+  availability: ProviderInstanceAvailability | null,
+  provider: ServerProvider | undefined,
+): keyof typeof PROVIDER_STATUS_STYLES {
+  if (availability === "disabled") {
+    return "disabled";
+  }
+  if (availability === "not-installed") {
+    return "warning";
+  }
+  if (provider?.status) {
+    return provider.status;
+  }
+  return availability === "ready" ? "ready" : "warning";
+}
 
 function getProviderSummary(provider: ServerProvider | undefined) {
   if (!provider) {
@@ -634,6 +653,10 @@ export function GeneralSettingsPanel() {
   const availableEditors = useServerAvailableEditors();
   const observability = useServerObservability();
   const serverProviders = useServerProviders();
+  const providerInstanceEntries = useMemo(
+    () => deriveProviderInstanceEntries(serverProviders),
+    [serverProviders],
+  );
   const codexHomePath = settings.providers.codex.homePath;
   const logsDirectoryPath = observability?.logsDirectoryPath ?? null;
   const diagnosticsDescription = (() => {
@@ -799,15 +822,19 @@ export function GeneralSettingsPanel() {
   );
 
   const providerCards = PROVIDER_SETTINGS.map((providerSettings) => {
-    const liveProvider = serverProviders.find(
-      (candidate) => candidate.provider === providerSettings.provider,
+    const providerInstance = providerInstanceEntries.find(
+      (candidate) => candidate.instanceId === providerSettings.provider,
     );
+    const liveProvider = providerInstance?.snapshot;
     const providerConfig = settings.providers[providerSettings.provider];
     const defaultProviderConfig = DEFAULT_UNIFIED_SETTINGS.providers[providerSettings.provider];
-    const statusKey = liveProvider?.status ?? (providerConfig.enabled ? "warning" : "disabled");
+    const statusKey = resolveProviderStatusKey(
+      providerInstance?.availability ?? null,
+      liveProvider,
+    );
     const summary = getProviderSummary(liveProvider);
     const models: ReadonlyArray<ServerProviderModel> =
-      liveProvider?.models ??
+      providerInstance?.models ??
       providerConfig.customModels.map((slug) => ({
         slug,
         name: slug,
@@ -827,6 +854,8 @@ export function GeneralSettingsPanel() {
       binaryCandidates: liveProvider?.binaryCandidates ?? [],
       binaryPathValue: providerConfig.binaryPath,
       isDirty: !Equal.equals(providerConfig, defaultProviderConfig),
+      displayName: providerInstance?.displayName ?? providerSettings.title,
+      availability: providerInstance?.availability ?? (providerConfig.enabled ? null : "disabled"),
       liveProvider,
       models,
       providerConfig,
@@ -1169,8 +1198,7 @@ export function GeneralSettingsPanel() {
         {providerCards.map((providerCard) => {
           const customModelInput = customModelInputByProvider[providerCard.provider];
           const customModelError = customModelErrorByProvider[providerCard.provider] ?? null;
-          const providerDisplayName =
-            PROVIDER_DISPLAY_NAMES[providerCard.provider] ?? providerCard.title;
+          const providerDisplayName = providerCard.displayName;
 
           return (
             <div key={providerCard.provider} className="border-t border-border first:border-t-0">
