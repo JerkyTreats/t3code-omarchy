@@ -12,7 +12,11 @@ import {
   resolveContextWindow,
   trimOrNull,
 } from "@t3tools/shared/model";
-import { getProviderInstanceEntry, getProviderInstanceModels } from "./providerInstances";
+import {
+  getProviderInstanceModels,
+  getProviderInstanceSnapshot,
+  getSelectableProviderInstanceEntry,
+} from "./providerInstances";
 
 const EMPTY_CAPABILITIES: ModelCapabilities = {
   reasoningEffortLevels: [],
@@ -33,7 +37,7 @@ export function getProviderSnapshot(
   providers: ReadonlyArray<ServerProvider>,
   provider: ProviderKind,
 ): ServerProvider | undefined {
-  return getProviderInstanceEntry(providers, provider)?.snapshot;
+  return getProviderInstanceSnapshot(providers, provider);
 }
 
 export function isProviderEnabled(
@@ -54,7 +58,7 @@ export function resolveSelectableProvider(
   if (isProviderEnabled(providers, requested)) {
     return requested;
   }
-  return providers.find((candidate) => candidate.enabled)?.provider ?? requested;
+  return getSelectableProviderInstanceEntry(providers, requested)?.driverKind ?? requested;
 }
 
 export function getProviderModelCapabilities(

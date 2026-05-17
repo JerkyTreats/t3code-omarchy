@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import type { ServerProvider } from "@t3tools/contracts";
 
 import {
+  deriveProviderInstanceEntryMap,
   deriveProviderInstanceEntries,
   getProviderInstanceEntry,
+  getSelectableProviderInstanceEntry,
   resolveSelectableProviderInstance,
 } from "./providerInstances";
 
@@ -45,6 +47,8 @@ describe("providerInstances compatibility shim", () => {
         driverKind: "cursor",
         displayName: "Cursor",
         isDefault: true,
+        availability: "ready",
+        isAvailable: true,
       }),
     ]);
   });
@@ -55,5 +59,37 @@ describe("providerInstances compatibility shim", () => {
     expect(getProviderInstanceEntry(providers, "claudeAgent")?.instanceId).toBe("claudeAgent");
     expect(resolveSelectableProviderInstance(providers, "codex")).toBe("claudeAgent");
     expect(resolveSelectableProviderInstance(providers, undefined)).toBe("claudeAgent");
+  });
+
+  it("derives canonical availability from enabled, installed, and runtime status", () => {
+    const entries = deriveProviderInstanceEntries([
+      createProvider("codex", { enabled: false }),
+      createProvider("claudeAgent", { installed: false }),
+      createProvider("cursor", { status: "warning" }),
+      createProvider("opencode"),
+    ]);
+
+    expect(
+      entries.map((entry) => [entry.instanceId, entry.availability, entry.isAvailable]),
+    ).toEqual([
+      ["codex", "disabled", false],
+      ["claudeAgent", "not-installed", false],
+      ["cursor", "unavailable", false],
+      ["opencode", "ready", true],
+    ]);
+  });
+
+  it("exposes map and selectable entry helpers from the same projection", () => {
+    const providers = [
+      createProvider("codex", { enabled: false, displayName: "Codex Stable" }),
+      createProvider("cursor", { status: "warning" }),
+      createProvider("opencode"),
+    ];
+
+    expect(deriveProviderInstanceEntryMap(providers).codex?.displayName).toBe("Codex Stable");
+    expect(getSelectableProviderInstanceEntry(providers, "codex")?.instanceId).toBe("cursor");
+    expect(getSelectableProviderInstanceEntry(providers, "cursor")?.availability).toBe(
+      "unavailable",
+    );
   });
 });
