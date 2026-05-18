@@ -5,6 +5,7 @@ import {
   type ModelSelection,
   type OrchestrationEvent,
   ProviderKind,
+  providerInstanceIdFromProviderKind,
   type OrchestrationSession,
   ThreadId,
   type ProviderSession,
@@ -60,7 +61,7 @@ function mapProviderSessionStatusToOrchestrationStatus(
       return "stopped";
     case "ready":
     default:
-      return "ready";
+      return "starting";
   }
 }
 
@@ -310,6 +311,9 @@ const make = Effect.gen(function* () {
       providerService.startSession(threadId, {
         threadId,
         ...(preferredProvider ? { provider: preferredProvider } : {}),
+        providerInstanceId:
+          desiredModelSelection.instanceId ??
+          providerInstanceIdFromProviderKind(desiredModelSelection.provider),
         ...(effectiveCwd ? { cwd: effectiveCwd } : {}),
         modelSelection: desiredModelSelection,
         ...(input?.resumeCursor !== undefined ? { resumeCursor: input.resumeCursor } : {}),
@@ -340,6 +344,15 @@ const make = Effect.gen(function* () {
         requestedModelSelection !== undefined &&
         requestedModelSelection.provider !== currentProvider;
       const activeSession = yield* resolveActiveSession(existingSessionThreadId);
+      const currentInstanceId =
+        activeSession?.providerInstanceId ??
+        thread.modelSelection.instanceId ??
+        providerInstanceIdFromProviderKind(threadProvider);
+      const desiredInstanceId =
+        requestedModelSelection?.instanceId ??
+        providerInstanceIdFromProviderKind(requestedModelSelection?.provider ?? threadProvider);
+      const providerInstanceChanged =
+        requestedModelSelection !== undefined && desiredInstanceId !== currentInstanceId;
       const sessionModelSwitch =
         currentProvider === undefined
           ? "in-session"
@@ -357,6 +370,7 @@ const make = Effect.gen(function* () {
       if (
         !runtimeModeChanged &&
         !providerChanged &&
+        !providerInstanceChanged &&
         !shouldRestartForModelChange &&
         !shouldRestartForModelSelectionChange
       ) {
@@ -364,7 +378,7 @@ const make = Effect.gen(function* () {
       }
 
       const resumeCursor =
-        providerChanged || shouldRestartForModelChange
+        providerChanged || providerInstanceChanged || shouldRestartForModelChange
           ? undefined
           : (activeSession?.resumeCursor ?? undefined);
       yield* Effect.logInfo("provider command reactor restarting provider session", {
@@ -376,6 +390,7 @@ const make = Effect.gen(function* () {
         desiredRuntimeMode: thread.runtimeMode,
         runtimeModeChanged,
         providerChanged,
+        providerInstanceChanged,
         modelChanged,
         shouldRestartForModelChange,
         shouldRestartForModelSelectionChange,
@@ -661,6 +676,20 @@ const make = Effect.gen(function* () {
 
     if (Option.isNone(sendTurnRequest)) {
       return;
+    }
+
+    const latestThread = yield* resolveThread(event.payload.threadId);
+    if (latestThread?.session) {
+      yield* setThreadSession({
+        threadId: event.payload.threadId,
+        session: {
+          ...latestThread.session,
+          status: "starting",
+          activeTurnId: event.payload.turnId ?? null,
+          updatedAt: event.payload.createdAt,
+        },
+        createdAt: event.payload.createdAt,
+      });
     }
 
     yield* providerService

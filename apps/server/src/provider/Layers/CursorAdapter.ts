@@ -43,6 +43,7 @@ import type * as EffectAcpSchema from "effect-acp/schema";
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
 import { ServerConfig } from "../../config.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
+import { resolveProviderSettingsForInstance } from "../providerInstanceSettings.ts";
 import {
   ProviderAdapterProcessError,
   ProviderAdapterRequestError,
@@ -307,7 +308,15 @@ function makeCursorAdapter(options?: CursorAdapterLiveOptions) {
     const makeEventStamp = () => Effect.all({ eventId: nextEventId, createdAt: nowIso });
 
     const offerRuntimeEvent = (event: ProviderRuntimeEvent) =>
-      PubSub.publish(runtimeEventPubSub, event).pipe(Effect.asVoid);
+      Effect.sync(() => {
+        const session = sessions.get(event.threadId)?.session;
+        return event.providerInstanceId || !session?.providerInstanceId
+          ? event
+          : { ...event, providerInstanceId: session.providerInstanceId };
+      }).pipe(
+        Effect.flatMap((nextEvent) => PubSub.publish(runtimeEventPubSub, nextEvent)),
+        Effect.asVoid,
+      );
 
     const getThreadSemaphore = (threadId: string) =>
       SynchronizedRef.modifyEffect(threadLocksRef, (current) => {
@@ -449,7 +458,13 @@ function makeCursorAdapter(options?: CursorAdapterLiveOptions) {
           }
 
           const cursorSettings = yield* serverSettingsService.getSettings.pipe(
-            Effect.map((settings) => settings.providers.cursor),
+            Effect.map((settings) =>
+              resolveProviderSettingsForInstance({
+                settings,
+                provider: PROVIDER,
+                instanceId: input.providerInstanceId,
+              }),
+            ),
             Effect.mapError(
               (error) =>
                 new ProviderAdapterProcessError({
@@ -673,7 +688,8 @@ function makeCursorAdapter(options?: CursorAdapterLiveOptions) {
           const now = yield* nowIso;
           const session: ProviderSession = {
             provider: PROVIDER,
-            providerInstanceId: providerInstanceIdFromProviderKind(PROVIDER),
+            providerInstanceId:
+              input.providerInstanceId ?? providerInstanceIdFromProviderKind(PROVIDER),
             status: "ready",
             runtimeMode: input.runtimeMode,
             cwd,

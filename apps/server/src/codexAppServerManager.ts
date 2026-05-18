@@ -14,6 +14,7 @@ import {
   TurnId,
   type ProviderApprovalDecision,
   type ProviderEvent,
+  type ProviderInstanceId,
   type ProviderSession,
   type ProviderTurnStartResult,
   RuntimeMode,
@@ -120,6 +121,7 @@ export interface CodexAppServerSendTurnInput {
 export interface CodexAppServerStartSessionInput {
   readonly threadId: ThreadId;
   readonly provider?: "codex";
+  readonly providerInstanceId?: ProviderInstanceId;
   readonly cwd?: string;
   readonly model?: string;
   readonly serviceTier?: string;
@@ -455,7 +457,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
 
       const session: ProviderSession = {
         provider: "codex",
-        providerInstanceId: providerInstanceIdFromProviderKind("codex"),
+        providerInstanceId: input.providerInstanceId ?? providerInstanceIdFromProviderKind("codex"),
         status: "connecting",
         runtimeMode: input.runtimeMode,
         model: normalizeCodexModelSlug(input.model),
@@ -655,6 +657,8 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
           id: EventId.makeUnsafe(randomUUID()),
           kind: "error",
           provider: "codex",
+          providerInstanceId:
+            input.providerInstanceId ?? providerInstanceIdFromProviderKind("codex"),
           threadId,
           createdAt: new Date().toISOString(),
           method: "session/startFailed",
@@ -1269,6 +1273,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
       id: EventId.makeUnsafe(randomUUID()),
       kind: "session",
       provider: "codex",
+      providerInstanceId: context.session.providerInstanceId,
       threadId: context.session.threadId,
       createdAt: new Date().toISOString(),
       method,
@@ -1281,6 +1286,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
       id: EventId.makeUnsafe(randomUUID()),
       kind: "error",
       provider: "codex",
+      providerInstanceId: context.session.providerInstanceId,
       threadId: context.session.threadId,
       createdAt: new Date().toISOString(),
       method,
@@ -1297,6 +1303,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
       id: EventId.makeUnsafe(randomUUID()),
       kind: "notification",
       provider: "codex",
+      providerInstanceId: context.session.providerInstanceId,
       threadId: context.session.threadId,
       createdAt: new Date().toISOString(),
       method,

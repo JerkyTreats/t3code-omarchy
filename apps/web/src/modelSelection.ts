@@ -2,6 +2,7 @@ import {
   DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER,
   type ModelSelection,
   type ProviderKind,
+  providerInstanceIdFromProviderKind,
   type ServerProvider,
 } from "@t3tools/contracts";
 import {
@@ -227,5 +228,8 @@ export function resolveAppModelSelectionState(
     provider,
     model,
     normalizeProviderOptionSelections(modelOptionsForDispatch),
+    provider === selection.provider
+      ? (selection.instanceId ?? providerInstanceIdFromProviderKind(provider))
+      : providerInstanceIdFromProviderKind(provider),
   );
 }

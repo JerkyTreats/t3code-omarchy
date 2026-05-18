@@ -1,4 +1,5 @@
 import type {
+  ProviderInstanceId,
   ProviderKind,
   ProviderSessionRuntimeStatus,
   RuntimeMode,
@@ -15,6 +16,7 @@ import type {
 export interface ProviderRuntimeBinding {
   readonly threadId: ThreadId;
   readonly provider: ProviderKind;
+  readonly providerInstanceId?: ProviderInstanceId | undefined;
   readonly adapterKey?: string;
   readonly status?: ProviderSessionRuntimeStatus;
   readonly resumeCursor?: unknown | null;

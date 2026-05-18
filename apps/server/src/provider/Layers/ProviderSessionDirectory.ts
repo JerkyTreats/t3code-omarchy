@@ -1,4 +1,9 @@
-import { ProviderKind, type ThreadId } from "@t3tools/contracts";
+import {
+  ProviderInstanceId,
+  ProviderKind,
+  providerInstanceIdFromProviderKind,
+  type ThreadId,
+} from "@t3tools/contracts";
 import { Effect, Layer, Option, Schema } from "effect";
 
 import { ProviderSessionRuntimeRepository } from "../../persistence/Services/ProviderSessionRuntime.ts";
@@ -23,15 +28,26 @@ function decodeProviderKind(
   providerName: string,
   operation: string,
 ): Effect.Effect<ProviderKind, ProviderSessionDirectoryPersistenceError> {
-  if (providerName === "codex" || providerName === "claudeAgent") {
-    return Effect.succeed(providerName);
-  }
-  return Effect.fail(
-    new ProviderSessionDirectoryPersistenceError({
-      operation,
-      detail: `Unknown persisted provider '${providerName}'.`,
-    }),
+  return Schema.decodeUnknownEffect(ProviderKind)(providerName).pipe(
+    Effect.mapError(
+      (cause) =>
+        new ProviderSessionDirectoryPersistenceError({
+          operation,
+          detail: `Unknown persisted provider '${providerName}'.`,
+          cause,
+        }),
+    ),
   );
+}
+
+function decodeProviderInstanceId(
+  adapterKey: string | undefined,
+  provider: ProviderKind,
+): ProviderInstanceId {
+  if (adapterKey && Schema.is(ProviderInstanceId)(adapterKey)) {
+    return ProviderInstanceId.make(adapterKey);
+  }
+  return providerInstanceIdFromProviderKind(provider);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -66,6 +82,7 @@ const makeProviderSessionDirectory = Effect.gen(function* () {
                 Option.some({
                   threadId: value.threadId,
                   provider,
+                  providerInstanceId: decodeProviderInstanceId(value.adapterKey, provider),
                   adapterKey: value.adapterKey,
                   runtimeMode: value.runtimeMode,
                   status: value.status,
@@ -93,15 +110,13 @@ const makeProviderSessionDirectory = Effect.gen(function* () {
     }
 
     const now = new Date().toISOString();
-    const providerChanged =
-      existingRuntime !== undefined && existingRuntime.providerName !== binding.provider;
+    const providerInstanceId =
+      binding.providerInstanceId ?? providerInstanceIdFromProviderKind(binding.provider);
     yield* repository
       .upsert({
         threadId: resolvedThreadId,
         providerName: binding.provider,
-        adapterKey:
-          binding.adapterKey ??
-          (providerChanged ? binding.provider : (existingRuntime?.adapterKey ?? binding.provider)),
+        adapterKey: binding.adapterKey ?? providerInstanceId,
         runtimeMode: binding.runtimeMode ?? existingRuntime?.runtimeMode ?? "full-access",
         status: binding.status ?? existingRuntime?.status ?? "running",
         lastSeenAt: now,
@@ -159,6 +174,7 @@ const makeProviderSessionDirectory = Effect.gen(function* () {
                   ({
                     threadId: row.threadId,
                     provider,
+                    providerInstanceId: decodeProviderInstanceId(row.adapterKey, provider),
                     adapterKey: row.adapterKey,
                     runtimeMode: row.runtimeMode,
                     status: row.status,

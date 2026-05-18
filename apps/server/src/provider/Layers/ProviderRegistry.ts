@@ -3,7 +3,11 @@
  *
  * @module ProviderRegistryLive
  */
-import type { ProviderKind, ServerProvider } from "@t3tools/contracts";
+import {
+  providerDriverKindFromProviderKind,
+  type ProviderKind,
+  type ServerProvider,
+} from "@t3tools/contracts";
 import { Effect, Equal, FileSystem, Layer, Path, PubSub, Ref, Stream } from "effect";
 
 import { ServerConfig } from "../../config.ts";
@@ -20,6 +24,8 @@ import { CursorProvider } from "../Services/CursorProvider.ts";
 import type { OpenCodeProviderShape } from "../Services/OpenCodeProvider.ts";
 import { OpenCodeProvider } from "../Services/OpenCodeProvider.ts";
 import { ProviderRegistry, type ProviderRegistryShape } from "../Services/ProviderRegistry.ts";
+import { ServerSettingsService } from "../../serverSettings.ts";
+import { configuredProviderInstanceRoutes } from "../providerInstanceSettings.ts";
 import {
   hydrateCachedProvider,
   mergeProviderSnapshot,
@@ -69,6 +75,7 @@ const ProviderRegistryLiveBase = Layer.effect(
     const openCodeProvider = yield* OpenCodeProvider;
     const cursorProvider = yield* CursorProvider;
     const config = yield* ServerConfig;
+    const serverSettings = yield* ServerSettingsService;
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
 
@@ -125,6 +132,35 @@ const ProviderRegistryLiveBase = Layer.effect(
       fallbackProviders.map((provider) => [provider.provider, provider] as const),
     );
 
+    const expandConfiguredProviderSnapshots = Effect.fn("expandConfiguredProviderSnapshots")(
+      function* (baseProviders: ReadonlyArray<ServerProvider>) {
+        const settings = yield* serverSettings.getSettings;
+        const baseByProvider = new Map(
+          baseProviders.map((provider) => [provider.provider, provider] as const),
+        );
+        return configuredProviderInstanceRoutes(settings)
+          .filter((route) => !route.isDefault)
+          .flatMap((route) => {
+            const base = baseByProvider.get(route.provider);
+            if (!base) return [];
+            return [
+              {
+                ...base,
+                instanceId: route.instanceId,
+                driver: providerDriverKindFromProviderKind(route.provider),
+                ...(route.displayName ? { displayName: route.displayName } : {}),
+                ...(route.accentColor ? { accentColor: route.accentColor } : {}),
+                enabled: route.enabled,
+                status: route.enabled ? base.status : "disabled",
+                continuation: {
+                  groupKey: `${route.provider}:instance:${route.instanceId}`,
+                },
+              } satisfies ServerProvider,
+            ];
+          });
+      },
+    );
+
     const cachedProviders = yield* Effect.forEach(
       activeProviders,
       (provider) => {
@@ -144,9 +180,14 @@ const ProviderRegistryLiveBase = Layer.effect(
       },
       { concurrency: "unbounded" },
     ).pipe(
-      Effect.map((providers) =>
-        orderProviderSnapshots(
-          providers.filter((provider): provider is ServerProvider => provider !== undefined),
+      Effect.flatMap((providers) =>
+        expandConfiguredProviderSnapshots(fallbackProviders).pipe(
+          Effect.map((configuredProviders) =>
+            orderProviderSnapshots([
+              ...providers.filter((provider): provider is ServerProvider => provider !== undefined),
+              ...configuredProviders,
+            ]),
+          ),
         ),
       ),
     );
@@ -154,7 +195,13 @@ const ProviderRegistryLiveBase = Layer.effect(
 
     const persistProvider = (provider: ServerProvider) =>
       writeProviderStatusCache({
-        filePath: cachePathByProvider.get(provider.provider)!,
+        filePath:
+          provider.instanceId !== undefined
+            ? resolveProviderStatusCachePath({
+                cacheDir: config.providerStatusCacheDir,
+                instanceId: provider.instanceId,
+              })
+            : cachePathByProvider.get(provider.provider)!,
         provider,
       }).pipe(
         Effect.provideService(FileSystem.FileSystem, fileSystem),
@@ -230,14 +277,20 @@ const ProviderRegistryLiveBase = Layer.effect(
           break;
       }
 
-      return yield* Effect.forEach(
+      yield* Effect.forEach(
         providerSources,
         (providerSource) => providerSource.refresh.pipe(Effect.flatMap(syncProvider)),
         {
           concurrency: "unbounded",
           discard: true,
         },
-      ).pipe(Effect.andThen(Ref.get(providersRef)));
+      );
+      const baseProviders = yield* Ref.get(providersRef);
+      const configuredProviders = yield* expandConfiguredProviderSnapshots(baseProviders);
+      if (configuredProviders.length > 0) {
+        yield* upsertProviders(configuredProviders);
+      }
+      return yield* Ref.get(providersRef);
     });
 
     yield* Stream.runForEach(codexProvider.streamChanges, (provider) =>
@@ -252,6 +305,7 @@ const ProviderRegistryLiveBase = Layer.effect(
     yield* Stream.runForEach(cursorProvider.streamChanges, (provider) =>
       syncProvider(provider),
     ).pipe(Effect.forkScoped);
+    yield* Stream.runForEach(serverSettings.streamChanges, () => refresh()).pipe(Effect.forkScoped);
     yield* Effect.yieldNow;
 
     return {

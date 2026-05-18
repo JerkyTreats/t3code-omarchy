@@ -66,6 +66,7 @@ import {
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
 import { ServerConfig } from "../../config.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
+import { resolveProviderSettingsForInstance } from "../providerInstanceSettings.ts";
 import { getClaudeModelCapabilities, resolveClaudeApiModelId } from "./ClaudeProvider.ts";
 import {
   ProviderAdapterProcessError,
@@ -946,7 +947,15 @@ const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
   const makeEventStamp = () => Effect.all({ eventId: nextEventId, createdAt: nowIso });
 
   const offerRuntimeEvent = (event: ProviderRuntimeEvent): Effect.Effect<void> =>
-    Queue.offer(runtimeEventQueue, event).pipe(Effect.asVoid);
+    Effect.sync(() => {
+      const session = sessions.get(event.threadId)?.session;
+      return event.providerInstanceId || !session?.providerInstanceId
+        ? event
+        : { ...event, providerInstanceId: session.providerInstanceId };
+    }).pipe(
+      Effect.flatMap((nextEvent) => Queue.offer(runtimeEventQueue, nextEvent)),
+      Effect.asVoid,
+    );
 
   const logNativeSdkMessage = Effect.fn("logNativeSdkMessage")(function* (
     context: ClaudeSessionContext,
@@ -2686,7 +2695,13 @@ const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         runPromise(canUseToolEffect(toolName, toolInput, callbackOptions));
 
       const claudeSettings = yield* serverSettingsService.getSettings.pipe(
-        Effect.map((settings) => settings.providers.claudeAgent),
+        Effect.map((settings) =>
+          resolveProviderSettingsForInstance({
+            settings,
+            provider: PROVIDER,
+            instanceId: input.providerInstanceId,
+          }),
+        ),
         Effect.mapError(
           (error) =>
             new ProviderAdapterProcessError({
@@ -2766,7 +2781,8 @@ const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
       const session: ProviderSession = {
         threadId,
         provider: PROVIDER,
-        providerInstanceId: providerInstanceIdFromProviderKind(PROVIDER),
+        providerInstanceId:
+          input.providerInstanceId ?? providerInstanceIdFromProviderKind(PROVIDER),
         status: "ready",
         runtimeMode: input.runtimeMode,
         ...(input.cwd ? { cwd: input.cwd } : {}),

@@ -45,6 +45,7 @@ import {
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
 import { ServerConfig } from "../../config.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
+import { resolveProviderSettingsForInstance } from "../providerInstanceSettings.ts";
 import { type EventNdjsonLogger, makeEventNdjsonLogger } from "./EventNdjsonLogger.ts";
 
 const PROVIDER = "codex" as const;
@@ -1673,7 +1674,13 @@ const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
       }
 
       const codexSettings = yield* serverSettingsService.getSettings.pipe(
-        Effect.map((settings) => settings.providers.codex),
+        Effect.map((settings) =>
+          resolveProviderSettingsForInstance({
+            settings,
+            provider: PROVIDER,
+            instanceId: input.providerInstanceId,
+          }),
+        ),
         Effect.mapError(
           (error) =>
             new ProviderAdapterProcessError({
@@ -1690,6 +1697,7 @@ const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
       const managerInput: CodexAppServerStartSessionInput = {
         threadId: input.threadId,
         provider: "codex",
+        ...(input.providerInstanceId ? { providerInstanceId: input.providerInstanceId } : {}),
         ...(input.cwd !== undefined ? { cwd: input.cwd } : {}),
         ...(input.resumeCursor !== undefined ? { resumeCursor: input.resumeCursor } : {}),
         runtimeMode: input.runtimeMode,

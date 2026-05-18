@@ -7,12 +7,21 @@
  *
  * @module ProviderAdapterRegistry
  */
-import type { ProviderKind } from "@t3tools/contracts";
+import type { ProviderDriverKind, ProviderInstanceId, ProviderKind } from "@t3tools/contracts";
 import { Context } from "effect";
 import type { Effect } from "effect";
 
 import type { ProviderAdapterError, ProviderUnsupportedError } from "../Errors.ts";
 import type { ProviderAdapterShape } from "./ProviderAdapter.ts";
+
+export interface ProviderInstanceRoutingInfo {
+  readonly instanceId: ProviderInstanceId;
+  readonly driverKind: ProviderDriverKind;
+  readonly provider: ProviderKind;
+  readonly displayName?: string | undefined;
+  readonly accentColor?: string | undefined;
+  readonly enabled: boolean;
+}
 
 /**
  * ProviderAdapterRegistryShape - Service API for adapter lookup by provider kind.
@@ -26,9 +35,28 @@ export interface ProviderAdapterRegistryShape {
   ) => Effect.Effect<ProviderAdapterShape<ProviderAdapterError>, ProviderUnsupportedError>;
 
   /**
+   * Resolve the adapter for a provider instance.
+   */
+  readonly getByInstance?: (
+    instanceId: ProviderInstanceId,
+  ) => Effect.Effect<ProviderAdapterShape<ProviderAdapterError>, ProviderUnsupportedError>;
+
+  /**
+   * Resolve routing metadata for a provider instance.
+   */
+  readonly getInstanceInfo?: (
+    instanceId: ProviderInstanceId,
+  ) => Effect.Effect<ProviderInstanceRoutingInfo, ProviderUnsupportedError>;
+
+  /**
    * List provider kinds currently registered.
    */
   readonly listProviders: () => Effect.Effect<ReadonlyArray<ProviderKind>>;
+
+  /**
+   * List currently registered provider instance ids.
+   */
+  readonly listInstances?: () => Effect.Effect<ReadonlyArray<ProviderInstanceId>>;
 }
 
 /**

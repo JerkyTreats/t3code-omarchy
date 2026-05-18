@@ -158,6 +158,12 @@ Primary upstream work:
 
 Files:
 
+- `packages/contracts/src/providerInstance.ts`
+- `packages/contracts/src/orchestration.ts`
+- `packages/contracts/src/provider.ts`
+- `packages/contracts/src/providerRuntime.ts`
+- `packages/contracts/src/settings.ts`
+- `apps/server/src/provider`
 - `apps/web/src/components/settings`
 - `apps/web/src/providerInstances.ts`
 - `apps/web/src/lib/providerReactQuery.ts`
@@ -184,6 +190,36 @@ Current branch outcome:
 - settings cards now consume provider-instance state in `d4617491`
 - composer picker gating and labels now consume provider-instance state in `7406295e`
 - sidebar shell audit found no further provider-state coupling to reconcile on this branch
+- provider instance identity seam landed in `c6b1f23e`
+- custom provider instances now materialize in provider registry snapshots without singleton service collisions
+- provider adapter routing, provider sessions, runtime events, recovery, and stop flows now carry `providerInstanceId`
+- composer and persisted model selection now preserve instance ids with legacy provider fallback
+- provider settings now expose add, enable, disable, and delete controls for custom instances in the fork settings layout
+
+Upstream comparison:
+
+- upstream `08e6d4cf` adds open provider instance contracts, provider instance settings, dynamic provider instance registry, per-instance adapter routing, provider session instance ids, model selection by instance id, and instance-aware web provider UI
+- upstream `460d9c3e` refactors provider settings forms onto declarative provider metadata after the instance substrate exists
+- this branch previously kept `ProviderInstanceId` and `ProviderDriverKind` as aliases for `ProviderKind`
+- this branch now has the additive contract, settings envelope, provider snapshot identity, cache identity, and web projection substrate from `08e6d4cf`
+- this branch now routes live provider adapters and provider sessions by provider instance id with legacy provider fallback
+- this branch now stores composer model selections with optional instance ids
+- this branch now exposes custom instance add, enable, disable, and delete settings controls
+- this branch adapts declarative settings work through the existing fork settings layout instead of taking the upstream settings route shape
+
+Completion target:
+
+- completed with fork-shaped instance-aware routing, settings, runtime events, session persistence, model selection, and registry materialization
+- preserved `F4`, `F10`, and existing provider runtime stability while replacing the compatibility shim
+
+Implementation order for this reopened lane:
+
+1. Complete upstream `08e6d4cf` contract and persistence compatibility. Done.
+2. Port provider session and runtime event instance ids. Done.
+3. Introduce the fork-shaped provider instance registry and adapter routing seam. Done.
+4. Route model selection and text generation through instance ids. Done.
+5. Adapt upstream instance settings UI and declarative provider settings forms. Done.
+6. Verify composer draft ownership, Codex binary selection, provider runtime recovery, and instance UI behavior. Done.
 
 ### Remote Connectivity And Hosted Frontend
 

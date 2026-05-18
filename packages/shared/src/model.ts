@@ -7,6 +7,7 @@ import {
   type LegacyProviderOptionSelectionsObject,
   type ModelCapabilities,
   type ModelSelection,
+  type ProviderInstanceId,
   type ProviderOptionDescriptor,
   type ProviderOptionSelection,
   type ProviderKind,
@@ -564,10 +565,12 @@ export function createModelSelection(
   provider: ProviderKind,
   model: string,
   options?: ReadonlyArray<ProviderOptionSelection> | null,
+  instanceId?: ProviderInstanceId | null,
 ): ModelSelection {
   const selections = options ? cloneSelections(options) : [];
   return {
     provider,
+    ...(instanceId ? { instanceId } : {}),
     model,
     ...(selections.length > 0 ? { options: selections } : {}),
   } as ModelSelection;

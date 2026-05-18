@@ -378,18 +378,36 @@ Provider status and settings can carry provider instance identity without collap
 - Provider status aggregation keys snapshots by instance identity so two snapshots with the same driver kind do not overwrite each other.
 - Server settings accept and preserve the `providerInstances` envelope for custom instance definitions.
 - Web provider instance projection uses `instanceId` as the routing identity and `driver` as presentation and capability context, with legacy provider kind fallback for older snapshots.
-- Full custom adapter materialization and turn routing remain owned by the provider runtime seam and must not replace fork composer draft ownership or Codex model and binary selection behavior.
+- Provider adapter routing, provider sessions, runtime events, recovery, and stop flows carry `providerInstanceId` while preserving legacy provider kind fallback.
+- Custom provider instances materialize as provider registry snapshots without duplicating singleton adapter event streams.
+- Provider settings expose custom instance add, enable, disable, and delete controls in the fork settings layout.
+- Full custom adapter materialization and turn routing remain owned by the provider runtime seam and must preserve fork composer draft ownership plus Codex model and binary selection behavior.
 
 ### Owner Modules
 
 - `packages/contracts/src/providerInstance.ts`
+- `packages/contracts/src/orchestration.ts`
 - `packages/contracts/src/server.ts`
 - `packages/contracts/src/settings.ts`
+- `packages/shared/src/model.ts`
 - `apps/server/src/provider/providerSnapshot.ts`
 - `apps/server/src/provider/providerStatusCache.ts`
+- `apps/server/src/provider/providerInstanceSettings.ts`
+- `apps/server/src/provider/Services/ProviderAdapterRegistry.ts`
+- `apps/server/src/provider/Services/ProviderSessionDirectory.ts`
 - `apps/server/src/provider/Layers/ProviderRegistry.ts`
+- `apps/server/src/provider/Layers/ProviderAdapterRegistry.ts`
+- `apps/server/src/provider/Layers/ProviderService.ts`
+- `apps/server/src/provider/Layers/ProviderSessionDirectory.ts`
+- `apps/server/src/provider/Layers/CodexAdapter.ts`
+- `apps/server/src/provider/Layers/ClaudeAdapter.ts`
+- `apps/server/src/provider/Layers/CursorAdapter.ts`
+- `apps/server/src/orchestration/Layers/ProviderCommandReactor.ts`
+- `apps/server/src/codexAppServerManager.ts`
 - `apps/web/src/providerInstances.ts`
 - `apps/web/src/providerModels.ts`
+- `apps/web/src/modelSelection.ts`
+- `apps/web/src/components/ChatView.tsx`
 - `apps/web/src/components/chat/ProviderModelPicker.tsx`
 - `apps/web/src/components/settings/SettingsPanels.tsx`
 
@@ -405,6 +423,9 @@ Provider status and settings can carry provider instance identity without collap
 - Instance aware provider snapshots decode with `instanceId`, `driver`, display metadata, and continuation metadata.
 - Provider status cache and aggregation preserve distinct snapshots that share a driver kind.
 - Web provider instance helpers keep custom instances distinct from default instances.
+- Provider service routes start, send, recover, and stop flows through `providerInstanceId`.
+- Composer model selection preserves custom instance ids across draft and persisted selections.
+- Settings can create, enable, disable, and delete custom provider instances.
 
 ## Change Procedure
 

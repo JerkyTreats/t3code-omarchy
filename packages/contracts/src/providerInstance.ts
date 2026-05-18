@@ -66,3 +66,8 @@ export const providerInstanceIdFromProviderKind = (provider: ProviderKind): Prov
 
 export const defaultInstanceIdForDriver = (driver: ProviderDriverKind): ProviderInstanceId =>
   ProviderInstanceId.make(driver);
+
+const providerKinds: ReadonlySet<string> = new Set(["codex", "claudeAgent", "cursor", "opencode"]);
+
+export const providerKindFromDriverKind = (driver: ProviderDriverKind): ProviderKind | undefined =>
+  providerKinds.has(driver) ? (driver as unknown as ProviderKind) : undefined;

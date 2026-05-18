@@ -15,6 +15,7 @@ import {
   type TurnId,
   OrchestrationThreadActivity,
   ProviderInteractionMode,
+  providerInstanceIdFromProviderKind,
   RuntimeMode,
   TerminalOpenInput,
 } from "@t3tools/contracts";
@@ -1055,6 +1056,11 @@ export default function ChatView({ threadId, conversationPanel = null }: ChatVie
     selectedProviderByThreadId ?? threadProvider ?? "codex",
   );
   const selectedProvider: ProviderKind = lockedProvider ?? unlockedSelectedProvider;
+  const selectedProviderInstanceId =
+    composerDraft.modelSelectionByProvider[selectedProvider]?.instanceId ??
+    activeThread?.modelSelection.instanceId ??
+    activeProject?.defaultModelSelection?.instanceId ??
+    providerInstanceIdFromProviderKind(selectedProvider);
   const { modelOptions: composerModelOptions, selectedModel } = useEffectiveComposerModelState({
     threadId,
     providers: providerStatuses,
@@ -1083,8 +1089,9 @@ export default function ChatView({ threadId, conversationPanel = null }: ChatVie
         selectedProvider,
         selectedModel,
         normalizeProviderOptionSelections(selectedModelOptionsForDispatch),
+        selectedProviderInstanceId,
       ),
-    [selectedModel, selectedModelOptionsForDispatch, selectedProvider],
+    [selectedModel, selectedModelOptionsForDispatch, selectedProvider, selectedProviderInstanceId],
   );
   const selectedModelForPicker = selectedModel;
   const phase = derivePhase(activeThread?.session ?? null);
@@ -2012,6 +2019,7 @@ export default function ChatView({ threadId, conversationPanel = null }: ChatVie
         input.modelSelection !== undefined &&
         (input.modelSelection.model !== serverThread.modelSelection.model ||
           input.modelSelection.provider !== serverThread.modelSelection.provider ||
+          input.modelSelection.instanceId !== serverThread.modelSelection.instanceId ||
           JSON.stringify(input.modelSelection.options ?? null) !==
             JSON.stringify(serverThread.modelSelection.options ?? null))
       ) {
@@ -3094,6 +3102,7 @@ export default function ChatView({ threadId, conversationPanel = null }: ChatVie
       const title = truncate(titleSeed);
       const threadCreateModelSelection: ModelSelection = {
         provider: selectedProvider,
+        instanceId: selectedProviderInstanceId,
         model:
           selectedModel ||
           activeProject.defaultModelSelection?.model ||
@@ -3625,7 +3634,11 @@ export default function ChatView({ threadId, conversationPanel = null }: ChatVie
   ]);
 
   const onProviderModelSelect = useCallback(
-    (provider: ProviderKind, model: string) => {
+    (
+      provider: ProviderKind,
+      model: string,
+      instanceId = providerInstanceIdFromProviderKind(provider),
+    ) => {
       if (!activeThread) return;
       if (lockedProvider !== null && provider !== lockedProvider) {
         scheduleComposerFocus();
@@ -3638,8 +3651,13 @@ export default function ChatView({ threadId, conversationPanel = null }: ChatVie
         providerStatuses,
         model,
       );
+      const resolvedInstanceId =
+        provider === resolvedProvider
+          ? instanceId
+          : providerInstanceIdFromProviderKind(resolvedProvider);
       const nextModelSelection: ModelSelection = {
         provider: resolvedProvider,
+        instanceId: resolvedInstanceId,
         model: resolvedModel,
       };
       setComposerDraftModelSelection(activeThread.id, nextModelSelection);
@@ -4470,6 +4488,7 @@ export default function ChatView({ threadId, conversationPanel = null }: ChatVie
                           <ProviderModelPicker
                             compact={isComposerFooterCompact}
                             provider={selectedProvider}
+                            providerInstanceId={selectedProviderInstanceId}
                             model={selectedModelForPickerWithCustomFallback}
                             lockedProvider={lockedProvider}
                             providers={providerStatuses}

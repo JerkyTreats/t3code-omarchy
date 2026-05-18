@@ -12,6 +12,8 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ProviderDriverKind,
+  ProviderInstanceId,
   type ProviderKind,
   type ServerProvider,
   type ServerProviderModel,
@@ -87,6 +89,8 @@ const THEME_OPTIONS = [
     label: "Dark",
   },
 ] as const;
+
+const PROVIDER_INSTANCE_ID_PATTERN = /^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/;
 
 const TIMESTAMP_FORMAT_LABELS = {
   locale: "System default",
@@ -625,6 +629,9 @@ export function GeneralSettingsPanel() {
       DEFAULT_UNIFIED_SETTINGS.providers.opencode,
     ),
   });
+  const [newProviderInstanceId, setNewProviderInstanceId] = useState("");
+  const [newProviderInstanceName, setNewProviderInstanceName] = useState("");
+  const [newProviderInstanceDriver, setNewProviderInstanceDriver] = useState<ProviderKind>("codex");
   const [customModelInputByProvider, setCustomModelInputByProvider] = useState<
     Record<ProviderKind, string>
   >({
@@ -823,6 +830,74 @@ export function GeneralSettingsPanel() {
       }));
     },
     [settings, updateSettings],
+  );
+
+  const createProviderInstance = useCallback(() => {
+    const instanceIdText = newProviderInstanceId.trim();
+    if (!PROVIDER_INSTANCE_ID_PATTERN.test(instanceIdText)) {
+      toastManager.add({
+        type: "error",
+        title: "Invalid instance id",
+        description: "Use letters, digits, dashes, or underscores, starting with a letter.",
+      });
+      return;
+    }
+    const instanceId = ProviderInstanceId.make(instanceIdText);
+    if (settings.providerInstances[instanceId] !== undefined) {
+      toastManager.add({
+        type: "error",
+        title: "Instance already exists",
+        description: "Choose a different instance id.",
+      });
+      return;
+    }
+    const displayName = newProviderInstanceName.trim();
+    updateSettings({
+      providerInstances: {
+        ...settings.providerInstances,
+        [instanceId]: {
+          driver: ProviderDriverKind.make(newProviderInstanceDriver),
+          ...(displayName ? { displayName } : {}),
+          enabled: true,
+          config: settings.providers[newProviderInstanceDriver],
+        },
+      },
+    });
+    setNewProviderInstanceId("");
+    setNewProviderInstanceName("");
+  }, [
+    newProviderInstanceDriver,
+    newProviderInstanceId,
+    newProviderInstanceName,
+    settings.providerInstances,
+    settings.providers,
+    updateSettings,
+  ]);
+
+  const deleteProviderInstance = useCallback(
+    (instanceId: ProviderInstanceId) => {
+      const nextProviderInstances = { ...settings.providerInstances };
+      delete nextProviderInstances[instanceId];
+      updateSettings({ providerInstances: nextProviderInstances });
+    },
+    [settings.providerInstances, updateSettings],
+  );
+
+  const setProviderInstanceEnabled = useCallback(
+    (instanceId: ProviderInstanceId, enabled: boolean) => {
+      const current = settings.providerInstances[instanceId];
+      if (!current) return;
+      updateSettings({
+        providerInstances: {
+          ...settings.providerInstances,
+          [instanceId]: {
+            ...current,
+            enabled,
+          },
+        },
+      });
+    },
+    [settings.providerInstances, updateSettings],
   );
 
   const providerCards = PROVIDER_SETTINGS.map((providerSettings) => {
@@ -1150,12 +1225,16 @@ export function GeneralSettingsPanel() {
                 modelOptionsByProvider={gitModelOptionsByProvider}
                 triggerVariant="outline"
                 triggerClassName="min-w-0 max-w-none shrink-0 text-foreground/90 hover:text-foreground"
-                onProviderModelChange={(provider, model) => {
+                onProviderModelChange={(provider, model, instanceId) => {
                   updateSettings({
                     textGenerationModelSelection: resolveAppModelSelectionState(
                       {
                         ...settings,
-                        textGenerationModelSelection: { provider, model },
+                        textGenerationModelSelection: {
+                          provider,
+                          ...(instanceId ? { instanceId } : {}),
+                          model,
+                        },
                       },
                       serverProviders,
                     ),
@@ -1184,6 +1263,7 @@ export function GeneralSettingsPanel() {
                           textGenProvider,
                           textGenModel,
                           normalizeProviderOptionSelections(nextOptions),
+                          textGenerationModelSelection.instanceId,
                         ),
                       },
                       serverProviders,
@@ -1225,6 +1305,125 @@ export function GeneralSettingsPanel() {
           </div>
         }
       >
+        <div className="border-t border-border first:border-t-0 px-4 py-4 sm:px-5">
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+              <div className="min-w-0 flex-1">
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                  Instance id
+                </label>
+                <Input
+                  value={newProviderInstanceId}
+                  onChange={(event) => setNewProviderInstanceId(event.target.value)}
+                  placeholder="codex_work"
+                />
+              </div>
+              <div className="min-w-0 flex-1">
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                  Display name
+                </label>
+                <Input
+                  value={newProviderInstanceName}
+                  onChange={(event) => setNewProviderInstanceName(event.target.value)}
+                  placeholder="Codex Work"
+                />
+              </div>
+              <div className="w-full sm:w-44">
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                  Driver
+                </label>
+                <Select
+                  value={newProviderInstanceDriver}
+                  onValueChange={(value) => {
+                    if (
+                      value === "codex" ||
+                      value === "claudeAgent" ||
+                      value === "cursor" ||
+                      value === "opencode"
+                    ) {
+                      setNewProviderInstanceDriver(value);
+                    }
+                  }}
+                >
+                  <SelectTrigger className="w-full" aria-label="Provider instance driver">
+                    <SelectValue>
+                      {PROVIDER_SETTINGS.find(
+                        (provider) => provider.provider === newProviderInstanceDriver,
+                      )?.title ?? "Codex"}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectPopup align="end" alignItemWithTrigger={false}>
+                    {PROVIDER_SETTINGS.map((provider) => (
+                      <SelectItem hideIndicator key={provider.provider} value={provider.provider}>
+                        {provider.title}
+                      </SelectItem>
+                    ))}
+                  </SelectPopup>
+                </Select>
+              </div>
+              <Button
+                size="sm"
+                className="h-9 shrink-0"
+                onClick={createProviderInstance}
+                disabled={!newProviderInstanceId.trim()}
+              >
+                <PlusIcon className="size-4" />
+                Add
+              </Button>
+            </div>
+
+            {providerInstanceEntries.some((entry) => !entry.isDefault) ? (
+              <div className="divide-y divide-border rounded-md border border-border">
+                {providerInstanceEntries
+                  .filter((entry) => !entry.isDefault)
+                  .map((entry) => {
+                    const config = settings.providerInstances[entry.instanceId];
+                    return (
+                      <div
+                        key={entry.instanceId}
+                        className="flex flex-col gap-3 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-foreground">
+                              {entry.displayName}
+                            </span>
+                            <code className="text-xs text-muted-foreground">
+                              {entry.instanceId}
+                            </code>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            {PROVIDER_SETTINGS.find(
+                              (provider) => provider.provider === entry.snapshot.provider,
+                            )?.title ?? entry.snapshot.provider}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 self-start sm:self-auto">
+                          <Switch
+                            checked={config?.enabled ?? entry.enabled}
+                            onCheckedChange={(checked) =>
+                              setProviderInstanceEnabled(entry.instanceId, Boolean(checked))
+                            }
+                            aria-label={`Enable ${entry.displayName}`}
+                          />
+                          <Button
+                            size="icon-xs"
+                            variant="ghost"
+                            className="size-7 rounded-sm p-0 text-muted-foreground hover:text-destructive"
+                            onClick={() => deleteProviderInstance(entry.instanceId)}
+                            aria-label={`Delete ${entry.displayName}`}
+                          >
+                            <XIcon className="size-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            ) : null}
+          </div>
+        </div>
+
         {providerCards.map((providerCard) => {
           const customModelInput = customModelInputByProvider[providerCard.provider];
           const customModelError = customModelErrorByProvider[providerCard.provider] ?? null;
