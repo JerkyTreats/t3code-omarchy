@@ -1,5 +1,10 @@
 import * as nodePath from "node:path";
-import { type ServerProvider, ServerProvider as ServerProviderSchema } from "@t3tools/contracts";
+import {
+  type ProviderInstanceId,
+  type ServerProvider,
+  ServerProvider as ServerProviderSchema,
+  providerInstanceIdFromProviderKind,
+} from "@t3tools/contracts";
 import { Cause, Effect, FileSystem, Path, Schema } from "effect";
 
 export const PROVIDER_CACHE_IDS = [
@@ -18,6 +23,9 @@ const providerOrderRank = (provider: ServerProvider["provider"]): number => {
   return rank === -1 ? Number.MAX_SAFE_INTEGER : rank;
 };
 
+export const providerSnapshotKey = (provider: ServerProvider): ProviderInstanceId =>
+  provider.instanceId ?? providerInstanceIdFromProviderKind(provider.provider);
+
 const mergeProviderModels = (
   fallbackModels: ReadonlyArray<ServerProvider["models"][number]>,
   cachedModels: ReadonlyArray<ServerProvider["models"][number]>,
@@ -30,7 +38,9 @@ export const orderProviderSnapshots = (
   providers: ReadonlyArray<ServerProvider>,
 ): ReadonlyArray<ServerProvider> =>
   [...providers].toSorted(
-    (left, right) => providerOrderRank(left.provider) - providerOrderRank(right.provider),
+    (left, right) =>
+      providerOrderRank(left.provider) - providerOrderRank(right.provider) ||
+      providerSnapshotKey(left).localeCompare(providerSnapshotKey(right)),
   );
 
 export const hydrateCachedProvider = (input: {
@@ -90,8 +100,14 @@ export const mergeProviderSnapshot = (
 
 export const resolveProviderStatusCachePath = (input: {
   readonly cacheDir: string;
-  readonly provider: ServerProvider["provider"];
-}) => nodePath.join(input.cacheDir, `${input.provider}.json`);
+  readonly provider?: ServerProvider["provider"];
+  readonly instanceId?: ProviderInstanceId;
+}) => {
+  const cacheId =
+    input.instanceId ??
+    (input.provider === undefined ? undefined : providerInstanceIdFromProviderKind(input.provider));
+  return nodePath.join(input.cacheDir, `${cacheId ?? "unknown"}.json`);
+};
 
 export const readProviderStatusCache = (filePath: string) =>
   Effect.gen(function* () {

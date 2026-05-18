@@ -12,6 +12,7 @@ import { KeybindingRule, ResolvedKeybindingsConfig } from "./keybindings.ts";
 import { EditorId } from "./editor.ts";
 import { ModelCapabilities } from "./model.ts";
 import { ProviderKind } from "./orchestration.ts";
+import { ProviderDriverKind, ProviderInstanceId } from "./providerInstance.ts";
 import { ServerSettings } from "./settings.ts";
 
 const KeybindingsMalformedConfigIssue = Schema.Struct({
@@ -90,10 +91,22 @@ export const ServerProviderSkill = Schema.Struct({
 });
 export type ServerProviderSkill = typeof ServerProviderSkill.Type;
 
+export const ServerProviderAvailability = Schema.Literals(["available", "unavailable"]);
+export type ServerProviderAvailability = typeof ServerProviderAvailability.Type;
+
+export const ServerProviderContinuation = Schema.Struct({
+  groupKey: TrimmedNonEmptyString,
+});
+export type ServerProviderContinuation = typeof ServerProviderContinuation.Type;
+
 export const ServerProvider = Schema.Struct({
   provider: ProviderKind,
+  instanceId: Schema.optional(ProviderInstanceId),
+  driver: Schema.optional(ProviderDriverKind),
   displayName: Schema.optional(TrimmedNonEmptyString),
+  accentColor: Schema.optional(TrimmedNonEmptyString),
   badgeLabel: Schema.optional(TrimmedNonEmptyString),
+  continuation: Schema.optional(ServerProviderContinuation),
   showInteractionModeToggle: Schema.optional(Schema.Boolean),
   enabled: Schema.Boolean,
   installed: Schema.Boolean,
@@ -102,6 +115,8 @@ export const ServerProvider = Schema.Struct({
   auth: ServerProviderAuth,
   checkedAt: IsoDateTime,
   message: Schema.optional(TrimmedNonEmptyString),
+  availability: Schema.optional(ServerProviderAvailability),
+  unavailableReason: Schema.optional(TrimmedNonEmptyString),
   models: Schema.Array(ServerProviderModel),
   slashCommands: Schema.Array(ServerProviderSlashCommand).pipe(
     Schema.withDecodingDefault(Effect.succeed([])),

@@ -25,6 +25,7 @@ import {
   mergeProviderSnapshot,
   PROVIDER_CACHE_IDS,
   orderProviderSnapshots,
+  providerSnapshotKey,
   readProviderStatusCache,
   resolveProviderStatusCachePath,
   writeProviderStatusCache,
@@ -172,14 +173,12 @@ const ProviderRegistryLiveBase = Layer.effect(
         providersRef,
         (previousProviders) => {
           const mergedProviders = new Map(
-            previousProviders.map((provider) => [provider.provider, provider] as const),
+            previousProviders.map((provider) => [providerSnapshotKey(provider), provider] as const),
           );
 
           for (const provider of nextProviders) {
-            mergedProviders.set(
-              provider.provider,
-              mergeProviderSnapshot(mergedProviders.get(provider.provider), provider),
-            );
+            const key = providerSnapshotKey(provider);
+            mergedProviders.set(key, mergeProviderSnapshot(mergedProviders.get(key), provider));
           }
 
           const providers = orderProviderSnapshots([...mergedProviders.values()]);

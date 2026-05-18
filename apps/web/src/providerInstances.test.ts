@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ServerProvider } from "@t3tools/contracts";
+import { ProviderInstanceId, type ServerProvider } from "@t3tools/contracts";
 
 import {
   deriveProviderInstanceEntryMap,
@@ -8,6 +8,8 @@ import {
   getSelectableProviderInstanceEntry,
   resolveSelectableProviderInstance,
 } from "./providerInstances";
+
+const instanceId = (value: string) => ProviderInstanceId.make(value);
 
 function createProvider(
   provider: ServerProvider["provider"],
@@ -28,7 +30,7 @@ function createProvider(
   };
 }
 
-describe("providerInstances compatibility shim", () => {
+describe("providerInstances", () => {
   it("projects each provider as a default instance entry", () => {
     const entries = deriveProviderInstanceEntries([
       createProvider("codex", { displayName: "Codex Stable" }),
@@ -56,8 +58,10 @@ describe("providerInstances compatibility shim", () => {
   it("falls back to the first enabled provider instance", () => {
     const providers = [createProvider("codex", { enabled: false }), createProvider("claudeAgent")];
 
-    expect(getProviderInstanceEntry(providers, "claudeAgent")?.instanceId).toBe("claudeAgent");
-    expect(resolveSelectableProviderInstance(providers, "codex")).toBe("claudeAgent");
+    expect(getProviderInstanceEntry(providers, instanceId("claudeAgent"))?.instanceId).toBe(
+      "claudeAgent",
+    );
+    expect(resolveSelectableProviderInstance(providers, instanceId("codex"))).toBe("claudeAgent");
     expect(resolveSelectableProviderInstance(providers, undefined)).toBe("claudeAgent");
   });
 
@@ -79,6 +83,34 @@ describe("providerInstances compatibility shim", () => {
     ]);
   });
 
+  it("keeps custom instances distinct from default instances of the same driver", () => {
+    const entries = deriveProviderInstanceEntries([
+      createProvider("codex"),
+      createProvider("codex", {
+        instanceId: instanceId("codex_work"),
+        driver: "codex" as ServerProvider["driver"],
+        displayName: "Codex",
+        accentColor: "#f97316",
+      }),
+    ]);
+
+    expect(entries).toEqual([
+      expect.objectContaining({
+        instanceId: "codex",
+        driverKind: "codex",
+        displayName: "Codex",
+        isDefault: true,
+      }),
+      expect.objectContaining({
+        instanceId: "codex_work",
+        driverKind: "codex",
+        displayName: "Codex Work",
+        accentColor: "#f97316",
+        isDefault: false,
+      }),
+    ]);
+  });
+
   it("exposes map and selectable entry helpers from the same projection", () => {
     const providers = [
       createProvider("codex", { enabled: false, displayName: "Codex Stable" }),
@@ -86,9 +118,13 @@ describe("providerInstances compatibility shim", () => {
       createProvider("opencode"),
     ];
 
-    expect(deriveProviderInstanceEntryMap(providers).codex?.displayName).toBe("Codex Stable");
-    expect(getSelectableProviderInstanceEntry(providers, "codex")?.instanceId).toBe("cursor");
-    expect(getSelectableProviderInstanceEntry(providers, "cursor")?.availability).toBe(
+    expect(deriveProviderInstanceEntryMap(providers)[instanceId("codex")]?.displayName).toBe(
+      "Codex Stable",
+    );
+    expect(getSelectableProviderInstanceEntry(providers, instanceId("codex"))?.instanceId).toBe(
+      "cursor",
+    );
+    expect(getSelectableProviderInstanceEntry(providers, instanceId("cursor"))?.availability).toBe(
       "unavailable",
     );
   });

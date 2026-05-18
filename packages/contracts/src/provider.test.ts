@@ -1,10 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { Schema } from "effect";
 
-import { ProviderSendTurnInput, ProviderSessionStartInput } from "./provider.ts";
+import {
+  ProviderEvent,
+  ProviderSendTurnInput,
+  ProviderSession,
+  ProviderSessionStartInput,
+} from "./provider.ts";
 
 const decodeProviderSessionStartInput = Schema.decodeUnknownSync(ProviderSessionStartInput);
 const decodeProviderSendTurnInput = Schema.decodeUnknownSync(ProviderSendTurnInput);
+const decodeProviderSession = Schema.decodeUnknownSync(ProviderSession);
+const decodeProviderEvent = Schema.decodeUnknownSync(ProviderEvent);
 const getOptionValue = (
   options:
     | ReadonlyArray<{ readonly id: string; readonly value: string | boolean }>
@@ -142,5 +149,68 @@ describe("ProviderSendTurnInput", () => {
     }
     expect(getOptionValue(parsed.modelSelection.options, "effort")).toBe("ultrathink");
     expect(getOptionValue(parsed.modelSelection.options, "fastMode")).toBe(true);
+  });
+});
+
+describe("providerInstanceId routing key", () => {
+  it("decodes legacy ProviderSessionStartInput without providerInstanceId", () => {
+    const parsed = decodeProviderSessionStartInput({
+      threadId: "thread-1",
+      provider: "codex",
+      runtimeMode: "full-access",
+    });
+
+    expect(parsed.providerInstanceId).toBeUndefined();
+  });
+
+  it("decodes ProviderSessionStartInput with providerInstanceId", () => {
+    const parsed = decodeProviderSessionStartInput({
+      threadId: "thread-1",
+      provider: "codex",
+      providerInstanceId: "codex_personal",
+      runtimeMode: "full-access",
+    });
+
+    expect(parsed.providerInstanceId).toBe("codex_personal");
+  });
+
+  it("propagates providerInstanceId through ProviderSession decode", () => {
+    const session = decodeProviderSession({
+      provider: "codex",
+      providerInstanceId: "codex_work",
+      status: "ready",
+      runtimeMode: "full-access",
+      threadId: "thread-1",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+
+    expect(session.providerInstanceId).toBe("codex_work");
+  });
+
+  it("decodes ProviderEvent carrying providerInstanceId", () => {
+    const event = decodeProviderEvent({
+      id: "event-1",
+      kind: "notification",
+      provider: "codex",
+      providerInstanceId: "codex_personal",
+      threadId: "thread-1",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      method: "session.created",
+    });
+
+    expect(event.provider).toBe("codex");
+    expect(event.providerInstanceId).toBe("codex_personal");
+  });
+
+  it("rejects providerInstanceId values that fail the slug pattern", () => {
+    expect(() =>
+      decodeProviderSessionStartInput({
+        threadId: "thread-1",
+        provider: "codex",
+        providerInstanceId: "not valid",
+        runtimeMode: "full-access",
+      }),
+    ).toThrow();
   });
 });

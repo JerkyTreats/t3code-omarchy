@@ -1,10 +1,16 @@
 import type {
   ModelCapabilities,
+  ProviderDriverKind,
+  ProviderInstanceId,
   ServerProvider,
   ServerProviderAuth,
   ServerProviderBinaryCandidate,
   ServerProviderModel,
   ServerProviderState,
+} from "@t3tools/contracts";
+import {
+  providerDriverKindFromProviderKind,
+  providerInstanceIdFromProviderKind,
 } from "@t3tools/contracts";
 import { Effect, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
@@ -134,13 +140,23 @@ export function providerModelsFromSettings(
 
 export function buildServerProvider(input: {
   provider: ServerProvider["provider"];
+  instanceId?: ProviderInstanceId | undefined;
+  driver?: ProviderDriverKind | undefined;
+  displayName?: string | undefined;
+  accentColor?: string | undefined;
   enabled: boolean;
   checkedAt: string;
   models: ReadonlyArray<ServerProviderModel>;
   probe: ProviderProbeResult;
 }): ServerProvider {
+  const driver = input.driver ?? providerDriverKindFromProviderKind(input.provider);
+  const instanceId = input.instanceId ?? providerInstanceIdFromProviderKind(input.provider);
   return {
     provider: input.provider,
+    instanceId,
+    driver,
+    ...(input.displayName ? { displayName: input.displayName } : {}),
+    ...(input.accentColor ? { accentColor: input.accentColor } : {}),
     enabled: input.enabled,
     installed: input.probe.installed,
     version: input.probe.version,

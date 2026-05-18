@@ -18,6 +18,7 @@ import {
   type ProviderTurnStartResult,
   RuntimeMode,
   ProviderInteractionMode,
+  providerInstanceIdFromProviderKind,
 } from "@t3tools/contracts";
 import { normalizeModelSlug } from "@t3tools/shared/model";
 import { Effect, Context } from "effect";
@@ -454,6 +455,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
 
       const session: ProviderSession = {
         provider: "codex",
+        providerInstanceId: providerInstanceIdFromProviderKind("codex"),
         status: "connecting",
         runtimeMode: input.runtimeMode,
         model: normalizeCodexModelSlug(input.model),

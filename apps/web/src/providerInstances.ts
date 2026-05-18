@@ -1,31 +1,76 @@
 import {
+  defaultInstanceIdForDriver,
   PROVIDER_DISPLAY_NAMES,
+  ProviderDriverKind,
+  ProviderInstanceId,
   type ProviderKind,
   type ServerProvider,
   type ServerProviderModel,
   type ServerProviderState,
 } from "@t3tools/contracts";
 
-export type ProviderInstanceId = ProviderKind;
-export type ProviderDriverKind = ProviderKind;
 export type ProviderInstanceAvailability = "ready" | "disabled" | "not-installed" | "unavailable";
 
 export interface ProviderInstanceEntry {
   readonly instanceId: ProviderInstanceId;
   readonly driverKind: ProviderDriverKind;
   readonly displayName: string;
+  readonly accentColor?: string | undefined;
+  readonly continuationGroupKey?: string | undefined;
   readonly enabled: boolean;
   readonly installed: boolean;
   readonly status: ServerProviderState;
-  readonly isDefault: true;
+  readonly isDefault: boolean;
   readonly isAvailable: boolean;
   readonly availability: ProviderInstanceAvailability;
   readonly snapshot: ServerProvider;
   readonly models: ReadonlyArray<ServerProviderModel>;
 }
 
-function resolveProviderDisplayName(snapshot: ServerProvider): string {
-  return snapshot.displayName?.trim() || PROVIDER_DISPLAY_NAMES[snapshot.provider];
+function toDriverKind(value: string): ProviderDriverKind {
+  return ProviderDriverKind.make(value);
+}
+
+function toInstanceId(value: string): ProviderInstanceId {
+  return ProviderInstanceId.make(value);
+}
+
+function humanizeInstanceId(instanceId: ProviderInstanceId): string {
+  return instanceId
+    .replace(/[_-]+/g, " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .split(" ")
+    .filter((token) => token.length > 0)
+    .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
+    .join(" ");
+}
+
+function driverKindLabel(driverKind: ProviderDriverKind, fallbackProvider: ProviderKind): string {
+  return PROVIDER_DISPLAY_NAMES[fallbackProvider] ?? driverKind;
+}
+
+export function normalizeProviderAccentColor(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  return /^#[0-9a-fA-F]{6}$/u.test(trimmed) ? trimmed : undefined;
+}
+
+function resolveProviderDisplayName(input: {
+  snapshot: ServerProvider;
+  instanceId: ProviderInstanceId;
+  driverKind: ProviderDriverKind;
+  isDefault: boolean;
+}): string {
+  const trimmedSnapshotName = input.snapshot.displayName?.trim();
+  const kindLabel = driverKindLabel(input.driverKind, input.snapshot.provider);
+  if (trimmedSnapshotName && trimmedSnapshotName !== kindLabel) {
+    return trimmedSnapshotName;
+  }
+  if (!input.isDefault) {
+    const humanized = humanizeInstanceId(input.instanceId);
+    if (humanized.length > 0) return humanized;
+  }
+  return trimmedSnapshotName || kindLabel;
 }
 
 function resolveProviderInstanceAvailability(
@@ -41,15 +86,20 @@ function resolveProviderInstanceAvailability(
 }
 
 function toProviderInstanceEntry(snapshot: ServerProvider): ProviderInstanceEntry {
+  const driverKind = snapshot.driver ?? toDriverKind(snapshot.provider);
+  const instanceId = snapshot.instanceId ?? toInstanceId(snapshot.provider);
+  const isDefault = instanceId === defaultInstanceIdForDriver(driverKind);
   const availability = resolveProviderInstanceAvailability(snapshot);
   return {
-    instanceId: snapshot.provider,
-    driverKind: snapshot.provider,
-    displayName: resolveProviderDisplayName(snapshot),
+    instanceId,
+    driverKind,
+    displayName: resolveProviderDisplayName({ snapshot, instanceId, driverKind, isDefault }),
+    accentColor: normalizeProviderAccentColor(snapshot.accentColor),
+    continuationGroupKey: snapshot.continuation?.groupKey,
     enabled: snapshot.enabled,
     installed: snapshot.installed,
     status: snapshot.status,
-    isDefault: true,
+    isDefault,
     isAvailable: availability === "ready",
     availability,
     snapshot,

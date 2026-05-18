@@ -6,6 +6,23 @@ import { ProviderRuntimeEvent } from "./providerRuntime.ts";
 const decodeRuntimeEvent = Schema.decodeUnknownSync(ProviderRuntimeEvent);
 
 describe("ProviderRuntimeEvent", () => {
+  it("accepts providerInstanceId on runtime events", () => {
+    const parsed = decodeRuntimeEvent({
+      type: "session.started",
+      eventId: "event-session-1",
+      provider: "codex",
+      providerInstanceId: "codex_work",
+      createdAt: "2026-02-28T00:00:00.000Z",
+      threadId: "thread-1",
+      payload: {
+        message: "started",
+      },
+    });
+
+    expect(parsed.provider).toBe("codex");
+    expect(parsed.providerInstanceId).toBe("codex_work");
+  });
+
   it("decodes turn.plan.updated for plan rendering", () => {
     const parsed = decodeRuntimeEvent({
       type: "turn.plan.updated",

@@ -39,6 +39,7 @@ import {
   TurnId,
   type ClaudeCodeEffort,
   type UserInputQuestion,
+  providerInstanceIdFromProviderKind,
 } from "@t3tools/contracts";
 import {
   applyClaudePromptEffortPrefix,
@@ -2765,6 +2766,7 @@ const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
       const session: ProviderSession = {
         threadId,
         provider: PROVIDER,
+        providerInstanceId: providerInstanceIdFromProviderKind(PROVIDER),
         status: "ready",
         runtimeMode: input.runtimeMode,
         ...(input.cwd ? { cwd: input.cwd } : {}),

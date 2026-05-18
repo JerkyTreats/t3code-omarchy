@@ -5,6 +5,8 @@ import { Effect, FileSystem } from "effect";
 
 import {
   hydrateCachedProvider,
+  orderProviderSnapshots,
+  providerSnapshotKey,
   readProviderStatusCache,
   resolveProviderStatusCachePath,
   writeProviderStatusCache,
@@ -172,5 +174,22 @@ it.layer(NodeServices.layer)("providerStatusCache", (it) => {
       }),
       disabledFallback,
     );
+  });
+
+  it("orders and keys snapshots by instance identity", () => {
+    const defaultCodex = makeProvider("codex");
+    const workCodex = makeProvider("codex", {
+      instanceId: "codex_work" as ServerProvider["instanceId"],
+      driver: "codex" as ServerProvider["driver"],
+      displayName: "Codex Work",
+    });
+    const claude = makeProvider("claudeAgent");
+
+    assert.equal(providerSnapshotKey(workCodex), "codex_work");
+    assert.deepStrictEqual(orderProviderSnapshots([claude, workCodex, defaultCodex]), [
+      defaultCodex,
+      workCodex,
+      claude,
+    ]);
   });
 });

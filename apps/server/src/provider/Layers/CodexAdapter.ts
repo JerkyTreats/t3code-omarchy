@@ -21,6 +21,7 @@ import {
   ThreadId,
   TurnId,
   ProviderSendTurnInput,
+  providerInstanceIdFromProviderKind,
 } from "@t3tools/contracts";
 import { Effect, FileSystem, Layer, Queue, Schema, Context, Stream } from "effect";
 import {
@@ -800,6 +801,8 @@ function runtimeEventBase(
   return {
     eventId: event.id,
     provider: event.provider,
+    providerInstanceId:
+      event.providerInstanceId ?? providerInstanceIdFromProviderKind(event.provider),
     threadId: canonicalThreadId,
     createdAt: event.createdAt,
     ...(turnId ? { turnId } : {}),

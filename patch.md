@@ -39,6 +39,7 @@ Use it together with [Upstream Merge Policy](governance/upstream_merge_policy.md
 - `F8` plan aware sidebar and activity status cues
 - `F9` plan markdown preview and markdown rendering behavior
 - `F10` Codex model and binary selection
+- `F12` provider instance identity seam
 
 ## F1 Branding And Release Identity
 
@@ -364,6 +365,46 @@ Codex provider setup follows the installed Codex app-server capability surface i
 - Settings show detected supported Codex binaries and selecting one persists its absolute path.
 - Restarting the desktop app keeps the configured Codex binary path for the backend process.
 - Explicit binary path pinning does not fall through to a newer PATH or environment binary unless the user selected bare `codex`.
+
+## F12 Provider Instance Identity Seam
+
+### Intent
+
+Provider status and settings can carry provider instance identity without collapsing every runtime view back to one provider kind row.
+
+### Required Behavior
+
+- Provider snapshots preserve legacy `provider` while carrying additive `instanceId` and `driver` fields when available.
+- Provider status aggregation keys snapshots by instance identity so two snapshots with the same driver kind do not overwrite each other.
+- Server settings accept and preserve the `providerInstances` envelope for custom instance definitions.
+- Web provider instance projection uses `instanceId` as the routing identity and `driver` as presentation and capability context, with legacy provider kind fallback for older snapshots.
+- Full custom adapter materialization and turn routing remain owned by the provider runtime seam and must not replace fork composer draft ownership or Codex model and binary selection behavior.
+
+### Owner Modules
+
+- `packages/contracts/src/providerInstance.ts`
+- `packages/contracts/src/server.ts`
+- `packages/contracts/src/settings.ts`
+- `apps/server/src/provider/providerSnapshot.ts`
+- `apps/server/src/provider/providerStatusCache.ts`
+- `apps/server/src/provider/Layers/ProviderRegistry.ts`
+- `apps/web/src/providerInstances.ts`
+- `apps/web/src/providerModels.ts`
+- `apps/web/src/components/chat/ProviderModelPicker.tsx`
+- `apps/web/src/components/settings/SettingsPanels.tsx`
+
+### Upstream Intake Rule
+
+- Adapt upstream provider instance work through the provider runtime seam so fork composer draft ownership, screenshot controls, and Codex model discovery remain intact.
+- Preserve legacy provider kind compatibility until all persisted thread, model selection, and session routing paths are instance aware.
+- Reject changes that drop unknown or unavailable instance data during settings decode or provider status projection.
+
+### Verification
+
+- Legacy provider snapshots decode without instance fields.
+- Instance aware provider snapshots decode with `instanceId`, `driver`, display metadata, and continuation metadata.
+- Provider status cache and aggregation preserve distinct snapshots that share a driver kind.
+- Web provider instance helpers keep custom instances distinct from default instances.
 
 ## Change Procedure
 

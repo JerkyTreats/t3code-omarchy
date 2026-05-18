@@ -18,6 +18,7 @@ import {
   type RuntimeMode,
   type ThreadId,
   TurnId,
+  providerInstanceIdFromProviderKind,
 } from "@t3tools/contracts";
 import {
   DateTime,
@@ -672,6 +673,7 @@ function makeCursorAdapter(options?: CursorAdapterLiveOptions) {
           const now = yield* nowIso;
           const session: ProviderSession = {
             provider: PROVIDER,
+            providerInstanceId: providerInstanceIdFromProviderKind(PROVIDER),
             status: "ready",
             runtimeMode: input.runtimeMode,
             cwd,

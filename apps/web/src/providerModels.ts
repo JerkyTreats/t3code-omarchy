@@ -1,5 +1,6 @@
 import {
   DEFAULT_MODEL_BY_PROVIDER,
+  ProviderInstanceId,
   type CursorModelOptions,
   type ModelCapabilities,
   type ProviderKind,
@@ -18,6 +19,9 @@ import {
   getSelectableProviderInstanceEntry,
 } from "./providerInstances";
 
+const providerInstanceIdFromLegacyProvider = (provider: ProviderKind): ProviderInstanceId =>
+  ProviderInstanceId.make(provider);
+
 const EMPTY_CAPABILITIES: ModelCapabilities = {
   reasoningEffortLevels: [],
   supportsFastMode: false,
@@ -30,14 +34,14 @@ export function getProviderModels(
   providers: ReadonlyArray<ServerProvider>,
   provider: ProviderKind,
 ): ReadonlyArray<ServerProviderModel> {
-  return getProviderInstanceModels(providers, provider);
+  return getProviderInstanceModels(providers, providerInstanceIdFromLegacyProvider(provider));
 }
 
 export function getProviderSnapshot(
   providers: ReadonlyArray<ServerProvider>,
   provider: ProviderKind,
 ): ServerProvider | undefined {
-  return getProviderInstanceSnapshot(providers, provider);
+  return getProviderInstanceSnapshot(providers, providerInstanceIdFromLegacyProvider(provider));
 }
 
 export function isProviderEnabled(
@@ -58,7 +62,11 @@ export function resolveSelectableProvider(
   if (isProviderEnabled(providers, requested)) {
     return requested;
   }
-  return getSelectableProviderInstanceEntry(providers, requested)?.driverKind ?? requested;
+  const entry = getSelectableProviderInstanceEntry(
+    providers,
+    providerInstanceIdFromLegacyProvider(requested),
+  );
+  return entry?.snapshot.provider ?? requested;
 }
 
 export function getProviderModelCapabilities(

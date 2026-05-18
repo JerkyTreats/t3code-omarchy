@@ -7,6 +7,7 @@ import {
   ProviderOptionSelections,
 } from "./model.ts";
 import { ModelSelection, ProviderKind } from "./orchestration.ts";
+import { ProviderInstanceConfig, ProviderInstanceConfigMap } from "./providerInstance.ts";
 
 export const TimestampFormat = Schema.Literals(["locale", "12-hour", "24-hour"]);
 export type TimestampFormat = typeof TimestampFormat.Type;
@@ -118,6 +119,7 @@ export const ServerSettings = Schema.Struct({
     cursor: CursorSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
     opencode: OpenCodeSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   }).pipe(Schema.withDecodingDefault(Effect.succeed({}))),
+  providerInstances: ProviderInstanceConfigMap.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   observability: ObservabilitySettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
 });
 export type ServerSettings = typeof ServerSettings.Type;
@@ -195,6 +197,15 @@ const OpenCodeSettingsPatch = Schema.Struct({
   customModels: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 
+const ProviderInstanceConfigPatch = Schema.Struct({
+  driver: Schema.optionalKey(ProviderInstanceConfig.fields.driver),
+  displayName: Schema.optionalKey(Schema.String),
+  accentColor: Schema.optionalKey(Schema.String),
+  environment: Schema.optionalKey(ProviderInstanceConfig.fields.environment),
+  enabled: Schema.optionalKey(Schema.Boolean),
+  config: Schema.optionalKey(Schema.Unknown),
+});
+
 export const ServerSettingsPatch = Schema.Struct({
   enableAssistantStreaming: Schema.optionalKey(Schema.Boolean),
   defaultThreadEnvMode: Schema.optionalKey(ThreadEnvMode),
@@ -212,6 +223,9 @@ export const ServerSettingsPatch = Schema.Struct({
       cursor: Schema.optionalKey(CursorSettingsPatch),
       opencode: Schema.optionalKey(OpenCodeSettingsPatch),
     }),
+  ),
+  providerInstances: Schema.optionalKey(
+    Schema.Record(ProviderInstanceConfigMap.key, ProviderInstanceConfigPatch),
   ),
 });
 export type ServerSettingsPatch = typeof ServerSettingsPatch.Type;
