@@ -1,11 +1,12 @@
 import {
   type ProviderInstanceConfig,
   type ProviderInstanceId,
-  type ProviderKind,
+  ProviderKind,
   type ServerSettings,
   providerInstanceIdFromProviderKind,
   providerKindFromDriverKind,
 } from "@t3tools/contracts";
+import { Schema } from "effect";
 
 type KnownProviderSettings = ServerSettings["providers"][ProviderKind];
 
@@ -28,7 +29,11 @@ export function resolveProviderInstanceRoute(input: {
   readonly provider?: ProviderKind | undefined;
   readonly instanceId?: ProviderInstanceId | undefined;
 }): ResolvedProviderInstanceRoute | undefined {
-  const fallbackProvider = input.provider ?? "codex";
+  const defaultProviderFromInstance =
+    input.instanceId !== undefined && Schema.is(ProviderKind)(input.instanceId)
+      ? input.instanceId
+      : undefined;
+  const fallbackProvider = input.provider ?? defaultProviderFromInstance ?? "codex";
   const fallbackInstanceId = providerInstanceIdFromProviderKind(fallbackProvider);
   const instanceId = input.instanceId ?? fallbackInstanceId;
   const instanceConfig = input.settings.providerInstances[instanceId];
@@ -54,6 +59,14 @@ export function resolveProviderInstanceRoute(input: {
       displayName: instanceConfig.displayName,
       accentColor: instanceConfig.accentColor,
     };
+  }
+
+  if (
+    input.provider === undefined &&
+    input.instanceId !== undefined &&
+    defaultProviderFromInstance === undefined
+  ) {
+    return undefined;
   }
 
   return {

@@ -1,4 +1,4 @@
-import type { ProviderKind } from "@t3tools/contracts";
+import { ProviderInstanceId, type ProviderKind } from "@t3tools/contracts";
 import { it, assert, vi } from "@effect/vitest";
 import { assertFailure } from "@effect/vitest/utils";
 
@@ -12,6 +12,7 @@ import { ProviderAdapterRegistry } from "../Services/ProviderAdapterRegistry.ts"
 import { ProviderAdapterRegistryLive } from "./ProviderAdapterRegistry.ts";
 import { ProviderUnsupportedError } from "../Errors.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { ServerSettingsService } from "../../serverSettings.ts";
 
 const fakeCodexAdapter: CodexAdapterShape = {
   provider: "codex",
@@ -57,6 +58,7 @@ const layer = it.layer(
       ),
     ),
     NodeServices.layer,
+    ServerSettingsService.layerTest(),
   ),
 );
 
@@ -71,6 +73,17 @@ layer("ProviderAdapterRegistryLive", (it) => {
 
       const providers = yield* registry.listProviders();
       assert.deepEqual(providers, ["codex", "claudeAgent"]);
+    }),
+  );
+
+  it.effect("resolves default provider instances with settings loaded", () =>
+    Effect.gen(function* () {
+      const registry = yield* ProviderAdapterRegistry;
+      if (registry.getByInstance === undefined) {
+        assert.fail("Expected provider instance lookup to be available.");
+      }
+      const claude = yield* registry.getByInstance(ProviderInstanceId.make("claudeAgent"));
+      assert.equal(claude, fakeClaudeAdapter);
     }),
   );
 
