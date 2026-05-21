@@ -850,6 +850,112 @@ describe("ProviderRuntimeIngestion", () => {
     expect(historicalPlanActivity).toBeUndefined();
   });
 
+  it("closes an active canonical turn when provider active turn lookup is stale", async () => {
+    const harness = await createHarness();
+    const providerTurnId = asTurnId("provider-turn-with-stale-active-lookup");
+    const canonicalTurnId = asTurnId("orch-turn:msg-stale-active-lookup");
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.makeUnsafe("cmd-turn-start-stale-active-lookup"),
+        threadId: asThreadId("thread-1"),
+        message: {
+          messageId: asMessageId("msg-stale-active-lookup"),
+          role: "user",
+          text: "continue",
+          attachments: [],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: new Date().toISOString(),
+      }),
+    );
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.session.set",
+        commandId: CommandId.makeUnsafe("cmd-session-set-stale-active-lookup"),
+        threadId: asThreadId("thread-1"),
+        session: {
+          threadId: asThreadId("thread-1"),
+          status: "running",
+          providerName: "codex",
+          runtimeMode: "approval-required",
+          activeTurnId: canonicalTurnId,
+          updatedAt: new Date().toISOString(),
+          lastError: null,
+        },
+        createdAt: new Date().toISOString(),
+      }),
+    );
+
+    harness.setProviderSession({
+      provider: "codex",
+      status: "running",
+      runtimeMode: "approval-required",
+      threadId: asThreadId("thread-1"),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    harness.emit({
+      type: "content.delta",
+      eventId: asEventId("evt-stale-active-lookup-delta"),
+      provider: "codex",
+      createdAt: new Date().toISOString(),
+      threadId: asThreadId("thread-1"),
+      turnId: providerTurnId,
+      itemId: asItemId("assistant-item-stale-active-lookup"),
+      payload: {
+        streamKind: "assistant_text",
+        delta: "Finished after stale lookup.",
+      },
+    });
+
+    harness.emit({
+      type: "item.completed",
+      eventId: asEventId("evt-stale-active-lookup-item-completed"),
+      provider: "codex",
+      createdAt: new Date().toISOString(),
+      threadId: asThreadId("thread-1"),
+      turnId: providerTurnId,
+      itemId: asItemId("assistant-item-stale-active-lookup"),
+      payload: {
+        itemType: "assistant_message",
+        detail: "Finished after stale lookup.",
+      },
+    });
+
+    harness.emit({
+      type: "turn.completed",
+      eventId: asEventId("evt-stale-active-lookup-turn-completed"),
+      provider: "codex",
+      createdAt: new Date().toISOString(),
+      threadId: asThreadId("thread-1"),
+      turnId: providerTurnId,
+      status: "completed",
+    });
+
+    const thread = await waitForThread(
+      harness.engine,
+      (entry) =>
+        entry.session?.status === "ready" &&
+        entry.session?.activeTurnId === null &&
+        entry.latestTurn?.turnId === canonicalTurnId,
+    );
+
+    const latestAssistantMessage = [...thread.messages]
+      .toReversed()
+      .find((message) => message.role === "assistant" && message.text.includes("stale lookup"));
+    expect(latestAssistantMessage?.turnId).toBe(canonicalTurnId);
+
+    const providerTurnMessage = thread.messages.find(
+      (message) => message.turnId === providerTurnId,
+    );
+    expect(providerTurnMessage).toBeUndefined();
+  });
+
   it("maps canonical content delta/item completed into finalized assistant messages", async () => {
     const harness = await createHarness();
     const now = new Date().toISOString();

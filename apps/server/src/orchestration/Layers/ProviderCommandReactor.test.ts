@@ -321,7 +321,7 @@ describe("ProviderCommandReactor", () => {
     const readModel = await Effect.runPromise(harness.engine.getReadModel());
     const thread = readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"));
     expect(thread?.session?.threadId).toBe("thread-1");
-    expect(thread?.session?.status).toBe("starting");
+    expect(thread?.session?.status).toBe("running");
     expect(thread?.session?.activeTurnId).toBe("orch-turn:user-message-1");
     expect(thread?.session?.runtimeMode).toBe("approval-required");
   });

@@ -256,6 +256,33 @@ const make = Effect.gen(function* () {
     });
   });
 
+  const markThreadTurnAccepted = Effect.fnUntraced(function* (input: {
+    readonly threadId: ThreadId;
+    readonly turnId: TurnId | null;
+    readonly createdAt: string;
+  }) {
+    const thread = yield* resolveThread(input.threadId);
+    const session = thread?.session;
+    if (!session || session.status !== "starting") {
+      return;
+    }
+    if (input.turnId !== null && !Equal.equals(session.activeTurnId, input.turnId)) {
+      return;
+    }
+
+    yield* setThreadSession({
+      threadId: input.threadId,
+      session: {
+        ...session,
+        status: "running",
+        activeTurnId: session.activeTurnId,
+        lastError: null,
+        updatedAt: input.createdAt,
+      },
+      createdAt: input.createdAt,
+    });
+  });
+
   const resolveThread = Effect.fnUntraced(function* (threadId: ThreadId) {
     const readModel = yield* orchestrationEngine.getReadModel();
     return readModel.threads.find((entry) => entry.id === threadId);
@@ -692,9 +719,17 @@ const make = Effect.gen(function* () {
       });
     }
 
-    yield* providerService
-      .sendTurn(sendTurnRequest.value)
-      .pipe(Effect.catchCause(recoverTurnStartFailure), Effect.forkScoped);
+    yield* providerService.sendTurn(sendTurnRequest.value).pipe(
+      Effect.tap(() =>
+        markThreadTurnAccepted({
+          threadId: event.payload.threadId,
+          turnId: event.payload.turnId ?? null,
+          createdAt: new Date().toISOString(),
+        }),
+      ),
+      Effect.catchCause(recoverTurnStartFailure),
+      Effect.forkScoped,
+    );
   });
 
   const processTurnInterruptRequested = Effect.fn("processTurnInterruptRequested")(function* (

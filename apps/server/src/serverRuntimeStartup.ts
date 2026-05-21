@@ -26,6 +26,7 @@ import { Open } from "./open.ts";
 import { OrchestrationEngineService } from "./orchestration/Services/OrchestrationEngine.ts";
 import { ProjectionSnapshotQuery } from "./orchestration/Services/ProjectionSnapshotQuery.ts";
 import { OrchestrationReactor } from "./orchestration/Services/OrchestrationReactor.ts";
+import { ProviderSessionReaper } from "./provider/Services/ProviderSessionReaper.ts";
 import { ServerLifecycleEvents } from "./serverLifecycleEvents.ts";
 import { ServerSettingsService } from "./serverSettings.ts";
 import { AnalyticsService } from "./telemetry/Services/AnalyticsService.ts";
@@ -264,6 +265,7 @@ const makeServerRuntimeStartup = Effect.gen(function* () {
   const serverEnvironment = yield* ServerEnvironment;
   const keybindings = yield* Keybindings;
   const orchestrationReactor = yield* OrchestrationReactor;
+  const providerSessionReaper = yield* ProviderSessionReaper;
   const lifecycleEvents = yield* ServerLifecycleEvents;
   const serverSettings = yield* ServerSettingsService;
 
@@ -308,6 +310,12 @@ const makeServerRuntimeStartup = Effect.gen(function* () {
     yield* runStartupPhase(
       "reactors.start",
       orchestrationReactor.start().pipe(Scope.provide(reactorScope)),
+    );
+
+    yield* Effect.logDebug("startup phase: starting provider session reaper");
+    yield* runStartupPhase(
+      "provider-session-reaper.start",
+      providerSessionReaper.start().pipe(Scope.provide(reactorScope)),
     );
 
     yield* Effect.logDebug("startup phase: preparing welcome payload");

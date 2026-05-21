@@ -138,6 +138,10 @@ describe("ProviderSessionReaper", () => {
             })) as ReturnType<ProviderServiceShape["stopSession"]>,
     );
 
+    const dispatch = vi.fn<OrchestrationEngineShape["dispatch"]>((command) =>
+      Effect.succeed({ sequence: command.commandId ? 1 : 0 }),
+    );
+
     const providerService: ProviderServiceShape = {
       startSession: () => unsupported(),
       sendTurn: () => unsupported(),
@@ -154,7 +158,7 @@ describe("ProviderSessionReaper", () => {
     const orchestrationEngine: OrchestrationEngineShape = {
       getReadModel: () => Effect.succeed(input.readModel as never),
       readEvents: () => Stream.empty,
-      dispatch: () => unsupported(),
+      dispatch,
       streamDomainEvents: Stream.empty,
     };
 
@@ -176,7 +180,7 @@ describe("ProviderSessionReaper", () => {
     );
 
     runtime = ManagedRuntime.make(layer);
-    return { stopSession, stoppedThreadIds };
+    return { stopSession, stoppedThreadIds, dispatch };
   }
 
   it("reaps stale persisted sessions without active turns", async () => {
@@ -360,8 +364,127 @@ describe("ProviderSessionReaper", () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     expect(harness.stopSession).not.toHaveBeenCalled();
+    expect(harness.dispatch).not.toHaveBeenCalled();
     const remaining = await runtime!.runPromise(repository.getByThreadId({ threadId }));
     expect(Option.isSome(remaining)).toBe(true);
+  });
+
+  it("reconciles stopped runtime bindings into the orchestration session projection", async () => {
+    const threadId = ThreadId.makeUnsafe("thread-reaper-stopped-runtime");
+    const turnId = TurnId.makeUnsafe("turn-reaper-stopped-runtime");
+    const now = new Date().toISOString();
+    const harness = await createHarness({
+      readModel: makeReadModel([
+        {
+          id: threadId,
+          session: {
+            threadId,
+            status: "starting",
+            providerName: "codex",
+            runtimeMode: "full-access",
+            activeTurnId: turnId,
+            lastError: null,
+            updatedAt: now,
+          },
+        },
+      ]),
+    });
+    const repository = await runtime!.runPromise(Effect.service(ProviderSessionRuntimeRepository));
+
+    await runtime!.runPromise(
+      repository.upsert({
+        threadId,
+        providerName: "codex",
+        adapterKey: "codex",
+        runtimeMode: "full-access",
+        status: "stopped",
+        lastSeenAt: "2026-04-14T00:00:00.000Z",
+        resumeCursor: {
+          opaque: "resume-stopped-runtime",
+        },
+        runtimePayload: null,
+      }),
+    );
+
+    const reaper = await runtime!.runPromise(Effect.service(ProviderSessionReaper));
+    scope = await Effect.runPromise(Scope.make("sequential"));
+    await Effect.runPromise(reaper.start().pipe(Scope.provide(scope)));
+
+    await waitFor(() => harness.dispatch.mock.calls.length === 1);
+
+    expect(harness.stopSession).not.toHaveBeenCalled();
+    expect(harness.dispatch.mock.calls[0]?.[0]).toMatchObject({
+      type: "thread.session.set",
+      threadId,
+      session: {
+        threadId,
+        status: "stopped",
+        providerName: "codex",
+        runtimeMode: "full-access",
+        activeTurnId: null,
+        lastError: null,
+      },
+    });
+  });
+
+  it("reconciles running runtime bindings out of the starting projection state", async () => {
+    const threadId = ThreadId.makeUnsafe("thread-reaper-running-runtime");
+    const turnId = TurnId.makeUnsafe("orch-turn:thread-reaper-running-runtime");
+    const now = new Date().toISOString();
+    const harness = await createHarness({
+      readModel: makeReadModel([
+        {
+          id: threadId,
+          session: {
+            threadId,
+            status: "starting",
+            providerName: "codex",
+            runtimeMode: "full-access",
+            activeTurnId: turnId,
+            lastError: "stale connection",
+            updatedAt: now,
+          },
+        },
+      ]),
+    });
+    const repository = await runtime!.runPromise(Effect.service(ProviderSessionRuntimeRepository));
+
+    await runtime!.runPromise(
+      repository.upsert({
+        threadId,
+        providerName: "codex",
+        adapterKey: "codex",
+        runtimeMode: "full-access",
+        status: "running",
+        lastSeenAt: now,
+        resumeCursor: {
+          opaque: "resume-running-runtime",
+        },
+        runtimePayload: {
+          activeTurnId: "provider-turn-running-runtime",
+        },
+      }),
+    );
+
+    const reaper = await runtime!.runPromise(Effect.service(ProviderSessionReaper));
+    scope = await Effect.runPromise(Scope.make("sequential"));
+    await Effect.runPromise(reaper.start().pipe(Scope.provide(scope)));
+
+    await waitFor(() => harness.dispatch.mock.calls.length === 1);
+
+    expect(harness.stopSession).not.toHaveBeenCalled();
+    expect(harness.dispatch.mock.calls[0]?.[0]).toMatchObject({
+      type: "thread.session.set",
+      threadId,
+      session: {
+        threadId,
+        status: "running",
+        providerName: "codex",
+        runtimeMode: "full-access",
+        activeTurnId: turnId,
+        lastError: null,
+      },
+    });
   });
 
   it("continues reaping other sessions when one stop attempt fails", async () => {
