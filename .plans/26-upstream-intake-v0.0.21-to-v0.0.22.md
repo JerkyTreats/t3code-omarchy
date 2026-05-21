@@ -353,8 +353,8 @@ Completed upstream slices on this branch:
 
 - source control and VCS completion
   - upstream coverage: `6d7fe2ee`, `0ce7e56e`, `91a03e07`, `d7969264`
-  - local checkpoints: `168beb8f`, `be08033f`, `fe8f2145`, `e0c35a8f`, `19647490`, `c6667bcc`, `6f7e8c77`
-  - status revision: reopened after upstream comparison found missing repository lookup, clone, publish, GitLab, Azure DevOps, and Bitbucket product workflows
+  - local checkpoints: `168beb8f`, `be08033f`, `fe8f2145`, `e0c35a8f`, `19647490`, `c6667bcc`, `6f7e8c77`, `060c8a0f`
+  - status revision: closed after repository lookup, clone, publish, GitLab, Azure DevOps, and Bitbucket product workflows landed
 
 - remote and hosted completion
   - upstream coverage: `3772fa12`, `8f50ca8e`
@@ -371,22 +371,97 @@ Completed upstream slices on this branch:
 Current `0.22` state:
 
 - runtime, remote, multi-provider shell, diff, markdown, and mobile presentation lanes are complete on branch
-- source control and VCS foundation is partial and reopened for provider workflow parity
+- source control and VCS provider workflow parity is complete on branch
+- provider skills and slash commands are complete on branch
+- auth access management UI and transport are complete on branch
 - the release-line reconciliation is recorded in this note
+
+## Remaining Fork Concerns
+
+### Provider Skills And Slash Commands
+
+Truth:
+
+- upstream discovers Codex skills and Claude slash commands, then exposes them through provider status for composer use
+- this branch now carries Claude slash commands through provider snapshot construction
+- this branch now shows provider slash commands in the composer slash command menu for the selected provider instance
+- this branch now discovers Codex skills from app-server capability discovery
+- this branch now renders composer skill chips and supports skill menu filtering
+- cache fallback plumbing exists for commands and skills
+
+Closeout plan:
+
+1. Add provider capability discovery for Claude slash commands. Done.
+2. Preserve provider instance identity when rendering slash command metadata. Done.
+3. Expose discovered commands through server provider snapshots without breaking existing empty-array clients. Done.
+4. Add composer command search and insertion flow that consumes the selected provider snapshot. Done.
+5. Add Codex skill discovery and composer skill chip rendering. Done.
+6. Cover skill discovery, cache fallback, provider refresh, composer filtering, and command dispatch with targeted tests. Done.
+
+Current branch outcome:
+
+- `buildServerProvider` accepts slash command metadata while preserving empty-array defaults
+- Claude capability discovery returns slash commands from SDK initialization metadata
+- Codex capability discovery returns skill metadata from `skills/list`
+- composer slash command search includes built-in commands and provider commands from the active provider instance
+- selecting a provider slash command inserts the provider command into the active draft
+- composer skill search includes enabled skills from the active provider instance
+- selecting a provider skill inserts the `$skill` token into the active draft and renders it as a chip when metadata is available
+
+Acceptance:
+
+- provider snapshots contain real skills and slash commands when the backing provider exposes them
+- composer command UI appears only when commands or skills are available
+- Codex and Claude metadata remain provider-instance aware
+- existing sessions without commands or skills behave exactly as today
+
+### Auth Access Management
+
+Truth:
+
+- backend auth control-plane services can create, list, and revoke pairing links and sessions
+- current web settings still preserve pasting a pairing link and managing saved environments
+- create and revoke pairing-link actions are now exposed through RPC and NativeApi for the settings UI
+- connected session management is now surfaced as a complete user workflow
+
+Closeout plan:
+
+1. Add additive auth access RPC and NativeApi methods for pairing link creation, pairing link revocation, session listing, and session revocation. Done.
+2. Wire web clients and React Query mutations for those methods. Done.
+3. Expand Connections settings with active access state, generated pairing links, revoke actions, and connected session controls. Done.
+4. Keep existing paste pairing-link and saved environment workflows unchanged. Done.
+5. Ensure hosted and desktop modes hide actions when the active transport lacks access-management capability. Done.
+6. Cover RPC contracts, native adapters, settings UI state, create flow, revoke flow, and saved environment regression with targeted tests. Done.
+
+Current branch outcome:
+
+- WebSocket RPC exposes auth access snapshot, pairing credential creation, pairing link revocation, session revocation, and other-session revocation
+- NativeApi exposes the auth access surface through the RPC-backed adapter
+- Connections settings can create pairing links, revoke pairing links, list client sessions, revoke client sessions, and revoke other client sessions
+- existing paste pairing-link, saved environment reconnect, disconnect, and forget workflows remain unchanged
+
+Acceptance:
+
+- Connections settings can create a pairing link without manual CLI work
+- Connections settings can revoke active pairing links
+- Connections settings can list and revoke connected sessions where supported
+- saved environment pairing and reconnect flows continue to work unchanged
 
 ## Implementation Order
 
-1. complete source control provider product workflows
-2. complete startup and runtime efficiency verification
-3. complete remote connectivity and hosted verification
-4. finish diff, mobile shell, and markdown verification
-5. record final parity outcome in this intake note
+1. complete provider skills and slash commands. Done.
+2. complete auth access management UI and transport. Done.
+3. complete final startup and runtime efficiency verification. Done.
+4. complete final hosted and remote verification. Done.
+5. record final parity outcome in this intake note. Done.
 
 ## Verification Focus
 
 - startup time and reconnect behavior improve without breaking local workflow
 - source control discovery preserves fork GitHub identity and promotion semantics
 - provider-instance settings do not regress shell or composer ownership
+- provider skills and slash commands preserve provider instance routing
+- auth access management preserves local-first desktop pairing and saved environment behavior
 - hosted and remote features do not disturb local-first desktop behavior
 - diff, markdown, and mobile shell changes preserve protected plan and preview flows
 
@@ -394,8 +469,6 @@ Current `0.22` state:
 
 `v0.0.21 -> v0.0.22` should be integrated in staged slices with explicit seam ownership.
 
-The remote-hosted, multi-provider shell, and protected shell-presentation lanes are now complete on branch.
+The remote-hosted, multi-provider shell, source control, protected shell-presentation, provider metadata, and auth access lanes are now complete on branch.
 
-The source control lane is reopened. Finish Git provider parity first, starting with repository lookup, clone, publish, GitLab, Azure DevOps, and Bitbucket workflow wiring.
-
-`v0.0.21 -> v0.0.22` is not complete on this branch until that source control provider lane is closed.
+`v0.0.21 -> v0.0.22` product parity is complete on this branch.

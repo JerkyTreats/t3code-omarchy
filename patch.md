@@ -41,6 +41,7 @@ Use it together with [Upstream Merge Policy](governance/upstream_merge_policy.md
 - `F10` Codex model and binary selection
 - `F11` source control provider lane and publish workflow
 - `F12` provider instance identity seam
+- `F13` auth access management
 
 ## F1 Branding And Release Identity
 
@@ -334,6 +335,7 @@ Codex provider setup follows the installed Codex app-server capability surface i
 ### Required Behavior
 
 - Codex provider models prefer `model/list` from the selected Codex app-server when available.
+- Codex provider skills prefer `skills/list` from the selected Codex app-server when available.
 - Built in Codex models remain only as a fallback when app-server model discovery is unavailable.
 - Custom Codex models configured by the user remain merged into the provider model list.
 - App-server initialization uses the resolved Codex CLI version as the client version so newer models are not rejected as requiring a newer Codex.
@@ -362,6 +364,7 @@ Codex provider setup follows the installed Codex app-server capability surface i
 ### Verification
 
 - A Codex app-server `model/list` response containing a new model such as `gpt-5.5` appears in the Codex model selector without a code update to the built in fallback list.
+- A Codex app-server `skills/list` response containing an enabled skill appears in provider status and can be used by the composer.
 - App-server initialize sends the resolved Codex CLI version as `clientInfo.version`.
 - Settings show detected supported Codex binaries and selecting one persists its absolute path.
 - Restarting the desktop app keeps the configured Codex binary path for the backend process.
@@ -433,6 +436,8 @@ Provider status and settings can carry provider instance identity without collap
 - Custom provider instances materialize as provider registry snapshots without duplicating singleton adapter event streams.
 - Provider settings expose custom instance add, enable, disable, and delete controls in the fork settings layout.
 - Provider snapshots may carry provider slash commands, and the composer slash command menu must read commands from the active provider instance snapshot.
+- Provider snapshots may carry provider skills, and the composer skill menu must read skills from the active provider instance snapshot.
+- Composer skill tokens render as `$skill` chips when metadata is available while preserving the raw prompt token value.
 - Full custom adapter materialization and turn routing remain owned by the provider runtime seam and must preserve fork composer draft ownership plus Codex model and binary selection behavior.
 
 ### Owner Modules
@@ -463,6 +468,10 @@ Provider status and settings can carry provider instance identity without collap
 - `apps/web/src/components/ChatView.tsx`
 - `apps/web/src/components/chat/ComposerCommandMenu.tsx`
 - `apps/web/src/components/chat/composerSlashCommandSearch.ts`
+- `apps/web/src/providerSkillPresentation.ts`
+- `apps/web/src/composer-editor-mentions.ts`
+- `apps/web/src/composer-logic.ts`
+- `apps/web/src/components/ComposerPromptEditor.tsx`
 - `apps/web/src/components/chat/ProviderModelPicker.tsx`
 - `apps/web/src/components/settings/SettingsPanels.tsx`
 
@@ -483,6 +492,51 @@ Provider status and settings can carry provider instance identity without collap
 - Settings can create, enable, disable, and delete custom provider instances.
 - Claude slash commands discovered from provider capabilities appear in the composer slash command menu for the active provider instance.
 - Selecting a provider slash command inserts the command into the draft without changing active draft ownership.
+- Codex skills discovered from provider capabilities appear in the composer skill menu for the active provider instance.
+- Selecting a provider skill inserts the `$skill` token into the draft without changing active draft ownership.
+- Existing prompts without skill metadata remain editable as plain text.
+
+## F13 Auth Access Management
+
+### Intent
+
+Auth access management is exposed through the fork native API and Connections settings so pairing links and client sessions can be managed without CLI work while preserving local-first desktop and saved environment flows.
+
+### Required Behavior
+
+- The server exposes auth access snapshot, pairing link creation, pairing link revocation, client session revocation, and other-client session revocation through additive WebSocket RPC methods.
+- RPC errors use the shared auth access error contract instead of leaking server-only auth service errors.
+- NativeApi exposes the auth access surface through the RPC-backed adapter.
+- Native API capability detection reports access management availability and disables controls when the active transport cannot support it.
+- Connections settings can create temporary pairing links, list and revoke active pairing links, list client sessions, revoke non-current client sessions, and revoke other client sessions.
+- Current session revocation remains disabled in the settings UI.
+- Existing paste pairing-link, saved environment reconnect, disconnect, forget, SSH connect, and local-first desktop fallback flows remain unchanged.
+
+### Owner Modules
+
+- `packages/contracts/src/auth.ts`
+- `packages/contracts/src/rpc.ts`
+- `packages/contracts/src/ipc.ts`
+- `apps/server/src/ws.ts`
+- `apps/web/src/wsRpcClient.ts`
+- `apps/web/src/wsNativeApi.ts`
+- `apps/web/src/forkNativeApiAdapter.ts`
+- `apps/web/src/components/settings/ConnectionsSettings.tsx`
+- `apps/web/src/environments`
+
+### Upstream Intake Rule
+
+- Adapt upstream auth and hosted connectivity changes through the fork NativeApi and Connections settings surface.
+- Preserve local-first desktop behavior and saved environment workflows when upstream changes pairing or access management flows.
+- Reject changes that expose destructive session revocation without current-session protection or transport capability gating.
+
+### Verification
+
+- Connections settings can create a pairing link and refresh the access snapshot.
+- Connections settings can revoke active pairing links.
+- Connections settings can list client sessions, revoke non-current sessions, and revoke other sessions.
+- NativeApi forwards auth access actions through RPC in browser-backed and desktop-backed web flows.
+- Saved environment pairing, reconnect, disconnect, forget, and SSH connect flows continue to work unchanged.
 
 ## Change Procedure
 
