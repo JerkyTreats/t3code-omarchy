@@ -18,6 +18,7 @@ describe("forkNativeApiAdapter", () => {
     expect(capabilities.git.mergeBranches).toBe(true);
     expect(capabilities.git.repositoryContext).toBe(true);
     expect(capabilities.github.status).toBe(true);
+    expect(capabilities.auth.accessManagement).toBe(true);
   });
 
   it("describes fork-level support from the shared capability selectors", () => {
@@ -42,6 +43,12 @@ describe("forkNativeApiAdapter", () => {
     expect(() => assertNativeApiFeature(capabilities, "github.createIssue")).toThrowError(
       getNativeApiFeatureUnavailableMessage("github.createIssue"),
     );
+  });
+
+  it("reports auth access management as a typed capability", () => {
+    expect(
+      assertNativeApiFeature(resolveNativeApiCapabilities(false), "auth.accessManagement"),
+    ).toBeUndefined();
   });
 
   it("forwards merge support through the RPC git adapter", async () => {

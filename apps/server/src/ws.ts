@@ -1,5 +1,6 @@
 import { Cause, Effect, Layer, Option, Queue, Ref, Schema, Stream } from "effect";
 import {
+  AuthAccessError,
   type AuthAccessStreamEvent,
   AuthSessionId,
   CommandId,
@@ -110,6 +111,18 @@ function toAuthAccessStreamEvent(
   }
 }
 
+function toAuthAccessRpcError(error: unknown): AuthAccessError {
+  const status =
+    typeof (error as { readonly status?: unknown }).status === "number"
+      ? (error as { readonly status: number }).status
+      : undefined;
+
+  return new AuthAccessError({
+    detail: error instanceof Error ? error.message : String(error),
+    ...(status === undefined ? {} : { status }),
+  });
+}
+
 const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
   WsRpcGroup.toLayer(
     Effect.gen(function* () {
@@ -143,9 +156,9 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
 
       const loadAuthAccessSnapshot = () =>
         Effect.all({
-          pairingLinks: serverAuth.listPairingLinks().pipe(Effect.orDie),
-          clientSessions: serverAuth.listClientSessions(currentSessionId).pipe(Effect.orDie),
-        });
+          pairingLinks: serverAuth.listPairingLinks(),
+          clientSessions: serverAuth.listClientSessions(currentSessionId),
+        }).pipe(Effect.mapError(toAuthAccessRpcError));
 
       const appendSetupScriptActivity = (input: {
         readonly threadId: ThreadId;
@@ -639,6 +652,51 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
             sourceControlDiscovery.discover,
             {
               "rpc.aggregate": "server",
+            },
+          ),
+        [WS_METHODS.authGetAccessSnapshot]: (_input) =>
+          observeRpcEffect(WS_METHODS.authGetAccessSnapshot, loadAuthAccessSnapshot(), {
+            "rpc.aggregate": "auth",
+          }),
+        [WS_METHODS.authCreatePairingCredential]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.authCreatePairingCredential,
+            serverAuth.issuePairingCredential(input).pipe(Effect.mapError(toAuthAccessRpcError)),
+            {
+              "rpc.aggregate": "auth",
+            },
+          ),
+        [WS_METHODS.authRevokePairingLink]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.authRevokePairingLink,
+            serverAuth.revokePairingLink(input.id).pipe(
+              Effect.map((revoked) => ({ revoked })),
+              Effect.mapError(toAuthAccessRpcError),
+            ),
+            {
+              "rpc.aggregate": "auth",
+            },
+          ),
+        [WS_METHODS.authRevokeClientSession]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.authRevokeClientSession,
+            serverAuth.revokeClientSession(currentSessionId, input.sessionId).pipe(
+              Effect.map((revoked) => ({ revoked })),
+              Effect.mapError(toAuthAccessRpcError),
+            ),
+            {
+              "rpc.aggregate": "auth",
+            },
+          ),
+        [WS_METHODS.authRevokeOtherClientSessions]: (_input) =>
+          observeRpcEffect(
+            WS_METHODS.authRevokeOtherClientSessions,
+            serverAuth.revokeOtherClientSessions(currentSessionId).pipe(
+              Effect.map((revokedCount) => ({ revokedCount })),
+              Effect.mapError(toAuthAccessRpcError),
+            ),
+            {
+              "rpc.aggregate": "auth",
             },
           ),
         [WS_METHODS.sourceControlLookupRepository]: (input) =>

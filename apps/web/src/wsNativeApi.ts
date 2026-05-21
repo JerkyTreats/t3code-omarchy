@@ -82,6 +82,13 @@ export function createWsNativeApi(): NativeApi {
       cloneRepository: rpcClient.sourceControl.cloneRepository,
       publishRepository: rpcClient.sourceControl.publishRepository,
     },
+    auth: {
+      getAccessSnapshot: rpcClient.auth.getAccessSnapshot,
+      createPairingCredential: rpcClient.auth.createPairingCredential,
+      revokePairingLink: rpcClient.auth.revokePairingLink,
+      revokeClientSession: rpcClient.auth.revokeClientSession,
+      revokeOtherClientSessions: rpcClient.auth.revokeOtherClientSessions,
+    },
     contextMenu: {
       show: async <T extends string>(
         items: readonly ContextMenuItem<T>[],

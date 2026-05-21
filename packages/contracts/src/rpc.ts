@@ -3,7 +3,15 @@ import * as Rpc from "effect/unstable/rpc/Rpc";
 import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 
 import { OpenError, OpenInEditorInput } from "./editor.ts";
-import { AuthAccessStreamEvent } from "./auth.ts";
+import {
+  AuthAccessSnapshot,
+  AuthAccessError,
+  AuthAccessStreamEvent,
+  AuthCreatePairingCredentialInput,
+  AuthPairingCredentialResult,
+  AuthRevokeClientSessionInput,
+  AuthRevokePairingLinkInput,
+} from "./auth.ts";
 import {
   GitAbortMergeInput,
   GitAbortMergeResult,
@@ -163,6 +171,13 @@ export const WS_METHODS = {
   serverUpdateSettings: "server.updateSettings",
   serverDiscoverSourceControl: "server.discoverSourceControl",
 
+  // Auth access methods
+  authGetAccessSnapshot: "auth.getAccessSnapshot",
+  authCreatePairingCredential: "auth.createPairingCredential",
+  authRevokePairingLink: "auth.revokePairingLink",
+  authRevokeClientSession: "auth.revokeClientSession",
+  authRevokeOtherClientSessions: "auth.revokeOtherClientSessions",
+
   // Source control methods
   sourceControlLookupRepository: "sourceControl.lookupRepository",
   sourceControlCloneRepository: "sourceControl.cloneRepository",
@@ -210,6 +225,39 @@ export const WsServerDiscoverSourceControlRpc = Rpc.make(WS_METHODS.serverDiscov
   payload: Schema.Struct({}),
   success: SourceControlDiscoveryResult,
 });
+
+export const WsAuthGetAccessSnapshotRpc = Rpc.make(WS_METHODS.authGetAccessSnapshot, {
+  payload: Schema.Struct({}),
+  success: AuthAccessSnapshot,
+  error: AuthAccessError,
+});
+
+export const WsAuthCreatePairingCredentialRpc = Rpc.make(WS_METHODS.authCreatePairingCredential, {
+  payload: AuthCreatePairingCredentialInput,
+  success: AuthPairingCredentialResult,
+  error: AuthAccessError,
+});
+
+export const WsAuthRevokePairingLinkRpc = Rpc.make(WS_METHODS.authRevokePairingLink, {
+  payload: AuthRevokePairingLinkInput,
+  success: Schema.Struct({ revoked: Schema.Boolean }),
+  error: AuthAccessError,
+});
+
+export const WsAuthRevokeClientSessionRpc = Rpc.make(WS_METHODS.authRevokeClientSession, {
+  payload: AuthRevokeClientSessionInput,
+  success: Schema.Struct({ revoked: Schema.Boolean }),
+  error: AuthAccessError,
+});
+
+export const WsAuthRevokeOtherClientSessionsRpc = Rpc.make(
+  WS_METHODS.authRevokeOtherClientSessions,
+  {
+    payload: Schema.Struct({}),
+    success: Schema.Struct({ revokedCount: Schema.Number }),
+    error: AuthAccessError,
+  },
+);
 
 export const WsSourceControlLookupRepositoryRpc = Rpc.make(
   WS_METHODS.sourceControlLookupRepository,
@@ -498,6 +546,7 @@ export const WsSubscribeServerLifecycleRpc = Rpc.make(WS_METHODS.subscribeServer
 export const WsSubscribeAuthAccessRpc = Rpc.make(WS_METHODS.subscribeAuthAccess, {
   payload: Schema.Struct({}),
   success: AuthAccessStreamEvent,
+  error: AuthAccessError,
   stream: true,
 });
 
@@ -508,6 +557,11 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerGetSettingsRpc,
   WsServerUpdateSettingsRpc,
   WsServerDiscoverSourceControlRpc,
+  WsAuthGetAccessSnapshotRpc,
+  WsAuthCreatePairingCredentialRpc,
+  WsAuthRevokePairingLinkRpc,
+  WsAuthRevokeClientSessionRpc,
+  WsAuthRevokeOtherClientSessionsRpc,
   WsSourceControlLookupRepositoryRpc,
   WsSourceControlCloneRepositoryRpc,
   WsSourceControlPublishRepositoryRpc,

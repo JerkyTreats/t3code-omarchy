@@ -1,7 +1,11 @@
-import { GlobeIcon, LinkIcon, RefreshCwIcon } from "lucide-react";
+import { GlobeIcon, KeyRoundIcon, LinkIcon, RefreshCwIcon, ShieldIcon } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import type {
   AdvertisedEndpoint,
+  AuthAccessSnapshot,
+  AuthClientSession,
+  AuthPairingLink,
+  AuthSessionId,
   DesktopDiscoveredSshHost,
   DesktopServerExposureState,
   DesktopServerExposureMode,
@@ -10,6 +14,7 @@ import type {
 import { useCallback, useMemo, useState } from "react";
 
 import { ensureLocalApi } from "../../localApi";
+import { ensureNativeApi, hasCurrentNativeApiFeature } from "../../nativeApi";
 import {
   addSavedEnvironment,
   connectDesktopSshEnvironment,
@@ -28,6 +33,10 @@ import { SettingsPageContainer, SettingsRow, SettingsSection } from "./settingsL
 const EMPTY_ADVERTISED_ENDPOINTS: readonly AdvertisedEndpoint[] = [];
 const EMPTY_SAVED_ENVIRONMENTS: readonly PersistedSavedEnvironmentRecord[] = [];
 const EMPTY_SSH_HOSTS: readonly DesktopDiscoveredSshHost[] = [];
+const EMPTY_AUTH_ACCESS_SNAPSHOT: AuthAccessSnapshot = {
+  pairingLinks: [],
+  clientSessions: [],
+};
 
 function createExposureStateFallback(): DesktopServerExposureState {
   return {
@@ -52,6 +61,30 @@ function formatConnectedAt(value: string | null): string {
     return value;
   }
   return date.toLocaleString();
+}
+
+function formatAuthDate(value: unknown): string {
+  const date = new Date(String(value));
+  if (Number.isNaN(date.getTime())) {
+    return String(value);
+  }
+  return date.toLocaleString();
+}
+
+function formatClientLabel(session: AuthClientSession): string {
+  return (
+    session.client.label ??
+    session.client.browser ??
+    session.client.os ??
+    session.client.deviceType ??
+    "Unknown client"
+  );
+}
+
+function formatClientDetail(session: AuthClientSession): string {
+  return [session.client.browser, session.client.os, session.client.ipAddress]
+    .filter(Boolean)
+    .join(" • ");
 }
 
 function formatSshTarget(host: DesktopDiscoveredSshHost): string {
@@ -92,10 +125,29 @@ function useConnectionsSnapshot() {
   });
 }
 
+function useAuthAccessSnapshot(enabled: boolean) {
+  return useQuery({
+    queryKey: ["connections", "authAccess"],
+    queryFn: async () => ensureNativeApi().auth.getAccessSnapshot(),
+    enabled,
+    staleTime: 15_000,
+  });
+}
+
 export function ConnectionsSettings() {
   const snapshotQuery = useConnectionsSnapshot();
+  const authAccessSupported = hasCurrentNativeApiFeature("auth.accessManagement");
+  const authAccessQuery = useAuthAccessSnapshot(authAccessSupported);
   const [isUpdatingExposure, setIsUpdatingExposure] = useState(false);
   const [isUpdatingTailscale, setIsUpdatingTailscale] = useState(false);
+  const [pairingLinkLabel, setPairingLinkLabel] = useState("");
+  const [creatingPairingLink, setCreatingPairingLink] = useState(false);
+  const [revokingPairingLinkId, setRevokingPairingLinkId] = useState<string | null>(null);
+  const [revokingClientSessionId, setRevokingClientSessionId] = useState<AuthSessionId | null>(
+    null,
+  );
+  const [revokingOtherClientSessions, setRevokingOtherClientSessions] = useState(false);
+  const [authAccessErrorMessage, setAuthAccessErrorMessage] = useState<string | null>(null);
   const [connectingSshHostKey, setConnectingSshHostKey] = useState<string | null>(null);
   const [isAddingRemote, setIsAddingRemote] = useState(false);
   const [pairingLabel, setPairingLabel] = useState("");
@@ -110,6 +162,7 @@ export function ConnectionsSettings() {
   );
 
   const snapshotData = snapshotQuery.data;
+  const authAccess = authAccessQuery.data ?? EMPTY_AUTH_ACCESS_SNAPSHOT;
   const activeRemoteEnvironment = useActiveRemoteEnvironmentStore((state) => state.session);
   const exposure = snapshotData?.exposure ?? createExposureStateFallback();
   const advertisedEndpoints = snapshotData?.advertisedEndpoints ?? EMPTY_ADVERTISED_ENDPOINTS;
@@ -124,30 +177,103 @@ export function ConnectionsSettings() {
     void snapshotQuery.refetch();
   }, [snapshotQuery]);
 
-  const connectSshHost = useCallback(
-    async (host: DesktopDiscoveredSshHost) => {
-      setSshErrorMessage(null);
-      const hostKey = makeSshHostKey(host);
-      setConnectingSshHostKey(hostKey);
+  const refreshAuthAccess = useCallback(() => {
+    void authAccessQuery.refetch();
+  }, [authAccessQuery]);
+
+  const createPairingLink = useCallback(async () => {
+    setAuthAccessErrorMessage(null);
+    setCreatingPairingLink(true);
+    try {
+      if (!authAccessSupported) {
+        throw new Error("Access management is unavailable on the current transport.");
+      }
+      const label = pairingLinkLabel.trim();
+      await ensureNativeApi().auth.createPairingCredential(label ? { label } : {});
+      setPairingLinkLabel("");
+      await authAccessQuery.refetch();
+    } catch (error) {
+      setAuthAccessErrorMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setCreatingPairingLink(false);
+    }
+  }, [authAccessQuery, authAccessSupported, pairingLinkLabel]);
+
+  const revokePairingLink = useCallback(
+    async (link: AuthPairingLink) => {
+      setAuthAccessErrorMessage(null);
+      setRevokingPairingLinkId(link.id);
       try {
-        await connectDesktopSshEnvironment(
-          {
-            alias: host.alias,
-            hostname: host.hostname,
-            username: host.username,
-            port: host.port,
-          },
-          { label: host.alias },
-        );
-        window.location.reload();
+        if (!authAccessSupported) {
+          throw new Error("Access management is unavailable on the current transport.");
+        }
+        await ensureNativeApi().auth.revokePairingLink({ id: link.id });
+        await authAccessQuery.refetch();
       } catch (error) {
-        setSshErrorMessage(error instanceof Error ? error.message : String(error));
+        setAuthAccessErrorMessage(error instanceof Error ? error.message : String(error));
       } finally {
-        setConnectingSshHostKey(null);
+        setRevokingPairingLinkId(null);
       }
     },
-    [snapshotQuery],
+    [authAccessQuery, authAccessSupported],
   );
+
+  const revokeClientSession = useCallback(
+    async (session: AuthClientSession) => {
+      setAuthAccessErrorMessage(null);
+      setRevokingClientSessionId(session.sessionId);
+      try {
+        if (!authAccessSupported) {
+          throw new Error("Access management is unavailable on the current transport.");
+        }
+        await ensureNativeApi().auth.revokeClientSession({ sessionId: session.sessionId });
+        await authAccessQuery.refetch();
+      } catch (error) {
+        setAuthAccessErrorMessage(error instanceof Error ? error.message : String(error));
+      } finally {
+        setRevokingClientSessionId(null);
+      }
+    },
+    [authAccessQuery, authAccessSupported],
+  );
+
+  const revokeOtherClientSessions = useCallback(async () => {
+    setAuthAccessErrorMessage(null);
+    setRevokingOtherClientSessions(true);
+    try {
+      if (!authAccessSupported) {
+        throw new Error("Access management is unavailable on the current transport.");
+      }
+      await ensureNativeApi().auth.revokeOtherClientSessions();
+      await authAccessQuery.refetch();
+    } catch (error) {
+      setAuthAccessErrorMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setRevokingOtherClientSessions(false);
+    }
+  }, [authAccessQuery, authAccessSupported]);
+
+  const connectSshHost = useCallback(async (host: DesktopDiscoveredSshHost) => {
+    setSshErrorMessage(null);
+    const hostKey = makeSshHostKey(host);
+    setConnectingSshHostKey(hostKey);
+    try {
+      await connectDesktopSshEnvironment(
+        {
+          alias: host.alias,
+          hostname: host.hostname,
+          username: host.username,
+          port: host.port,
+        },
+        { label: host.alias },
+      );
+      window.location.reload();
+    } catch (error) {
+      setSshErrorMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setConnectingSshHostKey(null);
+    }
+  }, []);
 
   const connectPairingUrl = useCallback(async () => {
     const trimmedPairingUrl = pairingUrl.trim();
@@ -171,7 +297,7 @@ export function ConnectionsSettings() {
     } finally {
       setIsAddingRemote(false);
     }
-  }, [pairingLabel, pairingUrl, snapshotQuery]);
+  }, [pairingLabel, pairingUrl]);
 
   const forgetSavedEnvironment = useCallback(
     async (environmentId: string) => {
@@ -341,6 +467,86 @@ export function ConnectionsSettings() {
     ],
   );
 
+  const pairingLinkRows = useMemo(
+    () =>
+      authAccess.pairingLinks.map((link: AuthPairingLink) => (
+        <SettingsRow
+          key={link.id}
+          title={link.label ?? link.subject}
+          description={`Role: ${link.role}`}
+          status={
+            <>
+              <span className="block break-all font-mono text-[11px] text-foreground">
+                {link.credential}
+              </span>
+              <span className="mt-1 block text-[11px] text-muted-foreground">
+                Expires: {formatAuthDate(link.expiresAt)}
+              </span>
+            </>
+          }
+          control={
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={revokingPairingLinkId !== null}
+              onClick={() => void revokePairingLink(link)}
+            >
+              {revokingPairingLinkId === link.id ? "Revoking..." : "Revoke"}
+            </Button>
+          }
+        />
+      )),
+    [authAccess.pairingLinks, revokePairingLink, revokingPairingLinkId],
+  );
+
+  const clientSessionRows = useMemo(
+    () =>
+      authAccess.clientSessions.map((session: AuthClientSession) => {
+        const clientDetail = formatClientDetail(session);
+
+        return (
+          <SettingsRow
+            key={session.sessionId}
+            title={formatClientLabel(session)}
+            description={clientDetail || session.method}
+            status={
+              <>
+                <span className="block text-[11px] text-muted-foreground">
+                  {session.current ? "Current session" : session.connected ? "Connected" : "Idle"} •{" "}
+                  {session.role}
+                </span>
+                <span className="mt-1 block text-[11px] text-muted-foreground">
+                  Last connected:{" "}
+                  {session.lastConnectedAt ? formatAuthDate(session.lastConnectedAt) : "Never"}
+                </span>
+                <span className="mt-1 block text-[11px] text-muted-foreground">
+                  Expires: {formatAuthDate(session.expiresAt)}
+                </span>
+              </>
+            }
+            control={
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={
+                  session.current || revokingClientSessionId !== null || revokingOtherClientSessions
+                }
+                onClick={() => void revokeClientSession(session)}
+              >
+                {revokingClientSessionId === session.sessionId ? "Revoking..." : "Revoke"}
+              </Button>
+            }
+          />
+        );
+      }),
+    [
+      authAccess.clientSessions,
+      revokeClientSession,
+      revokingClientSessionId,
+      revokingOtherClientSessions,
+    ],
+  );
+
   const advertisedEndpointRows = useMemo(
     () =>
       advertisedEndpoints.map((endpoint: AdvertisedEndpoint) => (
@@ -491,6 +697,103 @@ export function ConnectionsSettings() {
             />
           }
         />
+      </SettingsSection>
+
+      <SettingsSection
+        title="Authorized Access"
+        icon={<ShieldIcon className="size-3.5" />}
+        headerAction={
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={
+                !authAccessSupported ||
+                revokingOtherClientSessions ||
+                authAccess.clientSessions.length <= 1
+              }
+              onClick={() => void revokeOtherClientSessions()}
+            >
+              {revokingOtherClientSessions ? "Revoking..." : "Revoke others"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!authAccessSupported || authAccessQuery.isFetching}
+              onClick={refreshAuthAccess}
+            >
+              <RefreshCwIcon
+                className={cn("mr-2 size-4", authAccessQuery.isFetching && "animate-spin")}
+              />
+              Refresh
+            </Button>
+          </div>
+        }
+      >
+        <SettingsRow
+          title="Create pairing link"
+          description={
+            authAccessSupported
+              ? "Issue a temporary owner credential for connecting another client."
+              : "Access management is unavailable on the current transport."
+          }
+          status={authAccessErrorMessage ?? undefined}
+          control={
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!authAccessSupported || creatingPairingLink}
+              onClick={() => void createPairingLink()}
+            >
+              {creatingPairingLink ? "Creating..." : "Create link"}
+            </Button>
+          }
+        >
+          <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,16rem)_1fr]">
+            <div className="space-y-1">
+              <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+                Label
+              </p>
+              <Input
+                value={pairingLinkLabel}
+                onChange={(event) => setPairingLinkLabel(event.target.value)}
+                placeholder="Optional client label"
+              />
+            </div>
+            <div className="flex items-end text-[11px] text-muted-foreground">
+              Active pairing links and client sessions are listed below.
+            </div>
+          </div>
+        </SettingsRow>
+        {pairingLinkRows.length > 0 ? (
+          pairingLinkRows
+        ) : (
+          <SettingsRow
+            title="No active pairing links"
+            description="Created pairing links will appear here until they expire or are revoked."
+            status={
+              authAccessQuery.error instanceof Error ? authAccessQuery.error.message : undefined
+            }
+          />
+        )}
+        <SettingsRow
+          title="Client sessions"
+          description="Connected browsers and remote clients with active server access."
+          status={
+            <span className="inline-flex items-center gap-1">
+              <KeyRoundIcon className="size-3" />
+              {authAccess.clientSessions.length} active
+            </span>
+          }
+        />
+        {clientSessionRows.length > 0 ? (
+          clientSessionRows
+        ) : (
+          <SettingsRow
+            title="No client sessions"
+            description="Authenticated clients will appear here after they connect."
+          />
+        )}
       </SettingsSection>
 
       <SettingsSection title="Pair Remote Environment" icon={<LinkIcon className="size-3.5" />}>

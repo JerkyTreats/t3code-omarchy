@@ -48,7 +48,12 @@ import type {
   SourceControlRepositoryLookupInput,
 } from "./sourceControl.ts";
 import type {
+  AuthAccessSnapshot,
   AuthBearerBootstrapResult,
+  AuthCreatePairingCredentialInput,
+  AuthPairingCredentialResult,
+  AuthRevokeClientSessionInput,
+  AuthRevokePairingLinkInput,
   AuthSessionState,
   AuthWebSocketTokenResult,
 } from "./auth.ts";
@@ -389,6 +394,15 @@ export interface EnvironmentApi {
       input: SourceControlPublishRepositoryInput,
     ) => Promise<SourceControlPublishRepositoryResult>;
   };
+  auth: {
+    getAccessSnapshot: () => Promise<AuthAccessSnapshot>;
+    createPairingCredential: (
+      input: AuthCreatePairingCredentialInput,
+    ) => Promise<AuthPairingCredentialResult>;
+    revokePairingLink: (input: AuthRevokePairingLinkInput) => Promise<{ revoked: boolean }>;
+    revokeClientSession: (input: AuthRevokeClientSessionInput) => Promise<{ revoked: boolean }>;
+    revokeOtherClientSessions: () => Promise<{ revokedCount: number }>;
+  };
   orchestration: {
     getSnapshot: () => Promise<OrchestrationReadModel>;
     dispatchCommand: (command: ClientOrchestrationCommand) => Promise<{ sequence: number }>;
@@ -486,6 +500,15 @@ export interface NativeApi {
     publishRepository: (
       input: SourceControlPublishRepositoryInput,
     ) => Promise<SourceControlPublishRepositoryResult>;
+  };
+  auth: {
+    getAccessSnapshot: () => Promise<AuthAccessSnapshot>;
+    createPairingCredential: (
+      input: AuthCreatePairingCredentialInput,
+    ) => Promise<AuthPairingCredentialResult>;
+    revokePairingLink: (input: AuthRevokePairingLinkInput) => Promise<{ revoked: boolean }>;
+    revokeClientSession: (input: AuthRevokeClientSessionInput) => Promise<{ revoked: boolean }>;
+    revokeOtherClientSessions: () => Promise<{ revokedCount: number }>;
   };
   contextMenu: {
     show: <T extends string>(

@@ -49,6 +49,8 @@ const rpcClientMock = {
     ),
   },
   projects: {
+    listDirectory: vi.fn(),
+    readFile: vi.fn(),
     searchEntries: vi.fn(),
     writeFile: vi.fn(),
   },
@@ -86,6 +88,14 @@ const rpcClientMock = {
     lookupRepository: vi.fn(),
     cloneRepository: vi.fn(),
     publishRepository: vi.fn(),
+  },
+  auth: {
+    getAccessSnapshot: vi.fn(),
+    createPairingCredential: vi.fn(),
+    revokePairingLink: vi.fn(),
+    revokeClientSession: vi.fn(),
+    revokeOtherClientSessions: vi.fn(),
+    subscribeAccess: vi.fn(),
   },
   server: {
     getConfig: vi.fn(),
@@ -451,6 +461,19 @@ describe("wsNativeApi", () => {
     expect(rpcClientMock.server.updateSettings).toHaveBeenCalledWith({
       enableAssistantStreaming: true,
     });
+  });
+
+  it("forwards auth access management directly to the RPC client", async () => {
+    const snapshot = { pairingLinks: [], clientSessions: [] };
+    rpcClientMock.auth.getAccessSnapshot.mockResolvedValue(snapshot);
+    const { createWsNativeApi } = await import("./wsNativeApi");
+
+    const api = createWsNativeApi();
+
+    await expect(api.auth.getAccessSnapshot()).resolves.toEqual(snapshot);
+    await api.auth.revokeOtherClientSessions();
+    expect(rpcClientMock.auth.getAccessSnapshot).toHaveBeenCalledWith();
+    expect(rpcClientMock.auth.revokeOtherClientSessions).toHaveBeenCalledWith();
   });
 
   it("forwards context menu metadata to the desktop bridge", async () => {

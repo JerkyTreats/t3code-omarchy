@@ -186,6 +186,15 @@ export const AuthCreatePairingCredentialInput = Schema.Struct({
 });
 export type AuthCreatePairingCredentialInput = typeof AuthCreatePairingCredentialInput.Type;
 
+export class AuthAccessError extends Schema.TaggedErrorClass<AuthAccessError>()("AuthAccessError", {
+  detail: Schema.String,
+  status: Schema.optional(Schema.Number),
+}) {
+  override get message(): string {
+    return this.detail;
+  }
+}
+
 export const AuthSessionState = Schema.Struct({
   authenticated: Schema.Boolean,
   auth: ServerAuthDescriptor,

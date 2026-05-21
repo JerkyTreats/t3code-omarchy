@@ -23,6 +23,9 @@ export interface NativeApiCapabilities {
     readonly cloneRepository: boolean;
     readonly publishRepository: boolean;
   };
+  readonly auth: {
+    readonly accessManagement: boolean;
+  };
 }
 
 export type NativeApiFeature =
@@ -39,7 +42,8 @@ export type NativeApiFeature =
   | "github.reopenIssue"
   | "sourceControl.lookupRepository"
   | "sourceControl.cloneRepository"
-  | "sourceControl.publishRepository";
+  | "sourceControl.publishRepository"
+  | "auth.accessManagement";
 
 export const FULL_NATIVE_API_CAPABILITIES: NativeApiCapabilities = {
   git: {
@@ -61,6 +65,9 @@ export const FULL_NATIVE_API_CAPABILITIES: NativeApiCapabilities = {
     lookupRepository: true,
     cloneRepository: true,
     publishRepository: true,
+  },
+  auth: {
+    accessManagement: true,
   },
 };
 
@@ -85,6 +92,9 @@ export const RPC_NATIVE_API_CAPABILITIES: NativeApiCapabilities = {
     cloneRepository: true,
     publishRepository: true,
   },
+  auth: {
+    accessManagement: true,
+  },
 };
 
 export function resolveNativeApiCapabilities(hasEmbeddedNativeApi: boolean): NativeApiCapabilities {
@@ -99,6 +109,9 @@ export function resolveNativeApiCapabilities(hasEmbeddedNativeApi: boolean): Nat
       lookupRepository: Boolean(embeddedSourceControl?.lookupRepository),
       cloneRepository: Boolean(embeddedSourceControl?.cloneRepository),
       publishRepository: Boolean(embeddedSourceControl?.publishRepository),
+    },
+    auth: {
+      accessManagement: false,
     },
   };
 }
@@ -121,6 +134,7 @@ const nativeApiFeatureSelectors: Record<
   "sourceControl.lookupRepository": (capabilities) => capabilities.sourceControl.lookupRepository,
   "sourceControl.cloneRepository": (capabilities) => capabilities.sourceControl.cloneRepository,
   "sourceControl.publishRepository": (capabilities) => capabilities.sourceControl.publishRepository,
+  "auth.accessManagement": (capabilities) => capabilities.auth.accessManagement,
 };
 
 const nativeApiFeatureUnavailableMessages: Record<NativeApiFeature, string> = {
@@ -141,6 +155,7 @@ const nativeApiFeatureUnavailableMessages: Record<NativeApiFeature, string> = {
     "Source control repository clone is unavailable on the current transport.",
   "sourceControl.publishRepository":
     "Source control repository publish is unavailable on the current transport.",
+  "auth.accessManagement": "Access management is unavailable on the current transport.",
 };
 
 export function hasNativeApiFeature(

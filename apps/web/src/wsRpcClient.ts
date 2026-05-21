@@ -106,6 +106,16 @@ export interface WsRpcClient {
     readonly cloneRepository: RpcUnaryMethod<typeof WS_METHODS.sourceControlCloneRepository>;
     readonly publishRepository: RpcUnaryMethod<typeof WS_METHODS.sourceControlPublishRepository>;
   };
+  readonly auth: {
+    readonly getAccessSnapshot: RpcUnaryNoArgMethod<typeof WS_METHODS.authGetAccessSnapshot>;
+    readonly createPairingCredential: RpcUnaryMethod<typeof WS_METHODS.authCreatePairingCredential>;
+    readonly revokePairingLink: RpcUnaryMethod<typeof WS_METHODS.authRevokePairingLink>;
+    readonly revokeClientSession: RpcUnaryMethod<typeof WS_METHODS.authRevokeClientSession>;
+    readonly revokeOtherClientSessions: RpcUnaryNoArgMethod<
+      typeof WS_METHODS.authRevokeOtherClientSessions
+    >;
+    readonly subscribeAccess: RpcStreamMethod<typeof WS_METHODS.subscribeAuthAccess>;
+  };
   readonly server: {
     readonly getConfig: RpcUnaryNoArgMethod<typeof WS_METHODS.serverGetConfig>;
     readonly refreshProviders: RpcUnaryNoArgMethod<typeof WS_METHODS.serverRefreshProviders>;
@@ -254,6 +264,24 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
         transport.request((client) => client[WS_METHODS.sourceControlCloneRepository](input)),
       publishRepository: (input) =>
         transport.request((client) => client[WS_METHODS.sourceControlPublishRepository](input)),
+    },
+    auth: {
+      getAccessSnapshot: () =>
+        transport.request((client) => client[WS_METHODS.authGetAccessSnapshot]({})),
+      createPairingCredential: (input) =>
+        transport.request((client) => client[WS_METHODS.authCreatePairingCredential](input)),
+      revokePairingLink: (input) =>
+        transport.request((client) => client[WS_METHODS.authRevokePairingLink](input)),
+      revokeClientSession: (input) =>
+        transport.request((client) => client[WS_METHODS.authRevokeClientSession](input)),
+      revokeOtherClientSessions: () =>
+        transport.request((client) => client[WS_METHODS.authRevokeOtherClientSessions]({})),
+      subscribeAccess: (listener, options) =>
+        transport.subscribe(
+          (client) => client[WS_METHODS.subscribeAuthAccess]({}),
+          listener,
+          options,
+        ),
     },
     server: {
       getConfig: () => transport.request((client) => client[WS_METHODS.serverGetConfig]({})),
