@@ -374,7 +374,33 @@ Current `0.22` state:
 - source control and VCS provider workflow parity is complete on branch
 - provider skills and slash commands are complete on branch
 - auth access management UI and transport are complete on branch
-- the release-line reconciliation is recorded in this note
+- final parity closeout is still in progress for the remaining required gaps below
+
+## Parity Gap Checklist
+
+Required before this release line can be marked complete:
+
+- plan sidebar auto-open setting parity with upstream `00b5c3e1`
+- Claude `claude_code` system prompt preset parity with upstream `cb8015a3`
+- terminal dimension validation parity with upstream `02903f2d`
+- install and desktop package parity with upstream `02dd47ea`, `c07ac592`, and `f4c9418d`
+- small-fix sweep for remaining upstream `v0.0.22` commits not covered by a local equivalent
+
+Adapted equivalents already present:
+
+- source control lookup, clone, publish, GitLab, Azure DevOps, and Bitbucket workflow support
+- hosted frontend, Tailscale, SSH, and saved remote environment support
+- provider instance routing, status cache, settings, and composer model selection support
+- Codex skill discovery, Claude slash command discovery, and composer command integration
+- auth access snapshot, pairing link, and client session management
+- reconnect and runtime lifecycle hardening with fork-specific canonical turn handling
+
+Intentionally preserved fork behavior:
+
+- fork-owned GitHub identity and promotion workflow
+- Omarchy desktop and shell identity
+- rich draft composer ownership and screenshot attach behavior
+- fullscreen plan preview access
 
 ## Remaining Fork Concerns
 
@@ -451,9 +477,10 @@ Acceptance:
 
 1. complete provider skills and slash commands. Done.
 2. complete auth access management UI and transport. Done.
-3. complete final startup and runtime efficiency verification. Done.
-4. complete final hosted and remote verification. Done.
-5. record final parity outcome in this intake note. Done.
+3. add remaining `.22` product parity settings and provider behavior.
+4. align install, desktop package, and terminal validation metadata.
+5. complete final small-fix sweep and verification.
+6. record final parity outcome in this intake note.
 
 ## Verification Focus
 
@@ -469,6 +496,6 @@ Acceptance:
 
 `v0.0.21 -> v0.0.22` should be integrated in staged slices with explicit seam ownership.
 
-The remote-hosted, multi-provider shell, source control, protected shell-presentation, provider metadata, and auth access lanes are now complete on branch.
+The remote-hosted, multi-provider shell, source control, provider metadata, and auth access lanes are complete on branch.
 
-`v0.0.21 -> v0.0.22` product parity is complete on this branch.
+`v0.0.21 -> v0.0.22` product parity remains open until the parity gap checklist is closed.
