@@ -22,6 +22,7 @@ import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
 import * as DesktopShellEnvironment from "../shell/DesktopShellEnvironment.ts";
 import * as DesktopState from "./DesktopState.ts";
 import * as DesktopUpdates from "../updates/DesktopUpdates.ts";
+import * as DesktopSystemThemeService from "../fork/DesktopSystemThemeService.ts";
 
 const DEFAULT_DESKTOP_BACKEND_PORT = 3773;
 const MAX_TCP_PORT = 65_535;
@@ -136,6 +137,7 @@ const bootstrap = Effect.gen(function* () {
   const environment = yield* DesktopEnvironment.DesktopEnvironment;
   const desktopSettings = yield* DesktopAppSettings.DesktopAppSettings;
   const serverExposure = yield* DesktopServerExposure.DesktopServerExposure;
+  const systemThemeService = yield* DesktopSystemThemeService.DesktopSystemThemeService;
   yield* logBootstrapInfo("bootstrap start");
 
   if (environment.isDevelopment && Option.isNone(environment.configuredBackendPort)) {
@@ -177,6 +179,8 @@ const bootstrap = Effect.gen(function* () {
 
   yield* installDesktopIpcHandlers;
   yield* logBootstrapInfo("bootstrap ipc handlers registered");
+  yield* systemThemeService.register;
+  yield* logBootstrapInfo("bootstrap desktop theme watcher registered");
 
   if (!(yield* Ref.get(state.quitting))) {
     yield* backendManager.start;

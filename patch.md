@@ -91,9 +91,13 @@ System theme behavior on desktop Linux follows Omarchy theme state instead of ge
 
 ### Owner Modules
 
-- `apps/desktop/src/omarchyTheme.ts`
+- `apps/desktop/src/fork/OmarchyThemeSource.ts`
+- `apps/desktop/src/fork/DesktopSystemThemeService.ts`
 - `apps/desktop/src/main.ts`
 - `apps/desktop/src/preload.ts`
+- `apps/desktop/src/ipc/channels.ts`
+- `apps/desktop/src/ipc/methods/window.ts`
+- `apps/web/src/hooks/useTheme.ts`
 - `apps/web/src/index.css`
 
 ### Upstream Intake Rule
@@ -122,9 +126,11 @@ Screenshot capture and attach flows are tuned for Omarchy tooling and Linux desk
 
 ### Owner Modules
 
-- `apps/desktop/src/screenshotCapture.ts`
+- `apps/desktop/src/fork/OmarchyScreenshotCapture.ts`
 - `apps/desktop/src/main.ts`
 - `apps/desktop/src/preload.ts`
+- `apps/desktop/src/ipc/channels.ts`
+- `apps/desktop/src/ipc/methods/window.ts`
 - `apps/web/src/components/chat/ComposerTopActions.tsx`
 - `apps/web/src/components/ChatView.tsx`
 

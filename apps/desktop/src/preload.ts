@@ -90,6 +90,19 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   pickFolder: (options) => ipcRenderer.invoke(IpcChannels.PICK_FOLDER_CHANNEL, options),
   confirm: (message) => ipcRenderer.invoke(IpcChannels.CONFIRM_CHANNEL, message),
   setTheme: (theme) => ipcRenderer.invoke(IpcChannels.SET_THEME_CHANNEL, theme),
+  captureScreenshot: () => ipcRenderer.invoke(IpcChannels.CAPTURE_SCREENSHOT_CHANNEL),
+  getSystemTheme: () => ipcRenderer.invoke(IpcChannels.SYSTEM_THEME_GET_CHANNEL),
+  onSystemTheme: (listener) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, theme: unknown) => {
+      if (theme !== null && typeof theme !== "object") return;
+      listener(theme as Parameters<typeof listener>[0]);
+    };
+
+    ipcRenderer.on(IpcChannels.SYSTEM_THEME_CHANNEL, wrappedListener);
+    return () => {
+      ipcRenderer.removeListener(IpcChannels.SYSTEM_THEME_CHANNEL, wrappedListener);
+    };
+  },
   showContextMenu: (items, position) =>
     ipcRenderer.invoke(IpcChannels.CONTEXT_MENU_CHANNEL, {
       items,
