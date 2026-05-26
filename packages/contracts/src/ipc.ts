@@ -216,6 +216,34 @@ export const DesktopUpdateCheckResultSchema = Schema.Struct({
   state: DesktopUpdateStateSchema,
 });
 
+export interface DesktopScreenshotCapture {
+  name: string;
+  mimeType: "image/png";
+  sizeBytes: number;
+  dataUrl: string;
+}
+
+export const DesktopScreenshotCaptureSchema = Schema.Struct({
+  name: Schema.String,
+  mimeType: Schema.Literal("image/png"),
+  sizeBytes: Schema.Number,
+  dataUrl: Schema.String,
+});
+
+export interface DesktopSystemTheme {
+  source: "omarchy";
+  name: string;
+  mode: "light" | "dark";
+  colors: Record<string, string>;
+}
+
+export const DesktopSystemThemeSchema = Schema.Struct({
+  source: Schema.Literal("omarchy"),
+  name: Schema.String,
+  mode: Schema.Literals(["light", "dark"]),
+  colors: Schema.Record(Schema.String, Schema.String),
+});
+
 export interface DesktopEnvironmentBootstrap {
   label: string;
   httpBaseUrl: string | null;
@@ -371,6 +399,9 @@ export const PickFolderOptionsSchema = Schema.Struct({
 
 export interface DesktopBridge {
   getAppBranding: () => DesktopAppBranding | null;
+  captureScreenshot?: () => Promise<DesktopScreenshotCapture | null>;
+  getSystemTheme?: () => Promise<DesktopSystemTheme | null>;
+  onSystemTheme?: (listener: (theme: DesktopSystemTheme | null) => void) => () => void;
   getLocalEnvironmentBootstrap: () => DesktopEnvironmentBootstrap | null;
   getClientSettings: () => Promise<ClientSettings | null>;
   setClientSettings: (settings: ClientSettings) => Promise<void>;

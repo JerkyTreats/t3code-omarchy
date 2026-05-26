@@ -2,6 +2,10 @@
 
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import {
+  PRODUCT_BASE_NAME,
+  resolveProductReleaseDescription,
+} from "@t3tools/shared/productIdentity";
 import * as Config from "effect/Config";
 import * as Data from "effect/Data";
 import * as DateTime from "effect/DateTime";
@@ -95,10 +99,9 @@ export const buildDiscordReleaseAnnouncement = (
     {
       title: options.releaseName,
       url: options.releaseUrl.href,
-      description:
-        options.target === "prerelease"
-          ? "A new T3 Code prerelease is available for nightly testers."
-          : "A new T3 Code latest release is available.",
+      description: resolveProductReleaseDescription(
+        options.target === "prerelease" ? "nightly" : "latest",
+      ),
       color: targetColors[options.target],
       fields: [
         {
@@ -224,7 +227,7 @@ export const notifyDiscordReleaseCommand = Command.make(
       yield* postDiscordWebhook(webhookUrl, payload);
       yield* Effect.logInfo("discord release announcement completed");
     }),
-).pipe(Command.withDescription("Post a T3 Code release announcement to Discord."));
+).pipe(Command.withDescription(`Post a ${PRODUCT_BASE_NAME} release announcement to Discord.`));
 
 if (import.meta.main) {
   Command.run(notifyDiscordReleaseCommand, { version: "0.0.0" }).pipe(

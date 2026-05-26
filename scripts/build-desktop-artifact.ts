@@ -4,6 +4,13 @@ import rootPackageJson from "../package.json" with { type: "json" };
 import desktopPackageJson from "../apps/desktop/package.json" with { type: "json" };
 import serverPackageJson from "../apps/server/package.json" with { type: "json" };
 
+import {
+  formatProductDisplayName,
+  PRODUCT_BASE_NAME,
+  PRODUCT_PACKAGE_DESCRIPTION,
+  PRODUCT_TECHNICAL_IDENTITY,
+} from "@t3tools/shared/productIdentity";
+
 import { BRAND_ASSET_PATHS } from "./lib/brand-assets.ts";
 import { getDefaultBuildArch } from "./lib/build-target-arch.ts";
 import { resolveCatalogDependencies } from "./lib/resolve-catalog.ts";
@@ -555,8 +562,8 @@ export function resolveMockUpdateServerUrl(mockUpdateServerPort: number | undefi
 
 export function resolveDesktopProductName(version: string): string {
   return resolveDesktopUpdateChannel(version) === "nightly"
-    ? "T3 Code (Nightly)"
-    : (desktopPackageJson.productName ?? "T3 Code");
+    ? formatProductDisplayName("Nightly")
+    : (desktopPackageJson.productName ?? formatProductDisplayName("Alpha"));
 }
 
 const createBuildConfig = Effect.fn("createBuildConfig")(function* (
@@ -568,9 +575,9 @@ const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   mockUpdateServerPort: number | undefined,
 ) {
   const buildConfig: Record<string, unknown> = {
-    appId: "com.t3tools.t3code",
+    appId: PRODUCT_TECHNICAL_IDENTITY.appId,
     productName: resolveDesktopProductName(version),
-    artifactName: "T3-Code-${version}-${arch}.${ext}",
+    artifactName: PRODUCT_TECHNICAL_IDENTITY.artifactNameTemplate,
     directories: {
       buildResources: "apps/desktop/resources",
     },
@@ -599,12 +606,12 @@ const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   if (platform === "linux") {
     buildConfig.linux = {
       target: [target],
-      executableName: "t3code",
+      executableName: PRODUCT_TECHNICAL_IDENTITY.linuxExecutableName,
       icon: "icon.png",
       category: "Development",
       desktop: {
         entry: {
-          StartupWMClass: "t3code",
+          StartupWMClass: PRODUCT_TECHNICAL_IDENTITY.linuxWmClass,
         },
       },
     };
@@ -784,7 +791,7 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
     buildVersion: appVersion,
     t3codeCommitHash: commitHash,
     private: true,
-    description: "T3 Code desktop build",
+    description: PRODUCT_PACKAGE_DESCRIPTION,
     author: "T3 Tools",
     main: "apps/desktop/dist-electron/main.cjs",
     build: yield* createBuildConfig(
@@ -943,7 +950,7 @@ const buildDesktopArtifactCli = Command.make("build-desktop-artifact", {
     Flag.optional,
   ),
 }).pipe(
-  Command.withDescription("Build a desktop artifact for T3 Code."),
+  Command.withDescription(`Build a desktop artifact for ${PRODUCT_BASE_NAME}.`),
   Command.withHandler((input) => Effect.flatMap(resolveBuildOptions(input), buildDesktopArtifact)),
 );
 

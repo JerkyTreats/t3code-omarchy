@@ -49,10 +49,14 @@ export const FORK_FEATURE_CONTRACTS = [
     id: "F1",
     title: "Branding and release identity",
     ownerModules: [
+      "packages/shared/src/productIdentity.ts",
       "apps/desktop/package.json",
-      "apps/desktop/src/main.ts",
+      "apps/desktop/src/app/DesktopEnvironment.ts",
       "apps/desktop/scripts/electron-launcher.mjs",
       "apps/web/src/branding.ts",
+      "scripts/build-desktop-artifact.ts",
+      "scripts/resolve-nightly-release.ts",
+      "scripts/notify-discord-release.ts",
     ],
     scenarios: [
       {

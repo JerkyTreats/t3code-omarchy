@@ -1,5 +1,6 @@
 import type { DesktopSshPasswordPromptRequest } from "@t3tools/contracts";
 import { DesktopSshPasswordPromptResolutionInputSchema } from "@t3tools/contracts";
+import { PRODUCT_BASE_NAME } from "@t3tools/shared/productIdentity";
 import type { SshPasswordRequest } from "@t3tools/ssh/auth";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
@@ -16,7 +17,7 @@ import * as IpcChannels from "../ipc/channels.ts";
 import * as ElectronWindow from "../electron/ElectronWindow.ts";
 
 const DEFAULT_SSH_PASSWORD_PROMPT_TIMEOUT_MS = 3 * 60 * 1000;
-const WINDOW_UNAVAILABLE_MESSAGE = "T3 Code window is not available for SSH authentication.";
+const WINDOW_UNAVAILABLE_MESSAGE = `${PRODUCT_BASE_NAME} window is not available for SSH authentication.`;
 
 type DesktopSshPasswordPromptResolutionInput =
   typeof DesktopSshPasswordPromptResolutionInputSchema.Type;

@@ -2,6 +2,7 @@
 
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { formatNightlyReleaseName } from "@t3tools/shared/productIdentity";
 import * as Console from "effect/Console";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
@@ -61,7 +62,7 @@ export const resolveNightlyReleaseMetadata = (
     baseVersion,
     version,
     tag: `v${version}`,
-    name: `T3 Code Nightly ${version} (${shortSha})`,
+    name: formatNightlyReleaseName(version, shortSha),
     shortSha,
   };
 };

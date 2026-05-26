@@ -75,6 +75,10 @@
       "types": "./src/forkVerification.ts",
       "import": "./src/forkVerification.ts"
     },
+    "./productIdentity": {
+      "types": "./src/productIdentity.ts",
+      "import": "./src/productIdentity.ts"
+    },
     "./searchRanking": {
       "types": "./src/searchRanking.ts",
       "import": "./src/searchRanking.ts"

@@ -58,9 +58,13 @@ Fork builds identify as `T3 Code Omarchy` instead of generic upstream `T3 Code`.
 ### Owner Modules
 
 - `apps/desktop/package.json`
-- `apps/desktop/src/main.ts`
+- `packages/shared/src/productIdentity.ts`
+- `apps/desktop/src/app/DesktopEnvironment.ts`
 - `apps/desktop/scripts/electron-launcher.mjs`
 - `apps/web/src/branding.ts`
+- `scripts/build-desktop-artifact.ts`
+- `scripts/resolve-nightly-release.ts`
+- `scripts/notify-discord-release.ts`
 
 ### Upstream Intake Rule
 

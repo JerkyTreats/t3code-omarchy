@@ -76,6 +76,12 @@ describe("DesktopEnvironment", () => {
       assert.deepEqual(environment.commitHashOverride, Option.some("0123456789abcdef"));
       assert.deepEqual(environment.otlpTracesUrl, Option.some("http://127.0.0.1:4318/v1/traces"));
       assert.equal(environment.otlpExportIntervalMs, 2500);
+      assert.deepEqual(environment.branding, {
+        baseName: "T3 Code Omarchy",
+        stageLabel: "Dev",
+        displayName: "T3 Code Omarchy (Dev)",
+      });
+      assert.equal(environment.displayName, "T3 Code Omarchy (Dev)");
     }),
   );
 
@@ -89,9 +95,30 @@ describe("DesktopEnvironment", () => {
       );
 
       assert.equal(environment.isDevelopment, false);
+      assert.deepEqual(environment.branding, {
+        baseName: "T3 Code Omarchy",
+        stageLabel: "Alpha",
+        displayName: "T3 Code Omarchy (Alpha)",
+      });
+      assert.equal(environment.displayName, "T3 Code Omarchy (Alpha)");
       assert.equal(environment.stateDir, "/tmp/t3/userdata");
       assert.equal(environment.logDir, "/tmp/t3/userdata/logs");
       assert.equal(environment.serverSettingsPath, "/tmp/t3/userdata/settings.json");
+    }),
+  );
+
+  it.effect("uses nightly display identity for nightly versions", () =>
+    Effect.gen(function* () {
+      const environment = yield* makeEnvironment({
+        appVersion: "1.2.4-nightly.20260501.17",
+      });
+
+      assert.deepEqual(environment.branding, {
+        baseName: "T3 Code Omarchy",
+        stageLabel: "Nightly",
+        displayName: "T3 Code Omarchy (Nightly)",
+      });
+      assert.equal(environment.displayName, "T3 Code Omarchy (Nightly)");
     }),
   );
 

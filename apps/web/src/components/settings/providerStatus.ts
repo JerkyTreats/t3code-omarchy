@@ -1,4 +1,5 @@
 import type { ServerProvider, ServerProviderVersionAdvisory } from "@t3tools/contracts";
+import { PRODUCT_BASE_NAME } from "@t3tools/shared/productIdentity";
 
 /**
  * Visual treatment for each server-reported provider status. Centralized so
@@ -39,7 +40,8 @@ export function getProviderSummary(provider: ServerProvider | undefined) {
     return {
       headline: "Disabled",
       detail:
-        provider.message ?? "This provider is installed but disabled for new sessions in T3 Code.",
+        provider.message ??
+        `This provider is installed but disabled for new sessions in ${PRODUCT_BASE_NAME}.`,
     };
   }
   if (!provider.installed) {

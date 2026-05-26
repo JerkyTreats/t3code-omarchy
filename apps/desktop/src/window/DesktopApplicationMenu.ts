@@ -26,7 +26,8 @@ export class DesktopApplicationMenu extends Context.Service<
 type DesktopApplicationMenuRuntimeServices =
   | DesktopUpdates.DesktopUpdates
   | DesktopWindow.DesktopWindow
-  | ElectronDialog.ElectronDialog;
+  | ElectronDialog.ElectronDialog
+  | DesktopEnvironment.DesktopEnvironment;
 
 const { logInfo: logUpdaterInfo } = DesktopObservability.makeComponentLogger("desktop-updater");
 
@@ -42,10 +43,13 @@ const dispatchMenuAction = Effect.fn("desktop.menu.dispatchMenuAction")(function
 const checkForUpdatesFromMenu: Effect.Effect<
   void,
   never,
-  DesktopUpdates.DesktopUpdates | ElectronDialog.ElectronDialog
+  | DesktopUpdates.DesktopUpdates
+  | ElectronDialog.ElectronDialog
+  | DesktopEnvironment.DesktopEnvironment
 > = Effect.gen(function* () {
   const updates = yield* DesktopUpdates.DesktopUpdates;
   const electronDialog = yield* ElectronDialog.ElectronDialog;
+  const environment = yield* DesktopEnvironment.DesktopEnvironment;
   const result = yield* updates.check("menu");
   const updateState = result.state;
 
@@ -53,7 +57,7 @@ const checkForUpdatesFromMenu: Effect.Effect<
     yield* electronDialog.showMessageBox({
       type: "info",
       title: "You're up to date!",
-      message: `T3 Code ${updateState.currentVersion} is currently the newest version available.`,
+      message: `${environment.branding.baseName} ${updateState.currentVersion} is currently the newest version available.`,
       buttons: ["OK"],
     });
   } else if (updateState.status === "error") {
@@ -70,7 +74,10 @@ const checkForUpdatesFromMenu: Effect.Effect<
 const handleCheckForUpdatesMenuClick: Effect.Effect<
   void,
   DesktopWindow.DesktopWindowError,
-  DesktopUpdates.DesktopUpdates | ElectronDialog.ElectronDialog | DesktopWindow.DesktopWindow
+  | DesktopUpdates.DesktopUpdates
+  | ElectronDialog.ElectronDialog
+  | DesktopWindow.DesktopWindow
+  | DesktopEnvironment.DesktopEnvironment
 > = Effect.gen(function* () {
   const updates = yield* DesktopUpdates.DesktopUpdates;
   const electronDialog = yield* ElectronDialog.ElectronDialog;
