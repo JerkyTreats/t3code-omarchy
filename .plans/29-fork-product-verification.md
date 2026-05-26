@@ -61,12 +61,11 @@ Avoid copying whole upstream components into fork folders unless the entire comp
 - Commit `72c723df` ports `F1` product identity through shared identity helpers, desktop environment wiring, web fallback branding, and release script naming.
 - Commit `b2ce22b7` ports the `F10` Codex binary resolver and app server initialize version path.
 - Commit `5780a8a3` ports the desktop side of `F2` and `F3` through Omarchy theme and screenshot fork services, IPC bridge wiring, and web theme projection.
-- This lane ports `F3` screenshot attach through a web fork seam and the active composer draft store.
+- This lane ports `F3` screenshot attach through a web fork seam, the active composer draft store, and browser coverage for the visible screenshot control.
 
 Remaining work in those areas:
 
 - `F2` still needs browser level assertions for projected CSS variables.
-- `F3` still needs visible composer chrome browser coverage.
 - `F10` still needs settings UI coverage for detected binaries and active instance capability routing.
 
 ### Covered With Meaningful Existing Tests

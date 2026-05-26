@@ -95,6 +95,8 @@ const PROJECT_LOGICAL_KEY = deriveLogicalProjectKeyFromSettings(
 const NOW_ISO = "2026-03-04T12:00:00.000Z";
 const BASE_TIME_MS = Date.parse(NOW_ISO);
 const ATTACHMENT_SVG = "<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'></svg>";
+const SCREENSHOT_DATA_URL =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
 const ADD_PROJECT_SUBMENU_PLACEHOLDER = "Enter path (e.g. ~/projects/my-app)";
 
 interface TestFixture {
@@ -3554,6 +3556,54 @@ describe("ChatView timeline estimator parity (full app)", () => {
       expect(autoAcceptItem.textContent).toContain("Auto-approve edits");
       expect((await waitForSelectItemContainingText("Full access")).textContent).toContain(
         "Allow commands and edits without prompts",
+      );
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("shows desktop screenshot chrome and attaches captures to the active draft", async () => {
+    setDraftThreadWithoutWorktree();
+    useComposerDraftStore.getState().setPrompt(THREAD_REF, "Explain the visible error");
+    const captureScreenshot = vi.fn().mockResolvedValue({
+      name: "visible-error.png",
+      mimeType: "image/png",
+      sizeBytes: 70,
+      dataUrl: SCREENSHOT_DATA_URL,
+    });
+    window.desktopBridge = {
+      getAppBranding: () => null,
+      captureScreenshot,
+      getLocalEnvironmentBootstrap: () => null,
+      getClientSettings: vi.fn().mockResolvedValue(null),
+      setClientSettings: vi.fn().mockResolvedValue(undefined),
+      getSavedEnvironmentRegistry: vi.fn().mockResolvedValue([]),
+      setSavedEnvironmentRegistry: vi.fn().mockResolvedValue(undefined),
+      setTheme: vi.fn().mockResolvedValue(undefined),
+    } as unknown as NonNullable<typeof window.desktopBridge>;
+
+    const mounted = await mountChatView({
+      viewport: WIDE_FOOTER_VIEWPORT,
+      snapshot: createDraftOnlySnapshot(),
+    });
+
+    try {
+      await page.getByLabelText("Attach screenshot").click();
+
+      await vi.waitFor(
+        () => {
+          const draft = composerDraftFor(THREAD_ID);
+          expect(captureScreenshot).toHaveBeenCalledTimes(1);
+          expect(draft?.prompt).toBe("Explain the visible error");
+          expect(draft?.images).toHaveLength(1);
+          expect(draft?.images[0]).toMatchObject({
+            name: "visible-error.png",
+            mimeType: "image/png",
+            previewUrl: SCREENSHOT_DATA_URL,
+          });
+          expect(document.querySelector('img[alt="visible-error.png"]')).toBeTruthy();
+        },
+        { timeout: 8_000, interval: 16 },
       );
     } finally {
       await mounted.cleanup();
