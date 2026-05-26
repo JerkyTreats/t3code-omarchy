@@ -62,7 +62,8 @@ Avoid copying whole upstream components into fork folders unless the entire comp
 - Commit `b2ce22b7` ports the `F10` Codex binary resolver and app server initialize version path.
 - Commit `5780a8a3` ports the desktop side of `F2` and `F3` through Omarchy theme and screenshot fork services, IPC bridge wiring, and web theme projection.
 - This lane ports `F3` screenshot attach through a web fork seam, the active composer draft store, and browser coverage for the visible screenshot control.
-- Current working change ports `F4` rich draft mode through fork formatting helpers, active draft state, and browser coverage for the visible toolbar.
+- Commit `61686eec` ports `F4` rich draft mode through fork formatting helpers, active draft state, and browser coverage for the visible toolbar.
+- Current working change expands `F5` Git action draft isolation coverage for branch picker changes on active drafts.
 
 Remaining work in those areas:
 
@@ -242,19 +243,19 @@ Required seams:
 Required tests:
 
 - visible composer chrome includes screenshot and runtime access controls
-- rich draft mode and toolbar survive the rebuild draft store. Done in current working change.
+- rich draft mode and toolbar survive the rebuild draft store. Done in `61686eec`.
 - screenshot attach writes to the active draft and preview state
-- Git panel actions do not clear prompt text, images, or terminal chips
+- Git branch picker actions do not clear prompt text, images, terminal chips, or rich draft mode. Done in current working change.
 - provider switches keep draft ownership and selected provider instance
 - slash commands and skills come from the active custom provider instance
 
 First port steps:
 
-1. Add composer fork policy modules. Started in current working change.
+1. Add composer fork policy modules. Started in `61686eec`.
 2. Port screenshot data URL conversion and draft attach logic. Done in this lane.
-3. Add rich draft mode to the rebuild draft store. Done in current working change.
-4. Wire top action chrome and toolbar into `ChatComposer`. Started in current working change.
-5. Add browser tests before porting broader UI behavior. Started in current working change.
+3. Add rich draft mode to the rebuild draft store. Done in `61686eec`.
+4. Wire top action chrome and toolbar into `ChatComposer`. Started in `61686eec`.
+5. Add browser tests before porting broader UI behavior. Started in `61686eec`.
 
 ### Plan Sidebar And Markdown Preview
 
@@ -336,7 +337,7 @@ Required seams:
 - `apps/server/src/sourceControl/SourceControlProviderRegistry.ts`
 - `apps/server/src/sourceControl/SourceControlRepositoryService.ts`
 - `apps/server/src/fork/sourceControlContextPolicy.ts`
-- `apps/web/src/components/git-panel/PublishRepositoryDialog.tsx`
+- `apps/web/src/components/GitActionsControl.tsx`
 - `apps/web/src/fork/sourceControlPresentationPolicy.ts`
 
 Required tests:

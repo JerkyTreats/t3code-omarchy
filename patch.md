@@ -194,9 +194,10 @@ Git panel flows must not take ownership of the active composer draft or silently
 
 ### Owner Modules
 
-- `apps/web/src/components/git-panel`
+- `apps/web/src/components/GitActionsControl.tsx`
+- `apps/web/src/components/GitActionsControl.logic.ts`
 - `apps/web/src/composerDraftStore.ts`
-- `apps/web/src/components/ChatView.logic.ts`
+- `apps/web/src/components/ChatView.browser.tsx`
 
 ### Upstream Intake Rule
 
@@ -207,6 +208,7 @@ Git panel flows must not take ownership of the active composer draft or silently
 
 - Opening and using Git panel flows does not clear the active draft.
 - Branch and worktree routing preserves the expected draft thread state.
+- Changing the Git base branch preserves prompt text, images, terminal context chips, and rich draft mode on the active draft.
 - Discarding a dedicated worktree returns the user to a stable primary workspace draft without losing unrelated draft content.
 
 ## F6 Fork First GitHub Identity Resolution
@@ -255,7 +257,7 @@ Local Git workflow semantics favor fork safety and explicit promotion behavior o
 ### Owner Modules
 
 - `apps/server/src/git/Layers/GitManager.ts`
-- `apps/web/src/components/git-panel`
+- `apps/web/src/components/GitActionsControl.tsx`
 
 ### Upstream Intake Rule
 
@@ -418,7 +420,7 @@ Source control support exposes GitHub, GitLab, Azure DevOps, and Bitbucket throu
 - `apps/web/src/wsNativeApi.ts`
 - `apps/web/src/forkNativeApiAdapter.ts`
 - `apps/web/src/components/Sidebar.tsx`
-- `apps/web/src/components/git-panel`
+- `apps/web/src/components/GitActionsControl.tsx`
 - `apps/web/src/sourceControlPresentation.ts`
 
 ### Upstream Intake Rule

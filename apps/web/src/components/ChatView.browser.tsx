@@ -3238,6 +3238,133 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
+  it("preserves active draft content while changing the Git base branch", async () => {
+    const activeDraftId = draftIdFromPath("/draft/draft-git-content-preservation");
+
+    useComposerDraftStore.setState({
+      draftThreadsByThreadKey: {
+        [activeDraftId]: {
+          threadId: THREAD_ID,
+          environmentId: LOCAL_ENVIRONMENT_ID,
+          projectId: PROJECT_ID,
+          logicalProjectKey: PROJECT_DRAFT_KEY,
+          createdAt: NOW_ISO,
+          runtimeMode: "full-access",
+          interactionMode: "default",
+          branch: "main",
+          worktreePath: null,
+          envMode: "worktree",
+        },
+      },
+      logicalProjectDraftThreadKeyByLogicalProjectKey: {
+        [PROJECT_DRAFT_KEY]: activeDraftId,
+      },
+    });
+
+    useComposerDraftStore.getState().setPrompt(activeDraftId, "Protect this draft");
+    useComposerDraftStore.getState().setRichDraftMode(activeDraftId, true);
+    useComposerDraftStore.getState().addImage(activeDraftId, {
+      type: "image",
+      id: "draft-image-1",
+      name: "draft-image.png",
+      mimeType: "image/png",
+      sizeBytes: 70,
+      previewUrl: SCREENSHOT_DATA_URL,
+      file: new File(["draft image"], "draft-image.png", { type: "image/png" }),
+    });
+    useComposerDraftStore.getState().addTerminalContext(
+      activeDraftId,
+      createTerminalContext({
+        id: "ctx-git-draft-preserve",
+        terminalLabel: "Terminal 1",
+        lineStart: 3,
+        lineEnd: 4,
+        text: "git status\nOn branch main",
+      }),
+    );
+
+    const initialDraft = composerDraftFor(activeDraftId);
+    const initialPrompt = initialDraft?.prompt;
+    expect(initialDraft).toMatchObject({
+      richDraftMode: true,
+    });
+    expect(initialPrompt).toContain("Protect this draft");
+    expect(initialPrompt).toContain(INLINE_TERMINAL_CONTEXT_PLACEHOLDER);
+    expect(initialDraft?.images.map((image) => image.id)).toEqual(["draft-image-1"]);
+    expect(initialDraft?.terminalContexts.map((context) => context.id)).toEqual([
+      "ctx-git-draft-preserve",
+    ]);
+
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createDraftOnlySnapshot(),
+      initialPath: `/draft/${activeDraftId}`,
+      resolveRpc: (body) => {
+        if (body._tag === WS_METHODS.vcsListRefs) {
+          return {
+            isRepo: true,
+            hasPrimaryRemote: true,
+            nextCursor: null,
+            totalCount: 2,
+            refs: [
+              {
+                name: "main",
+                current: true,
+                isDefault: true,
+                worktreePath: null,
+              },
+              {
+                name: "release/next",
+                current: false,
+                isDefault: false,
+                worktreePath: null,
+              },
+            ],
+          };
+        }
+        return undefined;
+      },
+    });
+
+    try {
+      const branchButton = await waitForElement(
+        () =>
+          Array.from(document.querySelectorAll("button")).find(
+            (button) => button.textContent?.trim() === "From main",
+          ) as HTMLButtonElement | null,
+        'Unable to find branch selector button with "From main".',
+      );
+      branchButton.click();
+
+      const branchOption = await waitForElement(
+        () =>
+          Array.from(document.querySelectorAll("span")).find(
+            (element) => element.textContent?.trim() === "release/next",
+          ) as HTMLSpanElement | null,
+        'Unable to find the "release/next" branch option.',
+      );
+      branchOption.click();
+
+      await vi.waitFor(
+        () => {
+          const draftSession = useComposerDraftStore.getState().getDraftSession(activeDraftId);
+          const draftContent = composerDraftFor(activeDraftId);
+
+          expect(draftSession?.branch).toBe("release/next");
+          expect(draftContent?.prompt).toBe(initialPrompt);
+          expect(draftContent?.richDraftMode).toBe(true);
+          expect(draftContent?.images.map((image) => image.id)).toEqual(["draft-image-1"]);
+          expect(draftContent?.terminalContexts.map((context) => context.id)).toEqual([
+            "ctx-git-draft-preserve",
+          ]);
+        },
+        { timeout: 8_000, interval: 16 },
+      );
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
   it("keeps the new worktree branch picker anchored at the top when opening with a preselected branch", async () => {
     const draftId = DraftId.make("draft-branch-picker-scroll-regression");
     const branches = [

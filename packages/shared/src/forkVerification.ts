@@ -157,9 +157,10 @@ export const FORK_FEATURE_CONTRACTS = [
     id: "F5",
     title: "Git panel isolation from draft ownership",
     ownerModules: [
-      "apps/web/src/components/git-panel",
+      "apps/web/src/components/GitActionsControl.tsx",
+      "apps/web/src/components/GitActionsControl.logic.ts",
       "apps/web/src/composerDraftStore.ts",
-      "apps/web/src/components/ChatView.logic.ts",
+      "apps/web/src/components/ChatView.browser.tsx",
     ],
     scenarios: [
       {
@@ -199,7 +200,10 @@ export const FORK_FEATURE_CONTRACTS = [
   {
     id: "F7",
     title: "Local branch, worktree, and promotion workflow",
-    ownerModules: ["apps/server/src/git/Layers/GitManager.ts", "apps/web/src/components/git-panel"],
+    ownerModules: [
+      "apps/server/src/git/Layers/GitManager.ts",
+      "apps/web/src/components/GitActionsControl.tsx",
+    ],
     scenarios: [
       {
         id: "f7-promotion-creates-backup",
@@ -312,7 +316,7 @@ export const FORK_FEATURE_CONTRACTS = [
       "apps/web/src/wsNativeApi.ts",
       "apps/web/src/forkNativeApiAdapter.ts",
       "apps/web/src/components/Sidebar.tsx",
-      "apps/web/src/components/git-panel",
+      "apps/web/src/components/GitActionsControl.tsx",
       "apps/web/src/sourceControlPresentation.ts",
     ],
     scenarios: [
