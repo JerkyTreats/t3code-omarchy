@@ -10,7 +10,12 @@ import type {
   SourceControlRepositoryVisibility,
   VcsStatusResult,
 } from "@t3tools/contracts";
-import { useIsMutating, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useIsMutating,
+  useMutation,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import * as Option from "effect/Option";
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
@@ -21,6 +26,7 @@ import {
   CloudUploadIcon,
   ExternalLinkIcon,
   GitCommitIcon,
+  GitMergeIcon,
   InfoIcon,
   LockIcon,
   GlobeIcon,
@@ -66,6 +72,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { openInPreferredEditor } from "~/editorPreferences";
 import {
   gitInitMutationOptions,
+  gitBranchSearchInfiniteQueryOptions,
   gitMutationKeys,
   gitPullMutationOptions,
   gitRunStackedActionMutationOptions,
@@ -119,6 +126,7 @@ interface ActiveGitActionProgress {
 interface RunGitActionWithToastInput {
   action: GitStackedAction;
   commitMessage?: string;
+  targetBranch?: string;
   onConfirmed?: () => void;
   skipDefaultBranchPrompt?: boolean;
   statusOverride?: VcsStatusResult | null;
@@ -279,6 +287,25 @@ function getMenuActionDisabledReason({
     return "Push is currently unavailable.";
   }
 
+  if (item.id === "promote") {
+    if (!hasBranch) {
+      return "Detached HEAD: checkout a refName before promoting.";
+    }
+    if (!hasPrimaryRemote) {
+      return 'Add an "origin" remote before promoting.';
+    }
+    if (isBehind) {
+      return "Branch is behind upstream. Pull/rebase before promoting.";
+    }
+    if (!item.targetBranch) {
+      return "No target refName found for promotion.";
+    }
+    if (gitStatus.refName === item.targetBranch) {
+      return "Already on the promotion target refName.";
+    }
+    return "Promote is currently unavailable.";
+  }
+
   if (hasOpenPr) {
     return `View ${terminology.singular} is currently unavailable.`;
   }
@@ -313,6 +340,7 @@ function GitActionItemIcon({
 }) {
   if (icon === "commit") return <GitCommitIcon />;
   if (icon === "push") return <CloudUploadIcon />;
+  if (icon === "promote") return <GitMergeIcon />;
   return <SourceControlIcon />;
 }
 
@@ -975,6 +1003,7 @@ export default function GitActionsControl({
   const [excludedFiles, setExcludedFiles] = useState<ReadonlySet<string>>(new Set());
   const [isEditingFiles, setIsEditingFiles] = useState(false);
   const [isPublishDialogOpen, setIsPublishDialogOpen] = useState(false);
+  const [isPromoteDialogOpen, setIsPromoteDialogOpen] = useState(false);
   const [pendingDefaultBranchAction, setPendingDefaultBranchAction] =
     useState<PendingDefaultBranchAction | null>(null);
   const activeGitActionProgressRef = useRef<ActiveGitActionProgress | null>(null);
@@ -1058,16 +1087,34 @@ export default function GitActionsControl({
     environmentId: activeEnvironmentId,
     cwd: gitCwd,
   });
+  // Default to true while loading so we don't flash init controls.
+  const isRepo = gitStatus?.isRepo ?? true;
+  const branchListQuery = useInfiniteQuery(
+    gitBranchSearchInfiniteQueryOptions({
+      environmentId: activeEnvironmentId,
+      cwd: gitCwd,
+      query: "",
+      enabled: activeEnvironmentId !== null && gitCwd !== null && isRepo,
+    }),
+  );
   const sourceControlPresentation = useMemo(
     () => getSourceControlPresentation(gitStatus?.sourceControlProvider),
     [gitStatus?.sourceControlProvider],
   );
   const changeRequestTerminology = sourceControlPresentation.terminology;
   const SourceControlIcon = sourceControlPresentation.Icon;
-  // Default to true while loading so we don't flash init controls.
-  const isRepo = gitStatus?.isRepo ?? true;
   const hasPrimaryRemote = gitStatus?.hasPrimaryRemote ?? false;
   const gitStatusForActions = gitStatus;
+  const localRefs = useMemo(
+    () =>
+      branchListQuery.data?.pages.flatMap((page) => page.refs).filter((ref) => !ref.isRemote) ?? [],
+    [branchListQuery.data?.pages],
+  );
+  const defaultRefName = useMemo(
+    () => localRefs.find((ref) => ref.isDefault)?.name ?? null,
+    [localRefs],
+  );
+  const promoteTargetBranch = gitStatusForActions?.pr?.baseRef ?? defaultRefName;
 
   const allFiles = gitStatusForActions?.workingTree.files ?? [];
   const selectedFiles = allFiles.filter((f) => !excludedFiles.has(f.path));
@@ -1133,8 +1180,14 @@ export default function GitActionsControl({
   }, [gitStatusForActions?.isDefaultRef]);
 
   const gitActionMenuItems = useMemo(
-    () => buildMenuItems(gitStatusForActions, isGitActionRunning, hasPrimaryRemote),
-    [gitStatusForActions, hasPrimaryRemote, isGitActionRunning],
+    () =>
+      buildMenuItems(
+        gitStatusForActions,
+        isGitActionRunning,
+        hasPrimaryRemote,
+        promoteTargetBranch,
+      ),
+    [gitStatusForActions, hasPrimaryRemote, isGitActionRunning, promoteTargetBranch],
   );
   const quickAction = useMemo(
     () =>
@@ -1236,6 +1289,7 @@ export default function GitActionsControl({
     async ({
       action,
       commitMessage,
+      targetBranch,
       onConfirmed,
       skipDefaultBranchPrompt = false,
       statusOverride,
@@ -1280,6 +1334,7 @@ export default function GitActionsControl({
         action,
         hasCustomCommitMessage: !!commitMessage?.trim(),
         hasWorkingTreeChanges: !!actionStatus?.hasWorkingTreeChanges,
+        ...(targetBranch ? { targetBranch } : {}),
         featureBranch,
         terminology: changeRequestTerminology,
         shouldPushBeforePr:
@@ -1380,6 +1435,7 @@ export default function GitActionsControl({
         actionId,
         action,
         ...(commitMessage ? { commitMessage } : {}),
+        ...(targetBranch ? { targetBranch } : {}),
         ...(featureBranch ? { featureBranch } : {}),
         ...(filePaths ? { filePaths } : {}),
         onProgress: applyProgressEvent,
@@ -1567,9 +1623,30 @@ export default function GitActionsControl({
       void runGitActionWithToast({ action: "create_pr" });
       return;
     }
+    if (item.dialogAction === "promote") {
+      setIsPromoteDialogOpen(true);
+      return;
+    }
     setExcludedFiles(new Set());
     setIsEditingFiles(false);
     setIsCommitDialogOpen(true);
+  };
+
+  const runPromoteAction = () => {
+    if (!promoteTargetBranch) {
+      toastManager.add({
+        type: "error",
+        title: "Promotion target unavailable.",
+        data: threadToastData,
+      });
+      return;
+    }
+
+    setIsPromoteDialogOpen(false);
+    void runGitActionWithToast({
+      action: "promote",
+      targetBranch: promoteTargetBranch,
+    });
   };
 
   const runDialogAction = () => {
@@ -1937,6 +2014,46 @@ export default function GitActionsControl({
         environmentId={activeEnvironmentId}
         gitCwd={gitCwd}
       />
+
+      <Dialog open={isPromoteDialogOpen} onOpenChange={setIsPromoteDialogOpen}>
+        <DialogPopup className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Promote to {promoteTargetBranch ?? "target"}?</DialogTitle>
+            <DialogDescription>
+              This will merge{" "}
+              <code className="rounded bg-muted px-1 font-mono text-xs">
+                {gitStatusForActions?.refName ?? "current refName"}
+              </code>{" "}
+              into{" "}
+              <code className="rounded bg-muted px-1 font-mono text-xs">
+                {promoteTargetBranch ?? "target"}
+              </code>
+              , push, and delete the source branch. This bypasses pull request review.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogPanel className="space-y-3">
+            <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 rounded-lg border border-input bg-muted/40 p-3 text-xs">
+              <span className="text-muted-foreground">Source</span>
+              <span className="font-mono">{gitStatusForActions?.refName ?? "unknown"}</span>
+              <span className="text-muted-foreground">Target</span>
+              <span className="font-mono font-medium">{promoteTargetBranch ?? "unknown"}</span>
+            </div>
+            {gitStatusForActions?.hasWorkingTreeChanges ? (
+              <p className="text-xs text-muted-foreground">
+                Uncommitted changes will be committed before promotion.
+              </p>
+            ) : null}
+          </DialogPanel>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setIsPromoteDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button size="sm" disabled={!promoteTargetBranch} onClick={runPromoteAction}>
+              Promote
+            </Button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
 
       <Dialog
         open={pendingDefaultBranchAction !== null}

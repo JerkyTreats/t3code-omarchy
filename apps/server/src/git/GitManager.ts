@@ -51,6 +51,11 @@ import type { GitManagerServiceError } from "@t3tools/contracts";
 import { GitVcsDriver, type GitStatusDetails } from "../vcs/GitVcsDriver.ts";
 import { SourceControlProviderRegistry } from "../sourceControl/SourceControlProviderRegistry.ts";
 import type { ChangeRequest } from "@t3tools/contracts";
+import {
+  choosePromotePushRemoteName,
+  createPromoteBackupBranchName,
+  parseRemoteNames,
+} from "../fork/gitPromotionPolicy.ts";
 
 export interface GitActionProgressReporter {
   readonly publish: (event: GitActionProgressEvent) => Effect.Effect<void, never>;
@@ -96,7 +101,6 @@ const SHORT_SHA_LENGTH = 7;
 const TOAST_DESCRIPTION_MAX = 72;
 const STATUS_RESULT_CACHE_TTL = Duration.seconds(1);
 const STATUS_RESULT_CACHE_CAPACITY = 2_048;
-const PROMOTE_BACKUP_BRANCH_PREFIX = "t3code/promote-backup";
 type StripProgressContext<T> = T extends any ? Omit<T, "actionId" | "cwd" | "action"> : never;
 type GitActionProgressPayload = StripProgressContext<GitActionProgressEvent>;
 type GitActionProgressEmitter = (event: GitActionProgressPayload) => Effect.Effect<void, never>;
@@ -352,45 +356,6 @@ function truncateText(
 
 function withDescription(title: string, description: string | undefined) {
   return description ? { title, description } : { title };
-}
-
-function parseRemoteNames(stdout: string): string[] {
-  return stdout
-    .split(/\r?\n/g)
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0);
-}
-
-function parseRemoteRefWithRemoteNames(
-  remoteRef: string | null | undefined,
-  remoteNames: ReadonlyArray<string>,
-): { remoteName: string; remoteBranch: string } | null {
-  const trimmed = remoteRef?.trim() ?? "";
-  if (trimmed.length === 0) {
-    return null;
-  }
-
-  const sortedRemoteNames = [...remoteNames].toSorted((left, right) => right.length - left.length);
-  for (const remoteName of sortedRemoteNames) {
-    if (!trimmed.startsWith(`${remoteName}/`)) {
-      continue;
-    }
-
-    const remoteBranch = trimmed.slice(remoteName.length + 1).trim();
-    if (remoteBranch.length > 0) {
-      return {
-        remoteName,
-        remoteBranch,
-      };
-    }
-  }
-
-  return null;
-}
-
-function createPromoteBackupBranchName(sourceBranch: string): string {
-  const branchFragment = sanitizeBranchFragment(sourceBranch).trim() || "branch";
-  return `${PROMOTE_BACKUP_BRANCH_PREFIX}/${branchFragment}/${randomUUID().slice(0, 8)}`;
 }
 
 function summarizeGitActionResult(
@@ -1663,32 +1628,20 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
     upstreamRef: string | null,
   ) {
     const remoteNames = yield* listRemoteNames(cwd);
-    const upstreamRemote = parseRemoteRefWithRemoteNames(upstreamRef, remoteNames)?.remoteName;
-    if (upstreamRemote) {
-      return upstreamRemote;
-    }
-
     const branchPushRemote = normalizeOptionalString(
       yield* gitCore.readConfigValue(cwd, `branch.${branch}.pushRemote`),
     );
-    if (branchPushRemote) {
-      return branchPushRemote;
-    }
-
     const pushDefaultRemote = normalizeOptionalString(
       yield* gitCore.readConfigValue(cwd, "remote.pushDefault"),
     );
-    if (pushDefaultRemote) {
-      return pushDefaultRemote;
-    }
-
-    if (remoteNames.includes("origin")) {
-      return "origin";
-    }
-
-    const [firstRemote] = remoteNames;
-    if (firstRemote) {
-      return firstRemote;
+    const remoteName = choosePromotePushRemoteName({
+      remoteNames,
+      upstreamRef,
+      branchPushRemote,
+      pushDefaultRemote,
+    });
+    if (remoteName) {
+      return remoteName;
     }
 
     return yield* gitManagerError(

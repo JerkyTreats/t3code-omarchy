@@ -1817,6 +1817,58 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
     }),
   );
 
+  it.effect("keeps the source branch when promote hits merge conflicts", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("t3code-git-manager-");
+      yield* initRepo(repoDir);
+      const remoteDir = yield* createBareRemote();
+      yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "main"]);
+      fs.writeFileSync(path.join(repoDir, "conflict.txt"), "main\n");
+      yield* runGit(repoDir, ["add", "conflict.txt"]);
+      yield* runGit(repoDir, ["commit", "-m", "Add main conflict file"]);
+      yield* runGit(repoDir, ["push", "origin", "main"]);
+      yield* runGit(repoDir, ["checkout", "-b", "feature/promote-conflict", "HEAD~1"]);
+      fs.writeFileSync(path.join(repoDir, "conflict.txt"), "feature\n");
+      yield* runGit(repoDir, ["add", "conflict.txt"]);
+      yield* runGit(repoDir, ["commit", "-m", "Add feature conflict file"]);
+
+      const { manager } = yield* makeManager();
+      const result = yield* runStackedAction(manager, {
+        cwd: repoDir,
+        action: "promote",
+        targetBranch: "main",
+      });
+
+      expect(result.push.status).toBe("skipped_not_requested");
+      expect(result.promote).toMatchObject({
+        status: "conflicts",
+        sourceBranch: "feature/promote-conflict",
+        targetBranch: "main",
+        conflictedFiles: ["conflict.txt"],
+      });
+      expect(
+        yield* runGit(repoDir, ["rev-parse", "--abbrev-ref", "HEAD"]).pipe(
+          Effect.map((output) => output.stdout.trim()),
+        ),
+      ).toBe("main");
+      expect(
+        yield* runGit(repoDir, ["branch", "--list", "feature/promote-conflict"]).pipe(
+          Effect.map((output) => output.stdout.trim()),
+        ),
+      ).toContain("feature/promote-conflict");
+
+      const backupRefs = yield* runGit(remoteDir, [
+        "for-each-ref",
+        "--format=%(refname:short)",
+        "refs/heads/t3code/promote-backup/feature/promote-conflict",
+      ]).pipe(Effect.map((output) => output.stdout.trim()));
+      expect(backupRefs).toMatch(
+        /^t3code\/promote-backup\/feature\/promote-conflict\/[0-9a-f]{8}$/,
+      );
+    }),
+  );
+
   it.effect("create_pr pushes a clean branch before creating the PR when needed", () =>
     Effect.gen(function* () {
       const repoDir = yield* makeTempDir("t3code-git-manager-");

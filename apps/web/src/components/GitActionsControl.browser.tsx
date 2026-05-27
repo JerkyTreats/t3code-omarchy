@@ -79,6 +79,20 @@ vi.mock("@tanstack/react-query", async () => {
       };
     }),
     useQuery: vi.fn(() => ({ data: null, error: null })),
+    useInfiniteQuery: vi.fn(() => ({
+      data: {
+        pages: [
+          {
+            refs: [{ name: "main", current: false, isDefault: true, worktreePath: null }],
+            isRepo: true,
+            hasPrimaryRemote: true,
+            nextCursor: null,
+            totalCount: 1,
+          },
+        ],
+      },
+      error: null,
+    })),
     useQueryClient: vi.fn(() => ({})),
   };
 });
@@ -98,6 +112,7 @@ vi.mock("~/editorPreferences", () => ({
 }));
 
 vi.mock("~/lib/gitReactQuery", () => ({
+  gitBranchSearchInfiniteQueryOptions: vi.fn(() => ({ __kind: "branch-search" })),
   gitInitMutationOptions: vi.fn(() => ({ __kind: "init" })),
   gitMutationKeys: {
     publishRepository: vi.fn(() => ["publish-repository"]),

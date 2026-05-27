@@ -5,6 +5,10 @@ vi.mock("../environmentApi", () => ({
   ensureEnvironmentApi: vi.fn(),
 }));
 
+vi.mock("../environments/runtime", () => ({
+  requireEnvironmentConnection: vi.fn(),
+}));
+
 vi.mock("../wsRpcClient", () => ({
   getWsRpcClient: vi.fn(),
   getWsRpcClientForEnvironment: vi.fn(),
@@ -12,6 +16,7 @@ vi.mock("../wsRpcClient", () => ({
 
 import type { InfiniteData } from "@tanstack/react-query";
 import { EnvironmentId, type VcsListRefsResult } from "@t3tools/contracts";
+import { requireEnvironmentConnection } from "../environments/runtime";
 
 import {
   gitBranchSearchInfiniteQueryOptions,
@@ -67,6 +72,38 @@ describe("git mutation options", () => {
       queryClient,
     });
     expect(options.mutationKey).toEqual(gitMutationKeys.runStackedAction(ENVIRONMENT_A, "/repo/a"));
+  });
+
+  it("forwards promote target branch to the environment API", async () => {
+    const runStackedAction = vi.fn().mockResolvedValue({});
+    vi.mocked(requireEnvironmentConnection).mockReturnValue({
+      client: {
+        git: {
+          runStackedAction,
+        },
+      },
+    } as never);
+    const options = gitRunStackedActionMutationOptions({
+      environmentId: ENVIRONMENT_A,
+      cwd: "/repo/a",
+      queryClient,
+    });
+
+    await options.mutationFn?.(
+      {
+        actionId: "action-1",
+        action: "promote",
+        targetBranch: "main",
+      },
+      {} as never,
+    );
+
+    expect(runStackedAction).toHaveBeenCalledWith({
+      action: "promote",
+      actionId: "action-1",
+      cwd: "/repo/a",
+      targetBranch: "main",
+    });
   });
 
   it("attaches cwd-scoped mutation key for pull", () => {
