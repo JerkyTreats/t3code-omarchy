@@ -6,6 +6,7 @@ import {
   EventId,
   MessageId,
   ProjectId,
+  ProviderDriverKind,
   ProviderInstanceId,
   ThreadId,
   TurnId,
@@ -724,6 +725,172 @@ describe("incremental orchestration updates", () => {
     expect(nextEnvironmentState?.messageByThreadId[thread2.id]).toBe(
       previousEnvironmentState?.messageByThreadId[thread2.id],
     );
+  });
+
+  it("projects active plan progress into an existing sidebar summary", () => {
+    const turnId = TurnId.make("turn-1");
+    const thread = makeThread({
+      latestTurn: {
+        turnId,
+        state: "running",
+        requestedAt: "2026-02-27T00:00:00.000Z",
+        startedAt: "2026-02-27T00:00:00.000Z",
+        completedAt: null,
+        assistantMessageId: null,
+      },
+      session: {
+        provider: ProviderDriverKind.make("codex"),
+        status: "running",
+        createdAt: "2026-02-27T00:00:00.000Z",
+        updatedAt: "2026-02-27T00:00:00.000Z",
+        orchestrationStatus: "running",
+      },
+    });
+    const baseEnvironmentState = localEnvironmentStateOf(makeState(thread));
+    const state = withActiveEnvironmentState(baseEnvironmentState, {
+      sidebarThreadSummaryById: {
+        [thread.id]: {
+          id: thread.id,
+          environmentId: thread.environmentId,
+          projectId: thread.projectId,
+          title: thread.title,
+          interactionMode: thread.interactionMode,
+          session: thread.session,
+          createdAt: thread.createdAt,
+          archivedAt: thread.archivedAt,
+          latestTurn: thread.latestTurn,
+          branch: thread.branch,
+          worktreePath: thread.worktreePath,
+          latestUserMessageAt: null,
+          hasPendingApprovals: false,
+          hasPendingUserInput: false,
+          hasActionableProposedPlan: false,
+          activePlanProgress: null,
+        },
+      },
+    });
+
+    const next = applyOrchestrationEvent(
+      state,
+      makeEvent("thread.activity-appended", {
+        threadId: thread.id,
+        activity: {
+          id: EventId.make("activity-plan"),
+          kind: "turn.plan.updated",
+          tone: "info",
+          summary: "Plan updated",
+          turnId,
+          createdAt: "2026-02-27T00:00:01.000Z",
+          payload: {
+            plan: [
+              { step: "Read docs", status: "completed" },
+              { step: "Sketch design", status: "completed" },
+              { step: "Implement wiring", status: "inProgress" },
+              { step: "Verify", status: "pending" },
+              { step: "Run checks", status: "pending" },
+            ],
+          },
+        },
+      }),
+      localEnvironmentId,
+    );
+
+    expect(
+      next.environmentStateById[localEnvironmentId]?.sidebarThreadSummaryById[thread.id]
+        ?.activePlanProgress,
+    ).toEqual({
+      completedAllSteps: false,
+      currentStepNumber: 3,
+      totalSteps: 5,
+    });
+  });
+
+  it("clears sidebar plan progress when a new running turn has no plan activity", () => {
+    const turn1 = TurnId.make("turn-1");
+    const turn2 = TurnId.make("turn-2");
+    const thread = makeThread({
+      latestTurn: {
+        turnId: turn1,
+        state: "running",
+        requestedAt: "2026-02-27T00:00:00.000Z",
+        startedAt: "2026-02-27T00:00:00.000Z",
+        completedAt: null,
+        assistantMessageId: null,
+      },
+      session: {
+        provider: ProviderDriverKind.make("codex"),
+        status: "running",
+        createdAt: "2026-02-27T00:00:00.000Z",
+        updatedAt: "2026-02-27T00:00:00.000Z",
+        orchestrationStatus: "running",
+        activeTurnId: turn1,
+      },
+      activities: [
+        {
+          id: EventId.make("activity-plan"),
+          kind: "turn.plan.updated",
+          tone: "info",
+          summary: "Plan updated",
+          turnId: turn1,
+          createdAt: "2026-02-27T00:00:01.000Z",
+          payload: {
+            plan: [
+              { step: "Read docs", status: "completed" },
+              { step: "Implement", status: "inProgress" },
+            ],
+          },
+        },
+      ],
+    });
+    const baseEnvironmentState = localEnvironmentStateOf(makeState(thread));
+    const state = withActiveEnvironmentState(baseEnvironmentState, {
+      sidebarThreadSummaryById: {
+        [thread.id]: {
+          id: thread.id,
+          environmentId: thread.environmentId,
+          projectId: thread.projectId,
+          title: thread.title,
+          interactionMode: thread.interactionMode,
+          session: thread.session,
+          createdAt: thread.createdAt,
+          archivedAt: thread.archivedAt,
+          latestTurn: thread.latestTurn,
+          branch: thread.branch,
+          worktreePath: thread.worktreePath,
+          latestUserMessageAt: null,
+          hasPendingApprovals: false,
+          hasPendingUserInput: false,
+          hasActionableProposedPlan: false,
+          activePlanProgress: {
+            completedAllSteps: false,
+            currentStepNumber: 2,
+            totalSteps: 2,
+          },
+        },
+      },
+    });
+
+    const next = applyOrchestrationEvent(
+      state,
+      makeEvent("thread.session-set", {
+        threadId: thread.id,
+        session: {
+          threadId: thread.id,
+          status: "running",
+          providerName: "codex",
+          runtimeMode: "full-access",
+          activeTurnId: turn2,
+          lastError: null,
+          updatedAt: "2026-02-27T00:00:02.000Z",
+        },
+      }),
+      localEnvironmentId,
+    );
+
+    expect(
+      next.environmentStateById[localEnvironmentId]?.sidebarThreadSummaryById[thread.id]
+        ?.activePlanProgress,
+    ).toBeNull();
   });
 
   it("applies replay batches in sequence and updates session state", () => {

@@ -32,7 +32,8 @@ export interface ThreadStatusPill {
     | "Completed"
     | "Pending Approval"
     | "Awaiting Input"
-    | "Plan Ready";
+    | "Plan Ready"
+    | `${number}/${number}`;
   colorClass: string;
   dotClass: string;
   pulse: boolean;
@@ -47,6 +48,10 @@ const THREAD_STATUS_PRIORITY: Record<ThreadStatusPill["label"], number> = {
   Completed: 1,
 };
 
+function threadStatusPriority(status: ThreadStatusPill): number {
+  return THREAD_STATUS_PRIORITY[status.label] ?? THREAD_STATUS_PRIORITY.Working;
+}
+
 type ThreadStatusInput = Pick<
   SidebarThreadSummary,
   | "hasActionableProposedPlan"
@@ -58,6 +63,16 @@ type ThreadStatusInput = Pick<
 > & {
   lastVisitedAt?: string | undefined;
 };
+
+function hasCompletedLatestTurnForStatus(thread: ThreadStatusInput): boolean {
+  if (!thread.latestTurn?.completedAt) {
+    return false;
+  }
+  const activeTurnId = thread.session?.activeTurnId;
+  return (
+    activeTurnId === undefined || activeTurnId === null || activeTurnId === thread.latestTurn.turnId
+  );
+}
 
 export interface ThreadJumpHintVisibilityController {
   sync: (shouldShow: boolean) => void;
@@ -327,7 +342,7 @@ export function resolveThreadRowClassName(input: {
 }
 
 export function resolveThreadStatusPill(input: {
-  thread: ThreadStatusInput;
+  thread: ThreadStatusInput & Pick<SidebarThreadSummary, "activePlanProgress">;
 }): ThreadStatusPill | null {
   const { thread } = input;
 
@@ -349,7 +364,45 @@ export function resolveThreadStatusPill(input: {
     };
   }
 
+  const hasPlanReadyPrompt =
+    !thread.hasPendingUserInput &&
+    thread.interactionMode === "plan" &&
+    (isLatestTurnSettled(thread.latestTurn, thread.session) ||
+      hasCompletedLatestTurnForStatus(thread)) &&
+    thread.hasActionableProposedPlan;
+  if (hasPlanReadyPrompt) {
+    return {
+      label: "Plan Ready",
+      colorClass: "text-violet-600 dark:text-violet-300/90",
+      dotClass: "bg-violet-500 dark:bg-violet-300/90",
+      pulse: false,
+    };
+  }
+
+  if (
+    (isLatestTurnSettled(thread.latestTurn, thread.session) ||
+      hasCompletedLatestTurnForStatus(thread)) &&
+    hasUnseenCompletion(thread)
+  ) {
+    return {
+      label: "Completed",
+      colorClass: "text-emerald-600 dark:text-emerald-300/90",
+      dotClass: "bg-emerald-500 dark:bg-emerald-300/90",
+      pulse: false,
+    };
+  }
+
   if (thread.session?.status === "running") {
+    if (thread.activePlanProgress) {
+      return {
+        label: thread.activePlanProgress.completedAllSteps
+          ? `${thread.activePlanProgress.totalSteps}/${thread.activePlanProgress.totalSteps}`
+          : `${thread.activePlanProgress.currentStepNumber}/${thread.activePlanProgress.totalSteps}`,
+        colorClass: "text-sky-600 dark:text-sky-300/80",
+        dotClass: "bg-sky-500 dark:bg-sky-300/80",
+        pulse: true,
+      };
+    }
     return {
       label: "Working",
       colorClass: "text-sky-600 dark:text-sky-300/80",
@@ -367,29 +420,6 @@ export function resolveThreadStatusPill(input: {
     };
   }
 
-  const hasPlanReadyPrompt =
-    !thread.hasPendingUserInput &&
-    thread.interactionMode === "plan" &&
-    isLatestTurnSettled(thread.latestTurn, thread.session) &&
-    thread.hasActionableProposedPlan;
-  if (hasPlanReadyPrompt) {
-    return {
-      label: "Plan Ready",
-      colorClass: "text-violet-600 dark:text-violet-300/90",
-      dotClass: "bg-violet-500 dark:bg-violet-300/90",
-      pulse: false,
-    };
-  }
-
-  if (hasUnseenCompletion(thread)) {
-    return {
-      label: "Completed",
-      colorClass: "text-emerald-600 dark:text-emerald-300/90",
-      dotClass: "bg-emerald-500 dark:bg-emerald-300/90",
-      pulse: false,
-    };
-  }
-
   return null;
 }
 
@@ -402,7 +432,7 @@ export function resolveProjectStatusIndicator(
     if (status === null) continue;
     if (
       highestPriorityStatus === null ||
-      THREAD_STATUS_PRIORITY[status.label] > THREAD_STATUS_PRIORITY[highestPriorityStatus.label]
+      threadStatusPriority(status) > threadStatusPriority(highestPriorityStatus)
     ) {
       highestPriorityStatus = status;
     }

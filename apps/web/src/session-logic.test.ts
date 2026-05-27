@@ -10,7 +10,9 @@ import { describe, expect, it } from "vitest";
 import {
   deriveCompletionDividerBeforeEntryId,
   deriveActiveWorkStartedAt,
+  deriveActivePlanProgressState,
   deriveActivePlanState,
+  deriveCurrentTurnPlanProgressState,
   derivePendingApprovals,
   derivePendingUserInputs,
   deriveTimelineEntries,
@@ -364,6 +366,136 @@ describe("deriveActivePlanState", () => {
       createdAt: "2026-02-23T00:00:01.000Z",
       turnId: "turn-1",
       steps: [{ step: "Write tests", status: "completed" }],
+    });
+  });
+});
+
+describe("deriveActivePlanProgressState", () => {
+  it("tracks the in-progress step number for the active plan", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "plan-progress",
+        createdAt: "2026-02-23T00:00:02.000Z",
+        kind: "turn.plan.updated",
+        summary: "Plan updated",
+        tone: "info",
+        turnId: "turn-1",
+        payload: {
+          explanation: "Refined plan",
+          plan: [
+            { step: "Read docs", status: "completed" },
+            { step: "Sketch design", status: "completed" },
+            { step: "Implement wiring", status: "inProgress" },
+            { step: "Add tests", status: "pending" },
+            { step: "Run verification", status: "pending" },
+          ],
+        },
+      }),
+    ];
+
+    expect(deriveActivePlanProgressState(activities, TurnId.make("turn-1"))).toEqual({
+      completedAllSteps: false,
+      currentStepNumber: 3,
+      totalSteps: 5,
+    });
+  });
+
+  it("tracks completed plan progress", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "plan-complete",
+        createdAt: "2026-02-23T00:00:02.000Z",
+        kind: "turn.plan.updated",
+        summary: "Plan updated",
+        tone: "info",
+        turnId: "turn-1",
+        payload: {
+          plan: [
+            { step: "Implement", status: "completed" },
+            { step: "Verify", status: "completed" },
+          ],
+        },
+      }),
+    ];
+
+    expect(deriveActivePlanProgressState(activities, TurnId.make("turn-1"))).toEqual({
+      completedAllSteps: true,
+      currentStepNumber: 2,
+      totalSteps: 2,
+    });
+  });
+
+  it("returns null when no valid plan steps exist", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "plan-invalid",
+        createdAt: "2026-02-23T00:00:02.000Z",
+        kind: "turn.plan.updated",
+        summary: "Plan updated",
+        tone: "info",
+        turnId: "turn-1",
+        payload: {
+          plan: [{ status: "inProgress" }],
+        },
+      }),
+    ];
+
+    expect(deriveActivePlanProgressState(activities, TurnId.make("turn-1"))).toBeNull();
+  });
+});
+
+describe("deriveCurrentTurnPlanProgressState", () => {
+  it("does not fall back to a previous turn plan", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "plan-from-turn-1",
+        createdAt: "2026-02-23T00:00:01.000Z",
+        kind: "turn.plan.updated",
+        summary: "Plan updated",
+        tone: "info",
+        turnId: "turn-1",
+        payload: {
+          plan: [{ step: "Write tests", status: "completed" }],
+        },
+      }),
+    ];
+
+    expect(deriveCurrentTurnPlanProgressState(activities, TurnId.make("turn-2"))).toBeNull();
+  });
+
+  it("returns current turn progress when the latest turn has plan activity", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "plan-from-turn-1",
+        createdAt: "2026-02-23T00:00:01.000Z",
+        kind: "turn.plan.updated",
+        summary: "Plan updated",
+        tone: "info",
+        turnId: "turn-1",
+        payload: {
+          plan: [{ step: "Old work", status: "completed" }],
+        },
+      }),
+      makeActivity({
+        id: "plan-from-turn-2",
+        createdAt: "2026-02-23T00:00:02.000Z",
+        kind: "turn.plan.updated",
+        summary: "Plan updated",
+        tone: "info",
+        turnId: "turn-2",
+        payload: {
+          plan: [
+            { step: "New work", status: "completed" },
+            { step: "Verify new work", status: "inProgress" },
+          ],
+        },
+      }),
+    ];
+
+    expect(deriveCurrentTurnPlanProgressState(activities, TurnId.make("turn-2"))).toEqual({
+      completedAllSteps: false,
+      currentStepNumber: 2,
+      totalSteps: 2,
     });
   });
 });

@@ -27,6 +27,7 @@ import {
   ProjectId,
   ProviderInstanceId,
   ThreadId,
+  TurnId,
 } from "@t3tools/contracts";
 import {
   DEFAULT_INTERACTION_MODE,
@@ -474,6 +475,7 @@ describe("isContextMenuPointerDown", () => {
 
 describe("resolveThreadStatusPill", () => {
   const baseThread = {
+    activePlanProgress: null,
     hasActionableProposedPlan: false,
     hasPendingApprovals: false,
     hasPendingUserInput: false,
@@ -520,6 +522,68 @@ describe("resolveThreadStatusPill", () => {
     ).toMatchObject({ label: "Working", pulse: true });
   });
 
+  it("shows active plan progress while a plan thread is running", () => {
+    expect(
+      resolveThreadStatusPill({
+        thread: {
+          ...baseThread,
+          activePlanProgress: {
+            completedAllSteps: false,
+            currentStepNumber: 3,
+            totalSteps: 5,
+          },
+        },
+      }),
+    ).toMatchObject({ label: "3/5", pulse: true });
+  });
+
+  it("shows complete plan progress while a plan thread is still running", () => {
+    expect(
+      resolveThreadStatusPill({
+        thread: {
+          ...baseThread,
+          activePlanProgress: {
+            completedAllSteps: true,
+            currentStepNumber: 5,
+            totalSteps: 5,
+          },
+        },
+      }),
+    ).toMatchObject({ label: "5/5", pulse: true });
+  });
+
+  it("shows pending approval before active plan progress", () => {
+    expect(
+      resolveThreadStatusPill({
+        thread: {
+          ...baseThread,
+          activePlanProgress: {
+            completedAllSteps: false,
+            currentStepNumber: 3,
+            totalSteps: 5,
+          },
+          hasPendingApprovals: true,
+        },
+      }),
+    ).toMatchObject({ label: "Pending Approval", pulse: false });
+  });
+
+  it("shows awaiting input before active plan progress", () => {
+    expect(
+      resolveThreadStatusPill({
+        thread: {
+          ...baseThread,
+          activePlanProgress: {
+            completedAllSteps: false,
+            currentStepNumber: 3,
+            totalSteps: 5,
+          },
+          hasPendingUserInput: true,
+        },
+      }),
+    ).toMatchObject({ label: "Awaiting Input", pulse: false });
+  });
+
   it("shows plan ready when a settled plan turn has a proposed plan ready for follow-up", () => {
     expect(
       resolveThreadStatusPill({
@@ -535,6 +599,56 @@ describe("resolveThreadStatusPill", () => {
         },
       }),
     ).toMatchObject({ label: "Plan Ready", pulse: false });
+  });
+
+  it("shows plan ready when completion arrives before the running session clears", () => {
+    expect(
+      resolveThreadStatusPill({
+        thread: {
+          ...baseThread,
+          hasActionableProposedPlan: true,
+          latestTurn: makeLatestTurn(),
+          session: {
+            ...baseThread.session,
+            activeTurnId: TurnId.make("turn-1"),
+          },
+        },
+      }),
+    ).toMatchObject({ label: "Plan Ready", pulse: false });
+  });
+
+  it("shows completed when completion arrives before the running session clears", () => {
+    expect(
+      resolveThreadStatusPill({
+        thread: {
+          ...baseThread,
+          interactionMode: "default",
+          latestTurn: makeLatestTurn(),
+          lastVisitedAt: "2026-03-09T10:04:00.000Z",
+          session: {
+            ...baseThread.session,
+            activeTurnId: TurnId.make("turn-1"),
+          },
+        },
+      }),
+    ).toMatchObject({ label: "Completed", pulse: false });
+  });
+
+  it("keeps working when the running session belongs to a newer turn", () => {
+    expect(
+      resolveThreadStatusPill({
+        thread: {
+          ...baseThread,
+          interactionMode: "default",
+          latestTurn: makeLatestTurn(),
+          lastVisitedAt: "2026-03-09T10:04:00.000Z",
+          session: {
+            ...baseThread.session,
+            activeTurnId: TurnId.make("turn-2"),
+          },
+        },
+      }),
+    ).toMatchObject({ label: "Working", pulse: true });
   });
 
   it("does not show plan ready after the proposed plan was implemented elsewhere", () => {

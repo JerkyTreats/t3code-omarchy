@@ -37,6 +37,7 @@ import {
 import { resolveEnvironmentHttpUrl } from "./environments/runtime";
 import { sanitizeThreadErrorMessage } from "./rpc/transportError";
 import { getThreadFromEnvironmentState } from "./threadDerivation";
+import { deriveCurrentTurnPlanProgressState } from "./session-logic";
 const isProviderDriverKindValue = Schema.is(ProviderDriverKind);
 
 export interface EnvironmentState {
@@ -303,6 +304,7 @@ function mapThreadShell(
     hasPendingApprovals: thread.hasPendingApprovals,
     hasPendingUserInput: thread.hasPendingUserInput,
     hasActionableProposedPlan: thread.hasActionableProposedPlan,
+    activePlanProgress: null,
   };
   return {
     shell,
@@ -310,6 +312,23 @@ function mapThreadShell(
     turnState,
     summary,
   };
+}
+
+function deriveStoredActivePlanProgress(
+  state: EnvironmentState,
+  threadId: ThreadId,
+  latestTurnId: TurnId | undefined,
+): SidebarThreadSummary["activePlanProgress"] {
+  const activityIds = state.activityIdsByThreadId[threadId];
+  const activityById = state.activityByThreadId[threadId];
+  if (!activityIds || !activityById) {
+    return null;
+  }
+  const activities = activityIds.flatMap((activityId) => {
+    const activity = activityById[activityId];
+    return activity ? [activity] : [];
+  });
+  return deriveCurrentTurnPlanProgressState(activities, latestTurnId);
 }
 
 function toThreadShell(thread: Thread): ThreadShell {
@@ -403,7 +422,10 @@ function sidebarThreadSummariesEqual(
     left.latestUserMessageAt === right.latestUserMessageAt &&
     left.hasPendingApprovals === right.hasPendingApprovals &&
     left.hasPendingUserInput === right.hasPendingUserInput &&
-    left.hasActionableProposedPlan === right.hasActionableProposedPlan
+    left.hasActionableProposedPlan === right.hasActionableProposedPlan &&
+    left.activePlanProgress?.completedAllSteps === right.activePlanProgress?.completedAllSteps &&
+    left.activePlanProgress?.currentStepNumber === right.activePlanProgress?.currentStepNumber &&
+    left.activePlanProgress?.totalSteps === right.activePlanProgress?.totalSteps
   );
 }
 
@@ -568,7 +590,8 @@ function ensureThreadRegistered(
  * the active thread has up-to-date state even if the shell stream event
  * hasn't arrived yet (both streams use structural equality checks to avoid
  * unnecessary re-renders when delivering equivalent data).
- * Does NOT write sidebarThreadSummaryById — that is shell-stream-only.
+ * Only updates sidebarThreadSummaryById with detail-only plan progress that is
+ * absent from the shell stream.
  */
 function writeThreadState(
   state: EnvironmentState,
@@ -677,6 +700,27 @@ function writeThreadState(
     };
   }
 
+  const previousSummary = nextState.sidebarThreadSummaryById[nextThread.id];
+  if (previousSummary) {
+    const activePlanProgress = deriveCurrentTurnPlanProgressState(
+      nextThread.activities,
+      nextThread.latestTurn?.turnId ?? undefined,
+    );
+    const nextSummary: SidebarThreadSummary = {
+      ...previousSummary,
+      activePlanProgress,
+    };
+    if (!sidebarThreadSummariesEqual(previousSummary, nextSummary)) {
+      nextState = {
+        ...nextState,
+        sidebarThreadSummaryById: {
+          ...nextState.sidebarThreadSummaryById,
+          [nextThread.id]: nextSummary,
+        },
+      };
+    }
+  }
+
   return nextState;
 }
 
@@ -743,17 +787,24 @@ function writeThreadShellState(
     };
   }
 
+  const storedActivePlanProgress = deriveStoredActivePlanProgress(
+    nextState,
+    nextThread.shell.id,
+    nextThread.turnState.latestTurn?.turnId ?? undefined,
+  );
+  const nextSummary: SidebarThreadSummary = {
+    ...nextThread.summary,
+    activePlanProgress: storedActivePlanProgress,
+  };
+
   if (
-    !sidebarThreadSummariesEqual(
-      state.sidebarThreadSummaryById[nextThread.shell.id],
-      nextThread.summary,
-    )
+    !sidebarThreadSummariesEqual(state.sidebarThreadSummaryById[nextThread.shell.id], nextSummary)
   ) {
     nextState = {
       ...nextState,
       sidebarThreadSummaryById: {
         ...nextState.sidebarThreadSummaryById,
-        [nextThread.shell.id]: nextThread.summary,
+        [nextThread.shell.id]: nextSummary,
       },
     };
   }

@@ -21,6 +21,7 @@ import type {
   ThreadSession,
   TurnDiffSummary,
 } from "./types";
+import { derivePlanProgressPresentation, type PlanStepStatus } from "./fork/planPresentationPolicy";
 
 export type ProviderPickerKind = ProviderDriverKind;
 
@@ -88,6 +89,12 @@ export interface ActivePlanState {
     step: string;
     status: "pending" | "inProgress" | "completed";
   }>;
+}
+
+export interface ActivePlanProgressState {
+  completedAllSteps: boolean;
+  currentStepNumber: number;
+  totalSteps: number;
 }
 
 export interface LatestProposedPlanState {
@@ -364,16 +371,7 @@ export function deriveActivePlanState(
   activities: ReadonlyArray<OrchestrationThreadActivity>,
   latestTurnId: TurnId | undefined,
 ): ActivePlanState | null {
-  const ordered = [...activities].toSorted(compareActivitiesByOrder);
-  const allPlanActivities = ordered.filter((activity) => activity.kind === "turn.plan.updated");
-  // Prefer plan from the current turn; fall back to the most recent plan from any turn
-  // so that TodoWrite tasks persist across follow-up messages.
-  const latest = Option.firstSomeOf([
-    ...(latestTurnId
-      ? Arr.findLast(allPlanActivities, (activity) => activity.turnId === latestTurnId)
-      : Option.none()),
-    Arr.last(allPlanActivities),
-  ]).pipe(Option.getOrNull);
+  const latest = findLatestPlanActivity(activities, latestTurnId);
   if (!latest) {
     return null;
   }
@@ -381,11 +379,85 @@ export function deriveActivePlanState(
     latest.payload && typeof latest.payload === "object"
       ? (latest.payload as Record<string, unknown>)
       : null;
-  const rawPlan = payload?.plan;
-  if (!Array.isArray(rawPlan)) {
+  const steps = parsePlanSteps(payload?.plan);
+  if (steps.length === 0) {
     return null;
   }
-  const steps = rawPlan
+  return {
+    createdAt: latest.createdAt,
+    turnId: latest.turnId,
+    ...(payload && "explanation" in payload
+      ? { explanation: payload.explanation as string | null }
+      : {}),
+    steps,
+  };
+}
+
+export function deriveActivePlanProgressState(
+  activities: ReadonlyArray<OrchestrationThreadActivity>,
+  latestTurnId: TurnId | undefined,
+): ActivePlanProgressState | null {
+  const latest = findLatestPlanActivity(activities, latestTurnId);
+  return derivePlanProgressFromActivity(latest);
+}
+
+export function deriveCurrentTurnPlanProgressState(
+  activities: ReadonlyArray<OrchestrationThreadActivity>,
+  latestTurnId: TurnId | undefined,
+): ActivePlanProgressState | null {
+  if (!latestTurnId) {
+    return null;
+  }
+  const ordered = [...activities].toSorted(compareActivitiesByOrder);
+  const latest = Arr.findLast(
+    ordered,
+    (activity) => activity.kind === "turn.plan.updated" && activity.turnId === latestTurnId,
+  ).pipe(Option.getOrNull);
+  return derivePlanProgressFromActivity(latest);
+}
+
+function derivePlanProgressFromActivity(
+  latest: OrchestrationThreadActivity | null,
+): ActivePlanProgressState | null {
+  if (!latest) {
+    return null;
+  }
+  const payload =
+    latest.payload && typeof latest.payload === "object"
+      ? (latest.payload as Record<string, unknown>)
+      : null;
+  const progress = derivePlanProgressPresentation(parsePlanSteps(payload?.plan));
+  if (!progress) {
+    return null;
+  }
+  return {
+    completedAllSteps: progress.completedAllSteps,
+    currentStepNumber: progress.currentStepNumber,
+    totalSteps: progress.totalSteps,
+  };
+}
+
+function findLatestPlanActivity(
+  activities: ReadonlyArray<OrchestrationThreadActivity>,
+  latestTurnId: TurnId | undefined,
+): OrchestrationThreadActivity | null {
+  const ordered = [...activities].toSorted(compareActivitiesByOrder);
+  const allPlanActivities = ordered.filter((activity) => activity.kind === "turn.plan.updated");
+  // Prefer plan from the current turn; fall back to the most recent plan from any turn
+  // so that TodoWrite tasks persist across follow-up messages.
+  return Option.firstSomeOf([
+    ...(latestTurnId
+      ? Arr.findLast(allPlanActivities, (activity) => activity.turnId === latestTurnId)
+      : Option.none()),
+    Arr.last(allPlanActivities),
+  ]).pipe(Option.getOrNull);
+}
+
+function parsePlanSteps(rawPlan: unknown): Array<{ step: string; status: PlanStepStatus }> {
+  if (!Array.isArray(rawPlan)) {
+    return [];
+  }
+  return rawPlan
     .map((entry) => {
       if (!entry || typeof entry !== "object") return null;
       const record = entry as Record<string, unknown>;
@@ -404,20 +476,9 @@ export function deriveActivePlanState(
         step,
       ): step is {
         step: string;
-        status: "pending" | "inProgress" | "completed";
+        status: PlanStepStatus;
       } => step !== null,
     );
-  if (steps.length === 0) {
-    return null;
-  }
-  return {
-    createdAt: latest.createdAt,
-    turnId: latest.turnId,
-    ...(payload && "explanation" in payload
-      ? { explanation: payload.explanation as string | null }
-      : {}),
-    steps,
-  };
 }
 
 export function findLatestProposedPlan(
