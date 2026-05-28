@@ -64,16 +64,6 @@ type ThreadStatusInput = Pick<
   lastVisitedAt?: string | undefined;
 };
 
-function hasCompletedLatestTurnForStatus(thread: ThreadStatusInput): boolean {
-  if (!thread.latestTurn?.completedAt) {
-    return false;
-  }
-  const activeTurnId = thread.session?.activeTurnId;
-  return (
-    activeTurnId === undefined || activeTurnId === null || activeTurnId === thread.latestTurn.turnId
-  );
-}
-
 export interface ThreadJumpHintVisibilityController {
   sync: (shouldShow: boolean) => void;
   dispose: () => void;
@@ -367,8 +357,7 @@ export function resolveThreadStatusPill(input: {
   const hasPlanReadyPrompt =
     !thread.hasPendingUserInput &&
     thread.interactionMode === "plan" &&
-    (isLatestTurnSettled(thread.latestTurn, thread.session) ||
-      hasCompletedLatestTurnForStatus(thread)) &&
+    isLatestTurnSettled(thread.latestTurn, thread.session) &&
     thread.hasActionableProposedPlan;
   if (hasPlanReadyPrompt) {
     return {
@@ -379,11 +368,7 @@ export function resolveThreadStatusPill(input: {
     };
   }
 
-  if (
-    (isLatestTurnSettled(thread.latestTurn, thread.session) ||
-      hasCompletedLatestTurnForStatus(thread)) &&
-    hasUnseenCompletion(thread)
-  ) {
+  if (isLatestTurnSettled(thread.latestTurn, thread.session) && hasUnseenCompletion(thread)) {
     return {
       label: "Completed",
       colorClass: "text-emerald-600 dark:text-emerald-300/90",

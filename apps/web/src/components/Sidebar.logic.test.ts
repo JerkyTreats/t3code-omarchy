@@ -601,11 +601,16 @@ describe("resolveThreadStatusPill", () => {
     ).toMatchObject({ label: "Plan Ready", pulse: false });
   });
 
-  it("shows plan ready when completion arrives before the running session clears", () => {
+  it("keeps active plan progress when a plan completion arrives before the running session clears", () => {
     expect(
       resolveThreadStatusPill({
         thread: {
           ...baseThread,
+          activePlanProgress: {
+            completedAllSteps: true,
+            currentStepNumber: 5,
+            totalSteps: 5,
+          },
           hasActionableProposedPlan: true,
           latestTurn: makeLatestTurn(),
           session: {
@@ -614,10 +619,10 @@ describe("resolveThreadStatusPill", () => {
           },
         },
       }),
-    ).toMatchObject({ label: "Plan Ready", pulse: false });
+    ).toMatchObject({ label: "5/5", pulse: true });
   });
 
-  it("shows completed when completion arrives before the running session clears", () => {
+  it("keeps working when completion arrives before the running session clears", () => {
     expect(
       resolveThreadStatusPill({
         thread: {
@@ -631,7 +636,7 @@ describe("resolveThreadStatusPill", () => {
           },
         },
       }),
-    ).toMatchObject({ label: "Completed", pulse: false });
+    ).toMatchObject({ label: "Working", pulse: true });
   });
 
   it("keeps working when the running session belongs to a newer turn", () => {
