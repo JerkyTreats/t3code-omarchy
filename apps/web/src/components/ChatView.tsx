@@ -823,6 +823,7 @@ export default function ChatView(props: ChatViewProps) {
   const isLocalDraftThread = !isServerThread && localDraftThread !== undefined;
   const canCheckoutPullRequestIntoThread = isLocalDraftThread;
   const diffOpen = rawSearch.diff === "1";
+  const gitOpen = rawSearch.git === "1";
   const activeThreadId = activeThread?.id ?? null;
   const activeThreadRef = useMemo(
     () => (activeThread ? scopeThreadRef(activeThread.environmentId, activeThread.id) : null),
@@ -1728,6 +1729,23 @@ export default function ChatView(props: ChatViewProps) {
       },
     });
   }, [diffOpen, environmentId, isServerThread, navigate, onDiffPanelOpen, threadId]);
+  const onToggleGit = useCallback(() => {
+    if (!isServerThread) {
+      return;
+    }
+    void navigate({
+      to: "/$environmentId/$threadId",
+      params: {
+        environmentId,
+        threadId,
+      },
+      replace: true,
+      search: (previous) => {
+        const rest = stripDiffSearchParams(previous);
+        return gitOpen ? { ...rest, git: undefined } : { ...rest, git: "1" };
+      },
+    });
+  }, [environmentId, gitOpen, isServerThread, navigate, threadId]);
 
   const envLocked = Boolean(
     activeThread &&
@@ -3539,8 +3557,6 @@ export default function ChatView(props: ChatViewProps) {
       >
         <ChatHeader
           activeThreadEnvironmentId={activeThread.environmentId}
-          activeThreadId={activeThread.id}
-          {...(routeKind === "draft" && draftId ? { draftId } : {})}
           activeThreadTitle={activeThread.title}
           activeProjectName={activeProject?.name}
           isGitRepo={isGitRepo}
@@ -3556,12 +3572,14 @@ export default function ChatView(props: ChatViewProps) {
           terminalToggleShortcutLabel={terminalToggleShortcutLabel}
           diffToggleShortcutLabel={diffPanelShortcutLabel}
           gitCwd={gitCwd}
+          gitOpen={gitOpen}
           diffOpen={diffOpen}
           onRunProjectScript={runProjectScript}
           onAddProjectScript={saveProjectScript}
           onUpdateProjectScript={updateProjectScript}
           onDeleteProjectScript={deleteProjectScript}
           onToggleTerminal={toggleTerminalVisibility}
+          onToggleGit={onToggleGit}
           onToggleDiff={onToggleDiff}
         />
       </header>

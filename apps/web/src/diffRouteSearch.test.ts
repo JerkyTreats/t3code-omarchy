@@ -72,6 +72,10 @@ describe("parseDiffRouteSearch", () => {
     });
   });
 
+  it("parses Git panel mode", () => {
+    expect(parseDiffRouteSearch({ git: "1" })).toEqual({ git: "1" });
+  });
+
   it("parses fullscreen plan preview mode", () => {
     expect(
       parseDiffRouteSearch({
@@ -101,6 +105,7 @@ describe("parseDiffRouteSearch", () => {
         planPreview: "1",
         planThreadId: "thread-1",
         planId: "plan-1",
+        git: "1",
         keep: "value",
       }),
     ).toEqual({ keep: "value" });

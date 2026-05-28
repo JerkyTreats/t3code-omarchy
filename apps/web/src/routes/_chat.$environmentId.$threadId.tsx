@@ -26,6 +26,7 @@ import { getThreadFromEnvironmentState } from "../threadDerivation";
 import { resolveThreadRouteRef, buildThreadRouteParams } from "../threadRoutes";
 import { RightPanelSheet } from "../components/RightPanelSheet";
 import { Sidebar, SidebarInset, SidebarProvider, SidebarRail } from "~/components/ui/sidebar";
+import { GitPanelRouteAdapter } from "../components/git-panel/GitPanelRouteAdapter";
 
 const DiffPanel = lazy(() => import("../components/DiffPanel"));
 const DIFF_INLINE_SIDEBAR_WIDTH_STORAGE_KEY = "chat_diff_sidebar_width";
@@ -171,6 +172,7 @@ function ChatThreadRouteView() {
   const serverThreadStarted = threadHasStarted(serverThread);
   const environmentHasAnyThreads = environmentHasServerThreads || environmentHasDraftThreads;
   const diffOpen = search.diff === "1";
+  const gitOpen = search.git === "1";
   const planPreviewOpen = search.planPreview === "1" && !!search.planThreadId && !!search.planId;
   const shouldUseDiffSheet = useMediaQuery(RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY);
   const planPreviewThread = useStore(
@@ -218,6 +220,12 @@ function ChatThreadRouteView() {
     diffPanelMountState.threadKey === currentThreadKey
       ? diffPanelMountState.hasOpenedDiff
       : diffOpen;
+  const [gitPanelMountState, setGitPanelMountState] = useState(() => ({
+    threadKey: currentThreadKey,
+    hasOpenedGit: gitOpen,
+  }));
+  const hasOpenedGit =
+    gitPanelMountState.threadKey === currentThreadKey ? gitPanelMountState.hasOpenedGit : gitOpen;
   const markDiffOpened = useCallback(() => {
     setDiffPanelMountState((previous) => {
       if (previous.threadKey === currentThreadKey && previous.hasOpenedDiff) {
@@ -253,6 +261,41 @@ function ChatThreadRouteView() {
       },
     });
   }, [markDiffOpened, navigate, threadRef]);
+  const markGitOpened = useCallback(() => {
+    setGitPanelMountState((previous) => {
+      if (previous.threadKey === currentThreadKey && previous.hasOpenedGit) {
+        return previous;
+      }
+      return {
+        threadKey: currentThreadKey,
+        hasOpenedGit: true,
+      };
+    });
+  }, [currentThreadKey]);
+  const closeGit = useCallback(() => {
+    if (!threadRef) {
+      return;
+    }
+    void navigate({
+      to: "/$environmentId/$threadId",
+      params: buildThreadRouteParams(threadRef),
+      search: { git: undefined },
+    });
+  }, [navigate, threadRef]);
+  const openGit = useCallback(() => {
+    if (!threadRef) {
+      return;
+    }
+    markGitOpened();
+    void navigate({
+      to: "/$environmentId/$threadId",
+      params: buildThreadRouteParams(threadRef),
+      search: (previous) => {
+        const rest = stripDiffSearchParams(previous);
+        return { ...rest, git: "1" };
+      },
+    });
+  }, [markGitOpened, navigate, threadRef]);
   const openPlanPreview = useCallback(
     (input: {
       planThreadId: NonNullable<DiffRouteSearch["planThreadId"]>;
@@ -310,6 +353,7 @@ function ChatThreadRouteView() {
   }
 
   const shouldRenderDiffContent = diffOpen || hasOpenedDiff;
+  const shouldRenderGitContent = gitOpen || hasOpenedGit;
   const chatContent =
     planPreviewOpen && search.planThreadId ? (
       <PlanConversationDocument
@@ -329,6 +373,23 @@ function ChatThreadRouteView() {
         routeKind="server"
       />
     );
+
+  if (gitOpen) {
+    return (
+      <>
+        <SidebarInset className="h-svh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground md:h-dvh">
+          {chatContent}
+        </SidebarInset>
+        <GitPanelRouteAdapter
+          threadRef={threadRef}
+          gitOpen={gitOpen}
+          onCloseGit={closeGit}
+          onOpenGit={openGit}
+          renderGitContent={shouldRenderGitContent}
+        />
+      </>
+    );
+  }
 
   if (!shouldUseDiffSheet) {
     return (
@@ -362,7 +423,7 @@ export const Route = createFileRoute("/_chat/$environmentId/$threadId")({
   validateSearch: (search) => parseDiffRouteSearch(search),
   search: {
     middlewares: [
-      retainSearchParams<DiffRouteSearch>(["diff", "planPreview", "planThreadId", "planId"]),
+      retainSearchParams<DiffRouteSearch>(["diff", "git", "planPreview", "planThreadId", "planId"]),
     ],
   },
   component: ChatThreadRouteView,

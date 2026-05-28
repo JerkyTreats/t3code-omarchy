@@ -2,6 +2,7 @@ import { ThreadId, TurnId, type OrchestrationProposedPlanId } from "@t3tools/con
 
 export interface DiffRouteSearch {
   diff?: "1" | undefined;
+  git?: "1" | undefined;
   diffTurnId?: TurnId | undefined;
   diffFilePath?: string | undefined;
   planPreview?: "1" | undefined;
@@ -23,9 +24,13 @@ function normalizeSearchString(value: unknown): string | undefined {
 
 export function stripDiffSearchParams<T extends Record<string, unknown>>(
   params: T,
-): Omit<T, "diff" | "diffTurnId" | "diffFilePath" | "planPreview" | "planThreadId" | "planId"> {
+): Omit<
+  T,
+  "diff" | "git" | "diffTurnId" | "diffFilePath" | "planPreview" | "planThreadId" | "planId"
+> {
   const {
     diff: _diff,
+    git: _git,
     diffTurnId: _diffTurnId,
     diffFilePath: _diffFilePath,
     planPreview: _planPreview,
@@ -35,7 +40,7 @@ export function stripDiffSearchParams<T extends Record<string, unknown>>(
   } = params;
   return rest as Omit<
     T,
-    "diff" | "diffTurnId" | "diffFilePath" | "planPreview" | "planThreadId" | "planId"
+    "diff" | "git" | "diffTurnId" | "diffFilePath" | "planPreview" | "planThreadId" | "planId"
   >;
 }
 
@@ -48,6 +53,11 @@ export function parseDiffRouteSearch(search: Record<string, unknown>): DiffRoute
       planThreadId: ThreadId.make(planThreadIdRaw),
       planId: planIdRaw as OrchestrationProposedPlanId,
     };
+  }
+
+  const git = isDiffOpenValue(search.git) ? "1" : undefined;
+  if (git) {
+    return { git };
   }
 
   const diff = isDiffOpenValue(search.diff) ? "1" : undefined;
