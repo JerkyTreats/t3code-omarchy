@@ -307,43 +307,71 @@ Thread and sidebar status cues reflect plan state directly instead of collapsing
 - Plan sidebar remains reachable from the thread view.
 - Enabling logical project grouping keeps concrete project actions and plan aware thread cues visible.
 
-## F9 Plan Markdown Preview And Markdown Rendering Behavior
+## F9 Plan Markdown Preview And Document Markdown Rendering Behavior
 
 ### Intent
 
-Plan review and markdown presentation preserve fork specific preview flows and readability behavior instead of falling back to a narrower generic upstream markdown surface.
+Plan review, project document preview, and markdown presentation preserve fork specific preview flows, navigation behavior, and readability guarantees instead of falling back to a narrower generic upstream markdown surface.
 
 ### Required Behavior
 
 - Proposed plans can open into a fullscreen in memory markdown preview without requiring a workspace file write first.
 - Plan preview keeps plan specific actions such as copy, download, and explicit save to workspace.
 - Plan preview keeps route driven return behavior so the user can move back to chat cleanly.
-- Markdown rendering preserves horizontal overflow handling for wide tables and code blocks in chat and document surfaces.
-- Plan and markdown document links keep fork specific navigation behavior for workspace paths, local anchors, and external links.
+- Chat markdown, plan preview markdown, and project document markdown all preserve horizontal overflow handling for wide tables and code blocks.
+- Document markdown owns a richer rendering surface than chat markdown, including stable heading ids, local heading anchors, code copy controls, syntax highlighting, safe raw HTML support for document oriented tags, and readable document typography.
+- Mermaid fenced code blocks render as diagrams in document preview surfaces, with a readable failure state that can expose source when rendering fails.
+- Markdown image links in document previews resolve through the document asset pipeline when possible and support image preview or lightbox behavior without breaking external image links.
+- Plan preview and project document links keep fork specific navigation behavior for workspace paths, local anchors, and external links.
+- Workspace relative links navigate within the document preview or files preview route instead of forcing an editor open when an in app preview target exists.
+- External links open through the native shell or supported local API boundary instead of being treated as workspace paths.
+- Local hash links scroll to the matching generated heading anchor inside the current document preview.
 - The document renderer can hide the source footer when the preview is virtual rather than backed by a real workspace file.
+- Project files preview remains part of this feature area because it is the primary in app consumer of document markdown navigation, document preview routing, image resolution, and source file open behavior.
+- Document outline affordances remain available when a document preview exposes heading structure.
 
 ### Owner Modules
 
 - `apps/web/src/components/ChatMarkdown.tsx`
 - `apps/web/src/components/DocumentMarkdownRenderer.tsx`
+- `apps/web/src/components/DocumentOutlineRail.tsx`
 - `apps/web/src/components/PlanConversationDocument.tsx`
+- `apps/web/src/components/SourceFilePreview.tsx`
+- `apps/web/src/components/CheckpointFilePreviewSurface.tsx`
+- `apps/web/src/components/CheckpointImageLightbox.tsx`
+- `apps/web/src/components/useCheckpointAssetResolver.ts`
+- `apps/web/src/components/files-panel/FilesConversationDocument.tsx`
+- `apps/web/src/components/files-panel/FilesPanelRouteAdapter.tsx`
+- `apps/web/src/components/files-panel/ProjectExplorerPanel.tsx`
 - `apps/web/src/components/chat/ProposedPlanCard.tsx`
 - `apps/web/src/components/PlanSidebar.tsx`
 - `apps/web/src/components/ChatView.tsx`
+- `apps/web/src/chatPanelRouteSearch.ts`
+- `apps/web/src/diffRouteSearch.ts`
+- `apps/web/src/markdown-links.ts`
 - `apps/web/src/routes/_chat.$threadId.tsx`
+- `apps/web/src/routes/_chat.$environmentId.$threadId.tsx`
 - `apps/web/src/index.css`
 
 ### Upstream Intake Rule
 
 - Adapt upstream markdown and document preview changes under the fork plan preview contract.
-- Reject upstream changes that remove fullscreen in memory plan preview, regress plan specific navigation, or reintroduce clipped markdown content in the protected surfaces.
+- Preserve the richer document markdown renderer when upstream changes chat markdown internals.
+- Preserve route based document preview navigation when upstream changes diff, files, plan, or chat route search state.
+- Reject upstream changes that remove fullscreen in memory plan preview, remove in app project document preview, regress plan or document navigation, remove document outline behavior, disable Mermaid or image preview support, or reintroduce clipped markdown content in protected surfaces.
 
 ### Verification
 
 - A proposed plan can open in fullscreen markdown preview from the timeline card and the plan sidebar.
 - Returning from fullscreen plan preview restores the chat route without forcing a workspace write.
-- Wide markdown tables and code blocks remain horizontally scrollable instead of stretching or clipping the layout.
+- Wide markdown tables and code blocks remain horizontally scrollable instead of stretching or clipping the layout in chat markdown, plan preview, and project document preview.
 - Workspace path links, local heading links, and external links keep the expected fork navigation behavior in plan preview and markdown document surfaces.
+- Relative markdown links can navigate between in app document previews without opening an external editor when a preview route is available.
+- Local heading links scroll to generated heading anchors inside the current document preview.
+- Mermaid fenced code renders a diagram or a readable source backed failure state.
+- Markdown images in document previews resolve through the asset pipeline and can open in a preview or lightbox when available.
+- Document outline entries reflect rendered heading structure and navigate to the selected heading.
+- Virtual plan preview hides source file footer while real project document previews keep source open behavior available.
 
 ## F10 Codex Model And Binary Selection
 

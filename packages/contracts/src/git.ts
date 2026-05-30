@@ -2,6 +2,7 @@ import * as Schema from "effect/Schema";
 import { NonNegativeInt, PositiveInt, ThreadId, TrimmedNonEmptyString } from "./baseSchemas.ts";
 import { SourceControlProviderError, SourceControlProviderInfo } from "./sourceControl.ts";
 import { VcsDriverKind } from "./vcs.ts";
+import { GitHubIssueLink } from "./github.ts";
 
 const TrimmedNonEmptyStringSchema = TrimmedNonEmptyString;
 const GIT_LIST_BRANCHES_MAX_LIMIT = 200;
@@ -118,6 +119,7 @@ export const GitRunStackedActionInput = Schema.Struct({
   commitMessage: Schema.optional(TrimmedNonEmptyStringSchema.check(Schema.isMaxLength(10_000))),
   featureBranch: Schema.optional(Schema.Boolean),
   targetBranch: Schema.optional(TrimmedNonEmptyStringSchema),
+  issueLink: Schema.optional(Schema.NullOr(GitHubIssueLink)),
   filePaths: Schema.optional(
     Schema.Array(TrimmedNonEmptyStringSchema).check(Schema.isMinLength(1)),
   ),
@@ -187,6 +189,18 @@ export const VcsInitInput = Schema.Struct({
 });
 export type VcsInitInput = typeof VcsInitInput.Type;
 
+export const GitMergeBranchesInput = Schema.Struct({
+  cwd: TrimmedNonEmptyStringSchema,
+  sourceBranch: TrimmedNonEmptyStringSchema,
+  targetBranch: TrimmedNonEmptyStringSchema,
+});
+export type GitMergeBranchesInput = typeof GitMergeBranchesInput.Type;
+
+export const GitAbortMergeInput = Schema.Struct({
+  cwd: TrimmedNonEmptyStringSchema,
+});
+export type GitAbortMergeInput = typeof GitAbortMergeInput.Type;
+
 // RPC Results
 
 const VcsStatusChangeRequest = Schema.Struct({
@@ -197,6 +211,12 @@ const VcsStatusChangeRequest = Schema.Struct({
   headRef: TrimmedNonEmptyStringSchema,
   state: VcsStatusChangeRequestState,
 });
+
+const VcsStatusMerge = Schema.Struct({
+  inProgress: Schema.Boolean,
+  conflictedFiles: Schema.Array(TrimmedNonEmptyStringSchema),
+});
+export type VcsStatusMerge = typeof VcsStatusMerge.Type;
 
 const VcsStatusLocalShape = {
   isRepo: Schema.Boolean,
@@ -223,6 +243,7 @@ const VcsStatusRemoteShape = {
   aheadCount: NonNegativeInt,
   behindCount: NonNegativeInt,
   aheadOfDefaultCount: Schema.optional(NonNegativeInt),
+  merge: Schema.optional(VcsStatusMerge),
   pr: Schema.NullOr(VcsStatusChangeRequest),
 };
 
@@ -327,6 +348,22 @@ export const VcsPullResult = Schema.Struct({
   upstreamRef: TrimmedNonEmptyStringSchema.pipe(Schema.NullOr),
 });
 export type VcsPullResult = typeof VcsPullResult.Type;
+
+export const GitMergeBranchesResult = Schema.Struct({
+  status: Schema.Literals(["merged", "conflicted"]),
+  sourceBranch: TrimmedNonEmptyStringSchema,
+  targetBranch: TrimmedNonEmptyStringSchema,
+  targetWorktreePath: TrimmedNonEmptyStringSchema,
+  conflictedFiles: Schema.Array(TrimmedNonEmptyStringSchema),
+  mergeCommitSha: Schema.optional(TrimmedNonEmptyStringSchema),
+});
+export type GitMergeBranchesResult = typeof GitMergeBranchesResult.Type;
+
+export const GitAbortMergeResult = Schema.Struct({
+  status: Schema.Literals(["aborted", "skipped_no_merge_in_progress"]),
+  cwd: TrimmedNonEmptyStringSchema,
+});
+export type GitAbortMergeResult = typeof GitAbortMergeResult.Type;
 
 // RPC / domain errors
 export class GitCommandError extends Schema.TaggedErrorClass<GitCommandError>()("GitCommandError", {

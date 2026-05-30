@@ -59,6 +59,7 @@ export function buildGitActionProgressStages(input: {
   pushTarget?: string;
   targetBranch?: string;
   featureBranch?: boolean;
+  forcePushOnly?: boolean;
   shouldPushBeforePr?: boolean;
   terminology?: ChangeRequestTerminology;
 }): string[] {
@@ -92,7 +93,8 @@ export function buildGitActionProgressStages(input: {
     return input.shouldPushBeforePr ? [pushStage, ...prStages] : prStages;
   }
 
-  const shouldIncludeCommitStages = input.action === "commit" || input.hasWorkingTreeChanges;
+  const shouldIncludeCommitStages =
+    !input.forcePushOnly && (input.action === "commit" || input.hasWorkingTreeChanges);
   const commitStages = !shouldIncludeCommitStages
     ? []
     : input.hasCustomCommitMessage
@@ -105,6 +107,65 @@ export function buildGitActionProgressStages(input: {
     return [...branchStages, ...commitStages, pushStage];
   }
   return [...branchStages, ...commitStages, pushStage, ...prStages];
+}
+
+const withDescription = (title: string, description: string | undefined) =>
+  description ? { title, description } : { title };
+
+function shortenSha(commitSha: string | undefined): string | undefined {
+  return commitSha ? commitSha.slice(0, 7) : undefined;
+}
+
+function truncateText(value: string | undefined, maxLength = 80): string | undefined {
+  if (!value) return undefined;
+  return value.length > maxLength ? `${value.slice(0, maxLength - 1)}...` : value;
+}
+
+export function summarizeGitResult(result: GitRunStackedActionResult): {
+  title: string;
+  description?: string;
+} {
+  const promote = result.promote;
+  if (promote?.status === "promoted") {
+    const targetBranch = promote.targetBranch ?? "target";
+    const description = promote.branchDeleted
+      ? `${promote.sourceBranch ?? "Feature branch"} deleted`
+      : undefined;
+    return withDescription(`Promoted to ${targetBranch}`, description);
+  }
+
+  if (promote?.status === "conflicts") {
+    const fileCount = promote.conflictedFiles?.length ?? 0;
+    return {
+      title: "Merge conflicts",
+      description: `${fileCount} file${fileCount === 1 ? "" : "s"} need resolution`,
+    };
+  }
+
+  if (result.pr.status === "created" || result.pr.status === "opened_existing") {
+    const prNumber = result.pr.number ? ` #${result.pr.number}` : "";
+    const title = `${result.pr.status === "created" ? "Created PR" : "Opened PR"}${prNumber}`;
+    return withDescription(title, truncateText(result.pr.title));
+  }
+
+  if (result.push.status === "pushed") {
+    const shortSha = shortenSha(result.commit.commitSha);
+    const branch = result.push.upstreamBranch ?? result.push.branch;
+    const pushedCommitPart = shortSha ? ` ${shortSha}` : "";
+    const branchPart = branch ? ` to ${branch}` : "";
+    return withDescription(
+      `Pushed${pushedCommitPart}${branchPart}`,
+      truncateText(result.commit.subject),
+    );
+  }
+
+  if (result.commit.status === "created") {
+    const shortSha = shortenSha(result.commit.commitSha);
+    const title = shortSha ? `Committed ${shortSha}` : "Committed changes";
+    return withDescription(title, truncateText(result.commit.subject));
+  }
+
+  return { title: "Done" };
 }
 
 export function buildMenuItems(

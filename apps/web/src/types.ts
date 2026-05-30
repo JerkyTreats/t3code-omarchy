@@ -16,6 +16,7 @@ import type {
   CheckpointRef,
   ProviderInteractionMode,
   RuntimeMode,
+  GitHubIssueLink,
 } from "@t3tools/contracts";
 import type { ActivePlanProgressState } from "./session-logic";
 
@@ -114,6 +115,7 @@ export interface Thread {
   pendingSourceProposedPlan?: OrchestrationLatestTurn["sourceProposedPlan"];
   branch: string | null;
   worktreePath: string | null;
+  issueLink?: GitHubIssueLink | null;
   turnDiffSummaries: TurnDiffSummary[];
   activities: OrchestrationThreadActivity[];
 }
@@ -133,6 +135,7 @@ export interface ThreadShell {
   updatedAt?: string | undefined;
   branch: string | null;
   worktreePath: string | null;
+  issueLink?: GitHubIssueLink | null;
 }
 
 export interface ThreadTurnState {

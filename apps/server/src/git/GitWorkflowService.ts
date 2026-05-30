@@ -5,6 +5,10 @@ import * as Layer from "effect/Layer";
 import {
   GitManagerError,
   GitCommandError,
+  type GitAbortMergeInput,
+  type GitAbortMergeResult,
+  type GitMergeBranchesInput,
+  type GitMergeBranchesResult,
   type VcsSwitchRefInput,
   type VcsSwitchRefResult,
   type VcsCreateRefInput,
@@ -50,6 +54,12 @@ export interface GitWorkflowServiceShape {
     input: GitRunStackedActionInput,
     options?: GitRunStackedActionOptions,
   ) => Effect.Effect<GitRunStackedActionResult, GitManagerServiceError>;
+  readonly mergeBranches: (
+    input: GitMergeBranchesInput,
+  ) => Effect.Effect<GitMergeBranchesResult, GitManagerServiceError>;
+  readonly abortMerge: (
+    input: GitAbortMergeInput,
+  ) => Effect.Effect<GitAbortMergeResult, GitManagerServiceError>;
   readonly resolvePullRequest: (
     input: GitPullRequestRefInput,
   ) => Effect.Effect<GitResolvePullRequestResult, GitManagerServiceError>;
@@ -116,6 +126,7 @@ function nonRepositoryStatus(): VcsStatusResult {
     behindCount: 0,
     aheadOfDefaultCount: 0,
     pr: null,
+    merge: { inProgress: false, conflictedFiles: [] },
   };
 }
 
@@ -284,6 +295,8 @@ export const make = Effect.fn("makeGitWorkflowService")(function* () {
       "GitWorkflowService.preparePullRequestThread",
       gitManager.preparePullRequestThread,
     ),
+    mergeBranches: routeGitManager("GitWorkflowService.mergeBranches", gitManager.mergeBranches),
+    abortMerge: routeGitManager("GitWorkflowService.abortMerge", gitManager.abortMerge),
     listRefs: (input) =>
       detectGitRepositoryForCommand("GitWorkflowService.listRefs", input.cwd).pipe(
         Effect.flatMap((isGitRepository) =>

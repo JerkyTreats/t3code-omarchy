@@ -16,7 +16,11 @@ import * as Ref from "effect/Ref";
 import {
   GitActionProgressEvent,
   GitActionProgressPhase,
+  GitAbortMergeInput,
+  GitAbortMergeResult,
   GitCommandError,
+  GitMergeBranchesInput,
+  GitMergeBranchesResult,
   GitPreparePullRequestThreadInput,
   GitPreparePullRequestThreadResult,
   GitPullRequestRefInput,
@@ -89,6 +93,12 @@ export interface GitManagerShape {
     input: GitRunStackedActionInput,
     options?: GitRunStackedActionOptions,
   ) => Effect.Effect<GitRunStackedActionResult, GitManagerServiceError>;
+  readonly mergeBranches: (
+    input: GitMergeBranchesInput,
+  ) => Effect.Effect<GitMergeBranchesResult, GitManagerServiceError>;
+  readonly abortMerge: (
+    input: GitAbortMergeInput,
+  ) => Effect.Effect<GitAbortMergeResult, GitManagerServiceError>;
 }
 
 export class GitManager extends Context.Service<GitManager, GitManagerShape>()(
@@ -730,6 +740,7 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
     aheadCount: 0,
     behindCount: 0,
     aheadOfDefaultCount: 0,
+    merge: { inProgress: false, conflictedFiles: [] },
   } satisfies GitStatusDetails;
   const readLocalStatus = Effect.fn("readLocalStatus")(function* (cwd: string) {
     const details = yield* gitCore
@@ -789,6 +800,7 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
       aheadCount: details.aheadCount,
       behindCount: details.behindCount,
       aheadOfDefaultCount: details.aheadOfDefaultCount,
+      merge: details.merge,
       pr,
     } satisfies VcsStatusRemoteResult;
   });
@@ -1715,6 +1727,57 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
     );
   });
 
+  const mergeBranches: GitManagerShape["mergeBranches"] = Effect.fn("mergeBranches")(
+    function* (input) {
+      const merge = yield* mergeSourceIntoTarget(input.cwd, input.sourceBranch, input.targetBranch);
+      const mergeCommitSha =
+        merge.status === "merged"
+          ? yield* gitCore
+              .execute({
+                operation: "GitManager.mergeBranches.revParseHead",
+                cwd: input.cwd,
+                args: ["rev-parse", "HEAD"],
+              })
+              .pipe(Effect.map((result) => result.stdout.trim()))
+          : undefined;
+      yield* invalidateStatus(input.cwd);
+      return {
+        status: merge.status,
+        sourceBranch: input.sourceBranch,
+        targetBranch: input.targetBranch,
+        targetWorktreePath: input.cwd,
+        conflictedFiles: merge.conflictedFiles,
+        ...(mergeCommitSha ? { mergeCommitSha } : {}),
+      };
+    },
+  );
+
+  const abortMerge: GitManagerShape["abortMerge"] = Effect.fn("abortMerge")(function* (input) {
+    const mergeHead = yield* gitCore.execute({
+      operation: "GitManager.abortMerge.mergeHead",
+      cwd: input.cwd,
+      args: ["rev-parse", "--verify", "MERGE_HEAD"],
+      allowNonZeroExit: true,
+    });
+    if (mergeHead.exitCode !== 0) {
+      return {
+        status: "skipped_no_merge_in_progress" as const,
+        cwd: input.cwd,
+      };
+    }
+
+    yield* gitCore.execute({
+      operation: "GitManager.abortMerge",
+      cwd: input.cwd,
+      args: ["merge", "--abort"],
+    });
+    yield* invalidateStatus(input.cwd);
+    return {
+      status: "aborted" as const,
+      cwd: input.cwd,
+    };
+  });
+
   const runPromoteStep = Effect.fn("runPromoteStep")(function* (input: {
     cwd: string;
     sourceBranch: string;
@@ -2039,6 +2102,8 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
     invalidateStatus,
     resolvePullRequest,
     preparePullRequestThread,
+    mergeBranches,
+    abortMerge,
     runStackedAction,
   } satisfies GitManagerShape;
 });

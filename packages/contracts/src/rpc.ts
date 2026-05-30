@@ -11,9 +11,13 @@ import {
 } from "./filesystem.ts";
 import {
   GitActionProgressEvent,
+  GitAbortMergeInput,
+  GitAbortMergeResult,
   VcsSwitchRefInput,
   VcsSwitchRefResult,
   GitCommandError,
+  GitMergeBranchesInput,
+  GitMergeBranchesResult,
   VcsCreateRefInput,
   VcsCreateRefResult,
   VcsCreateWorktreeInput,
@@ -34,6 +38,17 @@ import {
   VcsStatusResult,
   VcsStatusStreamEvent,
 } from "./git.ts";
+import {
+  GitHubCreateIssueInput,
+  GitHubCreateIssueResult,
+  GitHubIssueMutationInput,
+  GitHubIssueMutationResult,
+  GitHubListIssuesInput,
+  GitHubListIssuesResult,
+  GitHubLoginInput,
+  GitHubStatusInput,
+  GitHubStatusResult,
+} from "./github.ts";
 import { KeybindingsConfigError } from "./keybindings.ts";
 import {
   ClientOrchestrationCommand,
@@ -127,6 +142,16 @@ export const WS_METHODS = {
   gitRunStackedAction: "git.runStackedAction",
   gitResolvePullRequest: "git.resolvePullRequest",
   gitPreparePullRequestThread: "git.preparePullRequestThread",
+  gitMergeBranches: "git.mergeBranches",
+  gitAbortMerge: "git.abortMerge",
+
+  // GitHub methods
+  githubStatus: "github.status",
+  githubLogin: "github.login",
+  githubListIssues: "github.listIssues",
+  githubCreateIssue: "github.createIssue",
+  githubCloseIssue: "github.closeIssue",
+  githubReopenIssue: "github.reopenIssue",
 
   // Terminal methods
   terminalOpen: "terminal.open",
@@ -325,6 +350,54 @@ export const WsGitPreparePullRequestThreadRpc = Rpc.make(WS_METHODS.gitPreparePu
   error: GitManagerServiceError,
 });
 
+export const WsGitMergeBranchesRpc = Rpc.make(WS_METHODS.gitMergeBranches, {
+  payload: GitMergeBranchesInput,
+  success: GitMergeBranchesResult,
+  error: GitManagerServiceError,
+});
+
+export const WsGitAbortMergeRpc = Rpc.make(WS_METHODS.gitAbortMerge, {
+  payload: GitAbortMergeInput,
+  success: GitAbortMergeResult,
+  error: GitManagerServiceError,
+});
+
+export const WsGitHubStatusRpc = Rpc.make(WS_METHODS.githubStatus, {
+  payload: GitHubStatusInput,
+  success: GitHubStatusResult,
+  error: SourceControlRepositoryError,
+});
+
+export const WsGitHubLoginRpc = Rpc.make(WS_METHODS.githubLogin, {
+  payload: GitHubLoginInput,
+  success: GitHubStatusResult,
+  error: SourceControlRepositoryError,
+});
+
+export const WsGitHubListIssuesRpc = Rpc.make(WS_METHODS.githubListIssues, {
+  payload: GitHubListIssuesInput,
+  success: GitHubListIssuesResult,
+  error: SourceControlRepositoryError,
+});
+
+export const WsGitHubCreateIssueRpc = Rpc.make(WS_METHODS.githubCreateIssue, {
+  payload: GitHubCreateIssueInput,
+  success: GitHubCreateIssueResult,
+  error: SourceControlRepositoryError,
+});
+
+export const WsGitHubCloseIssueRpc = Rpc.make(WS_METHODS.githubCloseIssue, {
+  payload: GitHubIssueMutationInput,
+  success: GitHubIssueMutationResult,
+  error: SourceControlRepositoryError,
+});
+
+export const WsGitHubReopenIssueRpc = Rpc.make(WS_METHODS.githubReopenIssue, {
+  payload: GitHubIssueMutationInput,
+  success: GitHubIssueMutationResult,
+  error: SourceControlRepositoryError,
+});
+
 export const WsVcsListRefsRpc = Rpc.make(WS_METHODS.vcsListRefs, {
   payload: VcsListRefsInput,
   success: VcsListRefsResult,
@@ -498,6 +571,14 @@ export const WsRpcGroup = RpcGroup.make(
   WsGitRunStackedActionRpc,
   WsGitResolvePullRequestRpc,
   WsGitPreparePullRequestThreadRpc,
+  WsGitMergeBranchesRpc,
+  WsGitAbortMergeRpc,
+  WsGitHubStatusRpc,
+  WsGitHubLoginRpc,
+  WsGitHubListIssuesRpc,
+  WsGitHubCreateIssueRpc,
+  WsGitHubCloseIssueRpc,
+  WsGitHubReopenIssueRpc,
   WsVcsListRefsRpc,
   WsVcsCreateWorktreeRpc,
   WsVcsRemoveWorktreeRpc,

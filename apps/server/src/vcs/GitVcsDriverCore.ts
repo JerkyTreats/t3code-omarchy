@@ -58,6 +58,7 @@ const NON_REPOSITORY_STATUS_DETAILS = Object.freeze<GitVcsDriver.GitStatusDetail
   aheadCount: 0,
   behindCount: 0,
   aheadOfDefaultCount: 0,
+  merge: { inProgress: false, conflictedFiles: [] },
 });
 
 type TraceTailState = {
@@ -1184,32 +1185,54 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
       );
     }
 
-    const [unstagedNumstatStdout, stagedNumstatStdout, defaultRefResult, hasPrimaryRemote] =
-      yield* Effect.all(
-        [
-          runGitStdout("GitVcsDriver.statusDetails.unstagedNumstat", cwd, ["diff", "--numstat"]),
-          runGitStdout("GitVcsDriver.statusDetails.stagedNumstat", cwd, [
-            "diff",
-            "--cached",
-            "--numstat",
-          ]),
-          executeGit(
-            "GitVcsDriver.statusDetails.defaultRef",
-            cwd,
-            ["symbolic-ref", "refs/remotes/origin/HEAD"],
-            {
-              allowNonZeroExit: true,
-            },
-          ),
-          originRemoteExists(cwd).pipe(Effect.catch(() => Effect.succeed(false))),
-        ],
-        { concurrency: "unbounded" },
-      );
+    const [
+      unstagedNumstatStdout,
+      stagedNumstatStdout,
+      defaultRefResult,
+      hasPrimaryRemote,
+      mergeHeadResult,
+      conflictedFilesStdout,
+    ] = yield* Effect.all(
+      [
+        runGitStdout("GitVcsDriver.statusDetails.unstagedNumstat", cwd, ["diff", "--numstat"]),
+        runGitStdout("GitVcsDriver.statusDetails.stagedNumstat", cwd, [
+          "diff",
+          "--cached",
+          "--numstat",
+        ]),
+        executeGit(
+          "GitVcsDriver.statusDetails.defaultRef",
+          cwd,
+          ["symbolic-ref", "refs/remotes/origin/HEAD"],
+          {
+            allowNonZeroExit: true,
+          },
+        ),
+        originRemoteExists(cwd).pipe(Effect.catch(() => Effect.succeed(false))),
+        executeGit(
+          "GitVcsDriver.statusDetails.mergeHead",
+          cwd,
+          ["rev-parse", "--verify", "MERGE_HEAD"],
+          { allowNonZeroExit: true },
+        ),
+        runGitStdout("GitVcsDriver.statusDetails.conflictedFiles", cwd, [
+          "diff",
+          "--name-only",
+          "--diff-filter=U",
+        ]).pipe(Effect.catch(() => Effect.succeed(""))),
+      ],
+      { concurrency: "unbounded" },
+    );
     const statusStdout = statusResult.stdout;
     const defaultBranch =
       defaultRefResult.exitCode === 0
         ? defaultRefResult.stdout.trim().replace(/^refs\/remotes\/origin\//, "")
         : null;
+    const mergeInProgress = mergeHeadResult.exitCode === 0;
+    const conflictedFiles = conflictedFilesStdout
+      .split(/\r?\n/g)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
 
     let refName: string | null = null;
     let upstreamRef: string | null = null;
@@ -1311,6 +1334,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
       aheadCount,
       behindCount,
       aheadOfDefaultCount,
+      merge: { inProgress: mergeInProgress, conflictedFiles },
     };
   });
 
@@ -1343,6 +1367,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
         aheadCount: details.aheadCount,
         behindCount: details.behindCount,
         aheadOfDefaultCount: details.aheadOfDefaultCount,
+        merge: details.merge,
         pr: null,
       })),
     );

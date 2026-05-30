@@ -26,6 +26,7 @@ import {
   ORCHESTRATION_WS_METHODS,
   ProjectSearchEntriesError,
   ProjectWriteFileError,
+  SourceControlRepositoryError,
   OrchestrationReplayEventsError,
   FilesystemBrowseError,
   ThreadId,
@@ -191,6 +192,17 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
         ),
       );
       const sourceControlRepositories = yield* SourceControlRepositoryService;
+      const gitHubCli = yield* GitHubCli.GitHubCli;
+      const mapGitHubRpcError = (operation: string) =>
+        Effect.mapError(
+          (cause: GitHubCli.GitHubCliError) =>
+            new SourceControlRepositoryError({
+              provider: "github",
+              operation,
+              detail: cause.detail,
+              cause,
+            }),
+        );
       const bootstrapCredentials = yield* BootstrapCredentialService;
       const sessions = yield* SessionCredentialService;
       const processDiagnostics = yield* ProcessDiagnostics.ProcessDiagnostics;
@@ -1066,6 +1078,66 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
               .pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
             { "rpc.aggregate": "git" },
           ),
+        [WS_METHODS.gitMergeBranches]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.gitMergeBranches,
+            gitWorkflow.mergeBranches(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
+            { "rpc.aggregate": "git" },
+          ),
+        [WS_METHODS.gitAbortMerge]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.gitAbortMerge,
+            gitWorkflow.abortMerge(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
+            { "rpc.aggregate": "git" },
+          ),
+        [WS_METHODS.githubStatus]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.githubStatus,
+            gitHubCli.getStatus(input).pipe(mapGitHubRpcError("github.status")),
+            {
+              "rpc.aggregate": "github",
+            },
+          ),
+        [WS_METHODS.githubLogin]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.githubLogin,
+            gitHubCli.login(input).pipe(mapGitHubRpcError("github.login")),
+            {
+              "rpc.aggregate": "github",
+            },
+          ),
+        [WS_METHODS.githubListIssues]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.githubListIssues,
+            gitHubCli.listIssues(input).pipe(mapGitHubRpcError("github.listIssues")),
+            {
+              "rpc.aggregate": "github",
+            },
+          ),
+        [WS_METHODS.githubCreateIssue]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.githubCreateIssue,
+            gitHubCli.createIssue(input).pipe(mapGitHubRpcError("github.createIssue")),
+            {
+              "rpc.aggregate": "github",
+            },
+          ),
+        [WS_METHODS.githubCloseIssue]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.githubCloseIssue,
+            gitHubCli.closeIssue(input).pipe(mapGitHubRpcError("github.closeIssue")),
+            {
+              "rpc.aggregate": "github",
+            },
+          ),
+        [WS_METHODS.githubReopenIssue]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.githubReopenIssue,
+            gitHubCli.reopenIssue(input).pipe(mapGitHubRpcError("github.reopenIssue")),
+            {
+              "rpc.aggregate": "github",
+            },
+          ),
         [WS_METHODS.vcsListRefs]: (input) =>
           observeRpcEffect(WS_METHODS.vcsListRefs, gitWorkflow.listRefs(input), {
             "rpc.aggregate": "vcs",
@@ -1255,6 +1327,7 @@ export const websocketRpcRouteLayer = Layer.unwrap(
           Effect.provide(
             makeWsRpcLayer(session.sessionId).pipe(
               Layer.provideMerge(RpcSerialization.layerJson),
+              Layer.provideMerge(GitHubCli.layer.pipe(Layer.provide(VcsProcess.layer))),
               Layer.provide(ProviderMaintenanceRunner.layer),
               Layer.provide(
                 SourceControlDiscoveryLayer.layer.pipe(

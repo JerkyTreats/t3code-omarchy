@@ -64,6 +64,7 @@ export interface GitStatusDetails {
   aheadCount: number;
   behindCount: number;
   aheadOfDefaultCount: number;
+  merge: VcsStatusResult["merge"];
 }
 
 export interface GitPreparedCommitContext {

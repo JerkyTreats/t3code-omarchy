@@ -948,6 +948,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
   );
   const router = useRouter();
   const { isMobile, setOpenMobile } = useSidebar();
+  const markThreadVisited = useUiStateStore((state) => state.markThreadVisited);
   const markThreadUnread = useUiStateStore((state) => state.markThreadUnread);
   const toggleProject = useUiStateStore((state) => state.toggleProject);
   const toggleThreadSelection = useThreadSelectionStore((state) => state.toggleThread);
@@ -1531,10 +1532,13 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
 
   const navigateToThread = useCallback(
     (threadRef: ScopedThreadRef) => {
+      const threadKey = scopedThreadKey(threadRef);
+      const thread = sidebarThreadByKeyRef.current.get(threadKey);
+      markThreadVisited(threadKey, thread?.latestTurn?.completedAt ?? undefined);
       if (useThreadSelectionStore.getState().selectedThreadKeys.size > 0) {
         clearSelection();
       }
-      setSelectionAnchor(scopedThreadKey(threadRef));
+      setSelectionAnchor(threadKey);
       if (isMobile) {
         setOpenMobile(false);
       }
@@ -1543,7 +1547,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         params: buildThreadRouteParams(threadRef),
       });
     },
-    [clearSelection, isMobile, router, setOpenMobile, setSelectionAnchor],
+    [clearSelection, isMobile, markThreadVisited, router, setOpenMobile, setSelectionAnchor],
   );
 
   const handleThreadClick = useCallback(
@@ -1573,6 +1577,8 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       if (currentSelectionCount > 0) {
         clearSelection();
       }
+      const thread = sidebarThreadByKeyRef.current.get(threadKey);
+      markThreadVisited(threadKey, thread?.latestTurn?.completedAt ?? undefined);
       setSelectionAnchor(threadKey);
       if (isMobile) {
         setOpenMobile(false);
@@ -1585,6 +1591,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     [
       clearSelection,
       isMobile,
+      markThreadVisited,
       rangeSelectTo,
       router,
       setOpenMobile,

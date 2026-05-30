@@ -179,6 +179,45 @@ describe("MessagesTimeline", () => {
     }
   });
 
+  it("snaps to the bottom when switching between populated threads", async () => {
+    const requestAnimationFrameSpy = vi
+      .spyOn(window, "requestAnimationFrame")
+      .mockImplementation((callback: FrameRequestCallback) => {
+        callback(0);
+        return 1;
+      });
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
+
+    const props = buildProps();
+    const screen = await render(
+      <MessagesTimeline
+        {...props}
+        timelineEntries={[buildUserTimelineEntry("First thread message")]}
+      />,
+    );
+
+    try {
+      await expect.element(page.getByText("First thread message")).toBeVisible();
+      scrollToEndSpy.mockClear();
+      props.onIsAtEndChange.mockClear();
+
+      await screen.rerender(
+        <MessagesTimeline
+          {...props}
+          routeThreadKey="environment-local:thread-2"
+          timelineEntries={[buildUserTimelineEntry("Second thread message")]}
+        />,
+      );
+
+      await expect.element(page.getByText("Second thread message")).toBeVisible();
+      expect(props.onIsAtEndChange).toHaveBeenCalledWith(true);
+      expect(scrollToEndSpy).toHaveBeenCalledWith({ animated: false });
+      expect(requestAnimationFrameSpy).toHaveBeenCalled();
+    } finally {
+      await screen.unmount();
+    }
+  });
+
   it("starts long user messages collapsed by default", async () => {
     const screen = await render(
       <MessagesTimeline

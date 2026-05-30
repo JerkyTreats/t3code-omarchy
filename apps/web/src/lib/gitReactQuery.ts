@@ -1,6 +1,7 @@
 import {
   type EnvironmentId,
   type GitActionProgressEvent,
+  type GitHubIssueLink,
   type GitStackedAction,
   type SourceControlPublishRepositoryInput,
   type ThreadId,
@@ -13,6 +14,7 @@ import {
 } from "@tanstack/react-query";
 import { ensureEnvironmentApi } from "../environmentApi";
 import { requireEnvironmentConnection } from "../environments/runtime";
+import { refreshGitStatus } from "./gitStatusState";
 
 const GIT_BRANCHES_STALE_TIME_MS = 15_000;
 const GIT_BRANCHES_REFETCH_INTERVAL_MS = 60_000;
@@ -22,6 +24,8 @@ export const gitQueryKeys = {
   all: ["git"] as const,
   refs: (environmentId: EnvironmentId | null, cwd: string | null) =>
     ["git", "refs", environmentId ?? null, cwd] as const,
+  branches: (environmentId: EnvironmentId | null, cwd: string | null) =>
+    ["git", "branches", environmentId ?? null, cwd] as const,
   branchSearch: (environmentId: EnvironmentId | null, cwd: string | null, query: string) =>
     ["git", "refs", environmentId ?? null, cwd, "search", query] as const,
 };
@@ -35,6 +39,10 @@ export const gitMutationKeys = {
     ["git", "mutation", "run-stacked-action", environmentId ?? null, cwd] as const,
   pull: (environmentId: EnvironmentId | null, cwd: string | null) =>
     ["git", "mutation", "pull", environmentId ?? null, cwd] as const,
+  mergeBranches: (environmentId: EnvironmentId | null, cwd: string | null) =>
+    ["git", "mutation", "merge-branches", environmentId ?? null, cwd] as const,
+  abortMerge: (environmentId: EnvironmentId | null, cwd: string | null) =>
+    ["git", "mutation", "abort-merge", environmentId ?? null, cwd] as const,
   preparePullRequestThread: (environmentId: EnvironmentId | null, cwd: string | null) =>
     ["git", "mutation", "prepare-pull-request-thread", environmentId ?? null, cwd] as const,
   publishRepository: (environmentId: EnvironmentId | null, cwd: string | null) =>
@@ -48,10 +56,36 @@ export function invalidateGitQueries(
   const environmentId = input?.environmentId ?? null;
   const cwd = input?.cwd ?? null;
   if (cwd !== null) {
-    return queryClient.invalidateQueries({ queryKey: gitQueryKeys.refs(environmentId, cwd) });
+    return Promise.all([
+      queryClient.invalidateQueries({ queryKey: gitQueryKeys.refs(environmentId, cwd) }),
+      queryClient.invalidateQueries({ queryKey: gitQueryKeys.branches(environmentId, cwd) }),
+      refreshGitStatus({ environmentId, cwd }),
+    ]).then(() => undefined);
   }
 
   return queryClient.invalidateQueries({ queryKey: gitQueryKeys.all });
+}
+
+export function gitBranchesQueryOptions(input: {
+  environmentId: EnvironmentId | null;
+  cwd: string | null;
+}) {
+  return queryOptions({
+    queryKey: gitQueryKeys.branches(input.environmentId, input.cwd),
+    queryFn: async () => {
+      if (!input.cwd || !input.environmentId) throw new Error("Git refs are unavailable.");
+      const api = ensureEnvironmentApi(input.environmentId);
+      return api.vcs.listRefs({
+        cwd: input.cwd,
+        limit: GIT_BRANCHES_PAGE_SIZE,
+      });
+    },
+    enabled: input.environmentId !== null && input.cwd !== null,
+    staleTime: GIT_BRANCHES_STALE_TIME_MS,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchInterval: GIT_BRANCHES_REFETCH_INTERVAL_MS,
+  });
 }
 
 function invalidateGitBranchQueries(
@@ -59,11 +93,7 @@ function invalidateGitBranchQueries(
   environmentId: EnvironmentId | null,
   cwd: string | null,
 ) {
-  if (cwd === null) {
-    return Promise.resolve();
-  }
-
-  return queryClient.invalidateQueries({ queryKey: gitQueryKeys.refs(environmentId, cwd) });
+  return invalidateGitQueries(queryClient, { environmentId, cwd });
 }
 
 /**
@@ -182,14 +212,16 @@ export function gitRunStackedActionMutationOptions(input: {
       commitMessage,
       featureBranch,
       targetBranch,
+      issueLink,
       filePaths,
       onProgress,
     }: {
-      actionId: string;
+      actionId?: string;
       action: GitStackedAction;
       commitMessage?: string;
       featureBranch?: boolean;
       targetBranch?: string;
+      issueLink?: GitHubIssueLink | null;
       filePaths?: string[];
       onProgress?: (event: GitActionProgressEvent) => void;
     }) => {
@@ -197,11 +229,12 @@ export function gitRunStackedActionMutationOptions(input: {
       return requireEnvironmentConnection(input.environmentId).client.git.runStackedAction(
         {
           action,
-          actionId,
+          actionId: actionId ?? crypto.randomUUID(),
           cwd: input.cwd,
           ...(commitMessage ? { commitMessage } : {}),
           ...(featureBranch ? { featureBranch: true } : {}),
           ...(targetBranch ? { targetBranch } : {}),
+          ...(issueLink ? { issueLink } : {}),
           ...(filePaths && filePaths.length > 0 ? { filePaths } : {}),
         },
         ...(onProgress ? [{ onProgress }] : []),
@@ -209,6 +242,55 @@ export function gitRunStackedActionMutationOptions(input: {
     },
     onSuccess: async () => {
       await invalidateGitBranchQueries(input.queryClient, input.environmentId, input.cwd);
+    },
+  });
+}
+
+export function gitMergeBranchesMutationOptions(input: {
+  environmentId: EnvironmentId | null;
+  cwd: string | null;
+  queryClient: QueryClient;
+}) {
+  return mutationOptions({
+    mutationKey: gitMutationKeys.mergeBranches(input.environmentId, input.cwd),
+    mutationFn: async ({
+      sourceBranch,
+      targetBranch,
+    }: {
+      sourceBranch: string;
+      targetBranch: string;
+    }) => {
+      if (!input.cwd || !input.environmentId) throw new Error("Git merge is unavailable.");
+      const api = ensureEnvironmentApi(input.environmentId);
+      return api.git.mergeBranches({ cwd: input.cwd, sourceBranch, targetBranch });
+    },
+    onSettled: async () => {
+      await invalidateGitQueries(input.queryClient, {
+        environmentId: input.environmentId,
+        cwd: input.cwd,
+      });
+    },
+  });
+}
+
+export function gitAbortMergeMutationOptions(input: {
+  environmentId: EnvironmentId | null;
+  cwd: string | null;
+  queryClient: QueryClient;
+}) {
+  return mutationOptions({
+    mutationKey: gitMutationKeys.abortMerge(input.environmentId, input.cwd),
+    mutationFn: async (cwdOverride?: string | null) => {
+      const cwd = cwdOverride ?? input.cwd;
+      if (!cwd || !input.environmentId) throw new Error("Git merge abort is unavailable.");
+      const api = ensureEnvironmentApi(input.environmentId);
+      return api.git.abortMerge({ cwd });
+    },
+    onSettled: async () => {
+      await invalidateGitQueries(input.queryClient, {
+        environmentId: input.environmentId,
+        cwd: input.cwd,
+      });
     },
   });
 }

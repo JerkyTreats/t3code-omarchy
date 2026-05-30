@@ -66,6 +66,7 @@ describe("GitWorkflowService", () => {
         aheadCount: 0,
         behindCount: 0,
         aheadOfDefaultCount: 0,
+        merge: { inProgress: false, conflictedFiles: [] },
         pr: null,
       });
     }).pipe(

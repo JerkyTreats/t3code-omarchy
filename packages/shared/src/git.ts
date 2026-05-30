@@ -203,6 +203,7 @@ const EMPTY_GIT_STATUS_REMOTE: VcsStatusRemoteResult = {
   aheadCount: 0,
   behindCount: 0,
   aheadOfDefaultCount: 0,
+  merge: { inProgress: false, conflictedFiles: [] },
   pr: null,
 };
 
@@ -224,6 +225,7 @@ function toRemoteStatusPart(status: VcsStatusResult): VcsStatusRemoteResult {
     ...(status.aheadOfDefaultCount === undefined
       ? {}
       : { aheadOfDefaultCount: status.aheadOfDefaultCount }),
+    ...(status.merge === undefined ? {} : { merge: status.merge }),
     pr: status.pr,
   };
 }

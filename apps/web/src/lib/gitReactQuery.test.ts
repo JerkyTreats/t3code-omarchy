@@ -6,6 +6,7 @@ vi.mock("../environmentApi", () => ({
 }));
 
 vi.mock("../environments/runtime", () => ({
+  readEnvironmentConnection: vi.fn(),
   requireEnvironmentConnection: vi.fn(),
 }));
 
@@ -16,7 +17,7 @@ vi.mock("../wsRpcClient", () => ({
 
 import type { InfiniteData } from "@tanstack/react-query";
 import { EnvironmentId, type VcsListRefsResult } from "@t3tools/contracts";
-import { requireEnvironmentConnection } from "../environments/runtime";
+import { readEnvironmentConnection, requireEnvironmentConnection } from "../environments/runtime";
 
 import {
   gitBranchSearchInfiniteQueryOptions,
@@ -130,6 +131,7 @@ describe("git mutation options", () => {
 describe("invalidateGitQueries", () => {
   it("can invalidate a single cwd without blasting other git query scopes", async () => {
     const queryClient = new QueryClient();
+    vi.mocked(readEnvironmentConnection).mockReturnValue(null);
 
     queryClient.setQueryData(
       gitBranchSearchInfiniteQueryOptions({

@@ -1,7 +1,11 @@
 import type {
   VcsSwitchRefInput,
   VcsSwitchRefResult,
+  GitAbortMergeInput,
+  GitAbortMergeResult,
   VcsCreateRefInput,
+  GitMergeBranchesInput,
+  GitMergeBranchesResult,
   GitPreparePullRequestThreadInput,
   GitPreparePullRequestThreadResult,
   GitPullRequestRefInput,
@@ -18,6 +22,17 @@ import type {
   VcsStatusResult,
   VcsCreateRefResult,
 } from "./git.ts";
+import type {
+  GitHubCreateIssueInput,
+  GitHubCreateIssueResult,
+  GitHubIssueMutationInput,
+  GitHubIssueMutationResult,
+  GitHubListIssuesInput,
+  GitHubListIssuesResult,
+  GitHubLoginInput,
+  GitHubStatusInput,
+  GitHubStatusResult,
+} from "./github.ts";
 import type { FilesystemBrowseInput, FilesystemBrowseResult } from "./filesystem.ts";
 import type {
   ProjectSearchEntriesInput,
@@ -570,10 +585,20 @@ export interface EnvironmentApi {
     ) => () => void;
   };
   git: {
+    mergeBranches: (input: GitMergeBranchesInput) => Promise<GitMergeBranchesResult>;
+    abortMerge: (input: GitAbortMergeInput) => Promise<GitAbortMergeResult>;
     resolvePullRequest: (input: GitPullRequestRefInput) => Promise<GitResolvePullRequestResult>;
     preparePullRequestThread: (
       input: GitPreparePullRequestThreadInput,
     ) => Promise<GitPreparePullRequestThreadResult>;
+  };
+  github: {
+    status: (input: GitHubStatusInput) => Promise<GitHubStatusResult>;
+    login: (input: GitHubLoginInput) => Promise<GitHubStatusResult>;
+    listIssues: (input: GitHubListIssuesInput) => Promise<GitHubListIssuesResult>;
+    createIssue: (input: GitHubCreateIssueInput) => Promise<GitHubCreateIssueResult>;
+    closeIssue: (input: GitHubIssueMutationInput) => Promise<GitHubIssueMutationResult>;
+    reopenIssue: (input: GitHubIssueMutationInput) => Promise<GitHubIssueMutationResult>;
   };
   orchestration: {
     dispatchCommand: (command: ClientOrchestrationCommand) => Promise<{ sequence: number }>;

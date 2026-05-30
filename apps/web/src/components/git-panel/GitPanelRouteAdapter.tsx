@@ -25,25 +25,25 @@ interface GitPanelRouteAdapterProps {
   threadRef: ScopedThreadRef;
 }
 
-export function GitPanelRouteAdapter(props: GitPanelRouteAdapterProps) {
-  const activeThread = useStore(
-    useMemo(() => createThreadSelectorByRef(props.threadRef), [props.threadRef]),
-  );
+export function GitPanelRouteAdapter({
+  gitOpen,
+  onCloseGit,
+  onOpenGit,
+  renderGitContent,
+  threadRef,
+}: GitPanelRouteAdapterProps) {
+  const activeThread = useStore(useMemo(() => createThreadSelectorByRef(threadRef), [threadRef]));
   const activeProject = useStore((store) =>
     activeThread
-      ? selectEnvironmentState(store, props.threadRef.environmentId).projectById[
-          activeThread.projectId
-        ]
+      ? selectEnvironmentState(store, threadRef.environmentId).projectById[activeThread.projectId]
       : undefined,
   );
-  const activeDraftThread = useComposerDraftStore((store) =>
-    store.getDraftThreadByRef(props.threadRef),
-  );
+  const activeDraftThread = useComposerDraftStore((store) => store.getDraftThreadByRef(threadRef));
   const fallbackDraftProject = useStore((store) => {
     if (!activeDraftThread) {
       return undefined;
     }
-    return selectEnvironmentState(store, props.threadRef.environmentId).projectById[
+    return selectEnvironmentState(store, threadRef.environmentId).projectById[
       activeDraftThread.projectId
     ];
   });
@@ -60,24 +60,27 @@ export function GitPanelRouteAdapter(props: GitPanelRouteAdapterProps) {
 
   const onOpenChange = useCallback(
     (open: boolean) => {
-      if (open) {
-        props.onOpenGit();
+      if (open === gitOpen) {
         return;
       }
-      props.onCloseGit();
+      if (open) {
+        onOpenGit();
+        return;
+      }
+      onCloseGit();
     },
-    [props],
+    [gitOpen, onCloseGit, onOpenGit],
   );
 
-  const gitPanelContent = props.renderGitContent ? (
+  const gitPanelContent = renderGitContent ? (
     <Suspense fallback={<DiffPanelLoadingState label="Loading Git panel..." />}>
-      <GitPanel activeThreadRef={props.threadRef} repoCwd={repoCwd} workspaceCwd={workspaceCwd} />
+      <GitPanel activeThreadRef={threadRef} repoCwd={repoCwd} workspaceCwd={workspaceCwd} />
     </Suspense>
   ) : null;
 
   if (shouldUseGitSheet) {
     return (
-      <RightPanelSheet open={props.gitOpen} onClose={props.onCloseGit}>
+      <RightPanelSheet open={gitOpen} onClose={onCloseGit}>
         {gitPanelContent}
       </RightPanelSheet>
     );
@@ -86,7 +89,7 @@ export function GitPanelRouteAdapter(props: GitPanelRouteAdapterProps) {
   return (
     <SidebarProvider
       defaultOpen={false}
-      open={props.gitOpen}
+      open={gitOpen}
       onOpenChange={onOpenChange}
       className="w-auto min-h-0 flex-none bg-transparent"
       style={{ "--sidebar-width": GIT_PANEL_INLINE_DEFAULT_WIDTH } as React.CSSProperties}

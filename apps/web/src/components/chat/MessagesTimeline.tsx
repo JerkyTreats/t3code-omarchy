@@ -208,6 +208,27 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     };
   }, [listRef, onIsAtEndChange, rows.length]);
 
+  const previousRouteThreadKeyRef = useRef(routeThreadKey);
+  useEffect(() => {
+    if (previousRouteThreadKeyRef.current === routeThreadKey) {
+      return;
+    }
+    previousRouteThreadKeyRef.current = routeThreadKey;
+
+    if (rows.length === 0) {
+      onIsAtEndChange(true);
+      return;
+    }
+
+    onIsAtEndChange(true);
+    const frameId = window.requestAnimationFrame(() => {
+      void listRef.current?.scrollToEnd?.({ animated: false });
+    });
+    return () => {
+      window.cancelAnimationFrame(frameId);
+    };
+  }, [listRef, onIsAtEndChange, routeThreadKey, rows.length]);
+
   const sharedState = useMemo<TimelineRowSharedState>(
     () => ({
       timestampFormat,

@@ -107,10 +107,20 @@ export interface WsRpcClient {
       input: GitRunStackedActionInput,
       options?: GitRunStackedActionOptions,
     ) => Promise<GitRunStackedActionResult>;
+    readonly mergeBranches: RpcUnaryMethod<typeof WS_METHODS.gitMergeBranches>;
+    readonly abortMerge: RpcUnaryMethod<typeof WS_METHODS.gitAbortMerge>;
     readonly resolvePullRequest: RpcUnaryMethod<typeof WS_METHODS.gitResolvePullRequest>;
     readonly preparePullRequestThread: RpcUnaryMethod<
       typeof WS_METHODS.gitPreparePullRequestThread
     >;
+  };
+  readonly github: {
+    readonly status: RpcUnaryMethod<typeof WS_METHODS.githubStatus>;
+    readonly login: RpcUnaryMethod<typeof WS_METHODS.githubLogin>;
+    readonly listIssues: RpcUnaryMethod<typeof WS_METHODS.githubListIssues>;
+    readonly createIssue: RpcUnaryMethod<typeof WS_METHODS.githubCreateIssue>;
+    readonly closeIssue: RpcUnaryMethod<typeof WS_METHODS.githubCloseIssue>;
+    readonly reopenIssue: RpcUnaryMethod<typeof WS_METHODS.githubReopenIssue>;
   };
   readonly server: {
     readonly getConfig: RpcUnaryNoArgMethod<typeof WS_METHODS.serverGetConfig>;
@@ -245,6 +255,21 @@ export function createWsRpcClient(transport: WsTransport): WsRpcClient {
         transport.request((client) => client[WS_METHODS.gitResolvePullRequest](input)),
       preparePullRequestThread: (input) =>
         transport.request((client) => client[WS_METHODS.gitPreparePullRequestThread](input)),
+      mergeBranches: (input) =>
+        transport.request((client) => client[WS_METHODS.gitMergeBranches](input)),
+      abortMerge: (input) => transport.request((client) => client[WS_METHODS.gitAbortMerge](input)),
+    },
+    github: {
+      status: (input) => transport.request((client) => client[WS_METHODS.githubStatus](input)),
+      login: (input) => transport.request((client) => client[WS_METHODS.githubLogin](input)),
+      listIssues: (input) =>
+        transport.request((client) => client[WS_METHODS.githubListIssues](input)),
+      createIssue: (input) =>
+        transport.request((client) => client[WS_METHODS.githubCreateIssue](input)),
+      closeIssue: (input) =>
+        transport.request((client) => client[WS_METHODS.githubCloseIssue](input)),
+      reopenIssue: (input) =>
+        transport.request((client) => client[WS_METHODS.githubReopenIssue](input)),
     },
     server: {
       getConfig: () => transport.request((client) => client[WS_METHODS.serverGetConfig]({})),

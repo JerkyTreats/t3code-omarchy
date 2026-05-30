@@ -610,6 +610,48 @@ function createGitHubCliWithFakeGh(scenario: FakeGhScenario = {}): {
           cwd: input.cwd,
           args: ["pr", "checkout", input.reference, ...(input.force ? ["--force"] : [])],
         }).pipe(Effect.asVoid),
+      getStatus: () =>
+        Effect.fail(
+          new GitHubCliError({
+            operation: "getStatus",
+            detail: "Unexpected GitHub status request.",
+          }),
+        ),
+      login: () =>
+        Effect.fail(
+          new GitHubCliError({
+            operation: "login",
+            detail: "Unexpected GitHub login request.",
+          }),
+        ),
+      listIssues: () =>
+        Effect.fail(
+          new GitHubCliError({
+            operation: "listIssues",
+            detail: "Unexpected GitHub issue list request.",
+          }),
+        ),
+      createIssue: () =>
+        Effect.fail(
+          new GitHubCliError({
+            operation: "createIssue",
+            detail: "Unexpected GitHub issue create request.",
+          }),
+        ),
+      closeIssue: () =>
+        Effect.fail(
+          new GitHubCliError({
+            operation: "closeIssue",
+            detail: "Unexpected GitHub issue close request.",
+          }),
+        ),
+      reopenIssue: () =>
+        Effect.fail(
+          new GitHubCliError({
+            operation: "reopenIssue",
+            detail: "Unexpected GitHub issue reopen request.",
+          }),
+        ),
     },
     ghCalls,
   };
@@ -913,6 +955,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         aheadCount: 0,
         behindCount: 0,
         aheadOfDefaultCount: 0,
+        merge: { inProgress: false, conflictedFiles: [] },
         pr: null,
       });
     }),
@@ -943,6 +986,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         aheadCount: 0,
         behindCount: 0,
         aheadOfDefaultCount: 0,
+        merge: { inProgress: false, conflictedFiles: [] },
         pr: null,
       });
     }),
