@@ -27,6 +27,18 @@ Use it together with [Upstream Merge Policy](governance/upstream_merge_policy.md
 - This file defines authoritative expected behavior for fork owned features.
 - When upstream differs from this file, preserve this file until the fork intentionally changes direction.
 
+## Architectural Preference
+
+Fork owned product behavior should usually be expressed through small, portable product modules that encode domain decisions without depending on a specific branch shape.
+
+Prefer branch shaped adapter layers for router, store, transport, Git, source control, desktop, environment, and provider runtime details.
+
+Prefer thin UI components that render product view models and call adapter callbacks instead of mixing fork policy directly into broad upstream shaped components.
+
+This is a preference, not a hard rule. Direct edits to existing modules are acceptable when the behavior is narrow, the branch shape is stable, or an adapter would add more complexity than it removes.
+
+When a feature is likely to be rebuilt onto future upstream `main` snapshots, bias toward pure product logic plus adapters so future rebuilds can replay product behavior first and branch integration second.
+
 ## Feature Index
 
 - `F1` branding and release identity
@@ -42,6 +54,7 @@ Use it together with [Upstream Merge Policy](governance/upstream_merge_policy.md
 - `F11` source control provider lane and publish workflow
 - `F12` provider instance identity seam
 - `F13` auth access management
+- `F14` project management and inference dashboard
 
 ## F1 Branding And Release Identity
 
@@ -584,6 +597,69 @@ Auth access management is exposed through the fork native API and Connections se
 - Connections settings can list client sessions, revoke non-current sessions, and revoke other sessions.
 - NativeApi forwards auth access actions through RPC in browser-backed and desktop-backed web flows.
 - Saved environment pairing, reconnect, disconnect, forget, and SSH connect flows continue to work unchanged.
+
+## F14 Project Management And Inference Dashboard
+
+### Intent
+
+Project level management gives each concrete project a first class workspace page for repository operations, project scripts, editor actions, linked threads, and inference usage without collapsing project identity into sidebar grouping or thread only surfaces.
+
+### Required Behavior
+
+- Project management is reachable from sidebar project actions and command palette project actions.
+- Project routes preserve concrete project identity, including environment identity when multiple environments can expose projects with overlapping ids.
+- Logical project grouping remains presentation only and must not become the source of workspace path, repository identity, or project route decisions.
+- The management page exposes project name, workspace path, repository summary, new thread action, latest active thread navigation, editor open actions, and project script actions.
+- Project scoped Git management works without requiring an active thread while preserving thread scoped Git actions where they remain meaningful.
+- Project scoped Git management must not take ownership of, clear, or reroute unrelated composer draft content.
+- The inference dashboard is reachable from project management and summarizes project wide model work across linked project threads.
+- Inference rollups use the latest usage snapshot per turn and preserve provider reported total processed tokens when available.
+- Inference rollups handle cached input tokens without double counting cached input when providers report cached input as a subset of input.
+- The dashboard shows lifetime burn, recent burn, projected thirty day burn, input, cached input, output, tracked turns, and a ranked thread leaderboard.
+- Thread links from the project page and dashboard preserve environment aware thread routing.
+- Missing project data after bootstrap redirects or degrades safely instead of rendering stale project content.
+
+### Owner Modules
+
+- `apps/web/src/routes/_chat.projects.$projectId.tsx`
+- `apps/web/src/routes/_chat.projects.$environmentId.$projectId.tsx`
+- `apps/web/src/components/ProjectOverviewPage.tsx`
+- `apps/web/src/components/ProjectInferenceDashboardPage.tsx`
+- `apps/web/src/components/ProjectOverview.logic.ts`
+- `apps/web/src/components/ProjectInference.logic.ts`
+- `apps/web/src/components/useProjectPageData.ts`
+- `apps/web/src/components/ProjectManagementHeader.tsx`
+- `apps/web/src/components/ProjectPageShell.tsx`
+- `apps/web/src/components/ProjectPanel.tsx`
+- `apps/web/src/components/ProjectPanelSection.tsx`
+- `apps/web/src/components/ProjectScriptsControl.tsx`
+- `apps/web/src/components/git-panel/GitPanel.tsx`
+- `apps/web/src/components/git-panel/GitPanelRouteAdapter.tsx`
+- `apps/web/src/components/Sidebar.tsx`
+- `apps/web/src/components/CommandPalette.tsx`
+- `apps/web/src/threadRoutes.ts`
+- `apps/web/src/storeSelectors.ts`
+
+### Upstream Intake Rule
+
+- Adapt upstream project page, dashboard, and route changes so concrete project identity and environment aware routing remain explicit.
+- Preserve fork sidebar grouping rules so grouped labels never replace concrete project identity for management actions.
+- Preserve fork Git panel draft isolation and source control guardrails when project scoped Git actions are added or changed.
+- Reject upstream changes that make inference totals depend only on prompt and response tokens when provider processed token totals are available.
+- Reject upstream changes that remove project level access to scripts, editor actions, latest thread navigation, or dashboard navigation.
+
+### Verification
+
+- Sidebar and command palette project actions open the management page for the intended concrete project.
+- Environment scoped project routes distinguish projects with the same id or path across saved environments.
+- Grouped sidebar projects keep group labels presentation only while concrete project actions still target concrete projects.
+- Project management can start a new thread, open the latest active thread, open the project in an available editor, and run project scripts.
+- Project scoped Git management renders repository state without an active thread and does not clear active composer drafts.
+- The inference dashboard counts only the latest usage snapshot for each turn.
+- The inference dashboard preserves `totalProcessedTokens` and falls back to `usedTokens` plus token components when needed.
+- Cached input handling avoids double counting when cached input is reported as an input subset.
+- Dashboard leaderboard links navigate to the correct environment scoped threads.
+- Missing or removed project state after bootstrap exits the page without stale project details.
 
 ## Change Procedure
 

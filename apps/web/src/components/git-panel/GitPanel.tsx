@@ -5,9 +5,11 @@ import {
   DEFAULT_RUNTIME_MODE,
   ProviderDriverKind,
   defaultInstanceIdForDriver,
+  type EnvironmentId,
   type GitHubIssue,
   type GitMergeBranchesResult,
   type ProjectId,
+  type ScopedProjectRef,
   type ScopedThreadRef,
   type SourceControlProviderKind,
   type SourceControlPublishRepositoryResult,
@@ -103,7 +105,8 @@ import { PublishRepositoryDialog } from "./PublishRepositoryDialog";
 import { buildThreadRouteParams } from "~/threadRoutes";
 
 interface GitPanelProps {
-  activeThreadRef: ScopedThreadRef;
+  activeThreadRef: ScopedThreadRef | null;
+  activeProjectRef?: ScopedProjectRef | null;
   workspaceCwd: string | null;
   repoCwd: string | null;
   panelVariant?: "page" | "sidepanel";
@@ -125,14 +128,37 @@ function Kbd({ children }: { children: ReactNode }) {
 // Main Component
 // =============================================================================
 
-export default function GitPanel({
+type GitPanelContentProps = GitPanelProps & {
+  environmentId: EnvironmentId;
+  activeThreadId: ThreadId | null;
+};
+
+export default function GitPanel(props: GitPanelProps) {
+  const environmentId =
+    props.activeThreadRef?.environmentId ?? props.activeProjectRef?.environmentId ?? null;
+
+  if (!environmentId) {
+    return null;
+  }
+
+  return (
+    <GitPanelContent
+      {...props}
+      environmentId={environmentId}
+      activeThreadId={props.activeThreadRef?.threadId ?? null}
+    />
+  );
+}
+
+function GitPanelContent({
   activeThreadRef,
+  activeProjectRef: providedActiveProjectRef = null,
+  activeThreadId,
+  environmentId,
   workspaceCwd,
   repoCwd,
   panelVariant = "page",
-}: GitPanelProps) {
-  const environmentId = activeThreadRef.environmentId;
-  const activeThreadId = activeThreadRef.threadId;
+}: GitPanelContentProps) {
   const repoRoot = repoCwd;
   const environmentApi = readEnvironmentApi(environmentId);
   const supportsGitMerge = typeof environmentApi?.git.mergeBranches === "function";
@@ -161,11 +187,12 @@ export default function GitPanel({
   );
   const clearTerminalState = useTerminalStateStore((store) => store.clearTerminalState);
   const activeServerThread = useMemo(
-    () => threads.find((thread) => thread.id === activeThreadId) ?? null,
+    () =>
+      activeThreadId ? (threads.find((thread) => thread.id === activeThreadId) ?? null) : null,
     [activeThreadId, threads],
   );
   const activeDraftThread = useComposerDraftStore((store) =>
-    store.getDraftThreadByRef(activeThreadRef),
+    activeThreadRef ? store.getDraftThreadByRef(activeThreadRef) : null,
   );
   const getDraftThreadByProjectRef = useComposerDraftStore(
     (store) => store.getDraftThreadByProjectRef,
@@ -173,8 +200,14 @@ export default function GitPanel({
   const setProjectDraftThreadId = useComposerDraftStore((store) => store.setProjectDraftThreadId);
   const setDraftThreadContext = useComposerDraftStore((store) => store.setDraftThreadContext);
   const setPrompt = useComposerDraftStore((store) => store.setPrompt);
-  const activeProjectId = activeServerThread?.projectId ?? activeDraftThread?.projectId ?? null;
-  const activeProjectRef = activeProjectId ? scopeProjectRef(environmentId, activeProjectId) : null;
+  const activeProjectId =
+    activeServerThread?.projectId ??
+    activeDraftThread?.projectId ??
+    providedActiveProjectRef?.projectId ??
+    null;
+  const activeProjectRef = activeProjectId
+    ? scopeProjectRef(environmentId, activeProjectId)
+    : providedActiveProjectRef;
   const hasServerThread = activeServerThread !== null;
   const activeThreadBranch = activeServerThread?.branch ?? activeDraftThread?.branch ?? null;
   const activeWorktreePath =

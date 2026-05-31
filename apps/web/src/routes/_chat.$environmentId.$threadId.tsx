@@ -441,7 +441,7 @@ function ChatThreadRouteView() {
     void navigate({
       to: "/$environmentId/$threadId",
       params: buildThreadRouteParams(threadRef),
-      search: (previous) => stripDiffSearchParams(previous),
+      search: {},
     });
   }, [navigate, threadRef]);
 

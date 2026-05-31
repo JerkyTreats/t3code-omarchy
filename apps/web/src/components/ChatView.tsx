@@ -114,6 +114,7 @@ import {
   nextProjectScriptId,
   projectScriptIdFromCommand,
 } from "~/projectScripts";
+import { consumePendingProjectScriptRun } from "~/projectPendingScriptRun";
 import { newCommandId, newDraftId, newMessageId, newThreadId } from "~/lib/utils";
 import { getProviderModelCapabilities, resolveSelectableProvider } from "../providerModels";
 import { useSettings } from "../hooks/useSettings";
@@ -1977,6 +1978,28 @@ export default function ChatView(props: ChatViewProps) {
       terminalState.terminalIds,
     ],
   );
+
+  useEffect(() => {
+    if (!activeThreadId || !activeProject) {
+      return;
+    }
+
+    const pendingRun = consumePendingProjectScriptRun(activeThreadId);
+    if (!pendingRun || pendingRun.projectId !== activeProject.id) {
+      return;
+    }
+
+    const script = activeProject.scripts.find((entry) => entry.id === pendingRun.scriptId);
+    if (!script) {
+      toastManager.add({
+        type: "warning",
+        title: "Saved action no longer exists",
+      });
+      return;
+    }
+
+    void runProjectScript(script);
+  }, [activeProject, activeThreadId, runProjectScript]);
 
   const persistProjectScripts = useCallback(
     async (input: {
