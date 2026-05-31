@@ -15,7 +15,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { LegendList, type LegendListRef } from "@legendapp/list/react";
+import { LegendList, type LegendListProps, type LegendListRef } from "@legendapp/list/react";
 import { deriveTimelineEntries, formatElapsed } from "../../session-logic";
 import { type TurnDiffSummary } from "../../types";
 import { summarizeTurnDiffStats } from "../../lib/turnDiffTree";
@@ -93,10 +93,16 @@ interface TimelineRowActivityState {
   isRevertingCheckpoint: boolean;
 }
 
+type MessagesTimelineScrollEvent = Parameters<
+  NonNullable<LegendListProps<MessagesTimelineRow>["onScroll"]>
+>[0];
+
 const TimelineRowCtx = createContext<TimelineRowSharedState>(null!);
 const TimelineRowActivityCtx = createContext<TimelineRowActivityState>(null!);
 const TIMELINE_LIST_HEADER = <div className="h-3 sm:h-4" />;
 const TIMELINE_LIST_FOOTER = <div className="h-3 sm:h-4" />;
+const TIMELINE_MAINTAIN_SCROLL_AT_END_THRESHOLD = 0.1;
+const TIMELINE_AT_END_PIXEL_EPSILON = 1;
 const EMPTY_TIMELINE_SKILLS: ReadonlyArray<Pick<ServerProviderSkill, "name" | "displayName">> = [];
 
 // ---------------------------------------------------------------------------
@@ -183,12 +189,21 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   );
   const rows = useStableRows(rawRows);
 
-  const handleScroll = useCallback(() => {
-    const state = listRef.current?.getState?.();
-    if (state) {
-      onIsAtEndChange(state.isAtEnd);
-    }
-  }, [listRef, onIsAtEndChange]);
+  const handleScroll = useCallback(
+    (event: MessagesTimelineScrollEvent) => {
+      const eventIsAtEnd = deriveTimelineScrollEventIsAtEnd(event);
+      if (eventIsAtEnd !== null) {
+        onIsAtEndChange(eventIsAtEnd);
+        return;
+      }
+
+      const state = listRef.current?.getState?.();
+      if (state) {
+        onIsAtEndChange(state.isAtEnd);
+      }
+    },
+    [listRef, onIsAtEndChange],
+  );
 
   const previousRowCountRef = useRef(rows.length);
   useEffect(() => {
@@ -208,7 +223,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     };
   }, [listRef, onIsAtEndChange, rows.length]);
 
-  const previousRouteThreadKeyRef = useRef(routeThreadKey);
+  const previousRouteThreadKeyRef = useRef<string | null>(null);
   useEffect(() => {
     if (previousRouteThreadKeyRef.current === routeThreadKey) {
       return;
@@ -295,7 +310,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
           estimatedItemSize={90}
           initialScrollAtEnd
           maintainScrollAtEnd
-          maintainScrollAtEndThreshold={0.1}
+          maintainScrollAtEndThreshold={TIMELINE_MAINTAIN_SCROLL_AT_END_THRESHOLD}
           maintainVisibleContentPosition
           onScroll={handleScroll}
           className="h-full overflow-x-hidden overscroll-y-contain px-3 sm:px-5"
@@ -309,6 +324,36 @@ export const MessagesTimeline = memo(function MessagesTimeline({
 
 function keyExtractor(item: MessagesTimelineRow) {
   return item.id;
+}
+
+function deriveTimelineScrollEventIsAtEnd(event: MessagesTimelineScrollEvent): boolean | null {
+  const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+  const scrollOffset = contentOffset.y;
+  const contentLength = contentSize.height;
+  const viewportLength = layoutMeasurement.height;
+
+  if (
+    !Number.isFinite(scrollOffset) ||
+    !Number.isFinite(contentLength) ||
+    !Number.isFinite(viewportLength) ||
+    contentLength <= 0 ||
+    viewportLength <= 0
+  ) {
+    return null;
+  }
+
+  if (contentLength <= viewportLength + TIMELINE_AT_END_PIXEL_EPSILON) {
+    return true;
+  }
+
+  const distanceFromEnd = contentLength - scrollOffset - viewportLength;
+  return (
+    distanceFromEnd <=
+    Math.max(
+      TIMELINE_AT_END_PIXEL_EPSILON,
+      viewportLength * TIMELINE_MAINTAIN_SCROLL_AT_END_THRESHOLD,
+    )
+  );
 }
 
 // ---------------------------------------------------------------------------

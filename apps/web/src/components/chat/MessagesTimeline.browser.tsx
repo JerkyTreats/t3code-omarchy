@@ -9,6 +9,14 @@ import { render } from "vitest-browser-react";
 
 const scrollToEndSpy = vi.fn();
 const getStateSpy = vi.fn(() => ({ isAtEnd: true }));
+type MockScrollEvent = {
+  nativeEvent: {
+    contentOffset: { x: number; y: number };
+    contentSize: { height: number; width: number };
+    layoutMeasurement: { height: number; width: number };
+  };
+};
+let legendListScrollEventOnMount: MockScrollEvent | null = null;
 
 vi.mock("@legendapp/list/react", async () => {
   const React = await import("react");
@@ -19,6 +27,7 @@ vi.mock("@legendapp/list/react", async () => {
     renderItem: (args: { item: { id: string } }) => React.ReactNode;
     ListHeaderComponent?: React.ReactNode;
     ListFooterComponent?: React.ReactNode;
+    onScroll?: (event: MockScrollEvent) => void;
     ref?: React.Ref<LegendListRef>;
   }) {
     React.useImperativeHandle(
@@ -29,6 +38,13 @@ vi.mock("@legendapp/list/react", async () => {
           getState: getStateSpy,
         }) as unknown as LegendListRef,
     );
+
+    const { onScroll } = props;
+    React.useEffect(() => {
+      if (legendListScrollEventOnMount) {
+        onScroll?.(legendListScrollEventOnMount);
+      }
+    }, [onScroll]);
 
     return (
       <div data-testid="legend-list">
@@ -96,8 +112,10 @@ function buildUserTimelineEntry(text: string) {
 
 describe("MessagesTimeline", () => {
   afterEach(() => {
+    legendListScrollEventOnMount = null;
     scrollToEndSpy.mockReset();
-    getStateSpy.mockClear();
+    getStateSpy.mockReset();
+    getStateSpy.mockReturnValue({ isAtEnd: true });
     vi.restoreAllMocks();
     document.body.innerHTML = "";
   });
@@ -213,6 +231,68 @@ describe("MessagesTimeline", () => {
       expect(props.onIsAtEndChange).toHaveBeenCalledWith(true);
       expect(scrollToEndSpy).toHaveBeenCalledWith({ animated: false });
       expect(requestAnimationFrameSpy).toHaveBeenCalled();
+    } finally {
+      await screen.unmount();
+    }
+  });
+
+  it("snaps to the bottom on an initially populated thread", async () => {
+    const requestAnimationFrameSpy = vi
+      .spyOn(window, "requestAnimationFrame")
+      .mockImplementation((callback: FrameRequestCallback) => {
+        callback(0);
+        return 1;
+      });
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
+
+    const props = buildProps();
+    const screen = await render(
+      <MessagesTimeline
+        {...props}
+        timelineEntries={[buildUserTimelineEntry("Initial thread message")]}
+      />,
+    );
+
+    try {
+      await expect.element(page.getByText("Initial thread message")).toBeVisible();
+      expect(props.onIsAtEndChange).toHaveBeenCalledWith(true);
+      expect(scrollToEndSpy).toHaveBeenCalledWith({ animated: false });
+      expect(requestAnimationFrameSpy).toHaveBeenCalled();
+    } finally {
+      await screen.unmount();
+    }
+  });
+
+  it("uses the scroll event position before stale list state", async () => {
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation(
+      (callback: FrameRequestCallback) => {
+        callback(0);
+        return 1;
+      },
+    );
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
+    getStateSpy.mockReturnValue({ isAtEnd: false });
+    legendListScrollEventOnMount = {
+      nativeEvent: {
+        contentOffset: { x: 0, y: 500 },
+        contentSize: { height: 1_000, width: 320 },
+        layoutMeasurement: { height: 500, width: 320 },
+      },
+    };
+
+    const props = buildProps();
+    const screen = await render(
+      <MessagesTimeline
+        {...props}
+        timelineEntries={[buildUserTimelineEntry("Bottom event message")]}
+      />,
+    );
+
+    try {
+      await expect.element(page.getByText("Bottom event message")).toBeVisible();
+      expect(props.onIsAtEndChange).toHaveBeenCalledWith(true);
+      expect(props.onIsAtEndChange).not.toHaveBeenCalledWith(false);
+      expect(getStateSpy).not.toHaveBeenCalled();
     } finally {
       await screen.unmount();
     }
