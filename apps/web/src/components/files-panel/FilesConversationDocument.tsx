@@ -1,11 +1,11 @@
 import type { EnvironmentId } from "@t3tools/contracts";
-import { ChevronLeftIcon } from "lucide-react";
 import { useCallback } from "react";
 
 import { openInPreferredEditor } from "~/editorPreferences";
 import { readLocalApi } from "~/localApi";
 import { resolvePathLinkTarget } from "~/terminal-links";
 import { DocumentShell } from "../DocumentShell";
+import { PanelTab } from "../DiffPanelShell";
 import { ProjectFilePreviewHeader, ProjectFilePreviewSurface } from "../ProjectFilePreviewSurface";
 
 export function FilesConversationDocument(props: {
@@ -31,14 +31,12 @@ export function FilesConversationDocument(props: {
   return (
     <DocumentShell
       panelTab={
-        <button
-          type="button"
-          aria-label="Return to chat"
-          className="absolute left-3 top-3 z-10 inline-flex size-7 items-center justify-center rounded-md border border-border/70 bg-background/85 text-muted-foreground transition-colors hover:text-foreground"
+        <PanelTab
           onClick={props.onCollapseDocument}
-        >
-          <ChevronLeftIcon className="size-4" />
-        </button>
+          ariaLabel="Return preview to side panel"
+          title="Return to side panel"
+          placement="flush-left"
+        />
       }
       header={
         <ProjectFilePreviewHeader

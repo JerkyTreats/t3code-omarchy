@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   clearThreadUi,
+  expandThreadProjectExplorerDirectories,
   hydratePersistedProjectState,
   markThreadVisited,
   markThreadUnread,
@@ -13,8 +14,10 @@ import {
   setDefaultAdvertisedEndpointKey,
   setProjectExpanded,
   setThreadChangedFilesExpanded,
+  setThreadProjectExplorerExpandedDirectories,
   syncProjects,
   syncThreads,
+  toggleThreadProjectExplorerDirectory,
   type UiState,
 } from "./uiStateStore";
 
@@ -24,6 +27,7 @@ function makeUiState(overrides: Partial<UiState> = {}): UiState {
     projectOrder: [],
     threadLastVisitedAtById: {},
     threadChangedFilesExpandedById: {},
+    threadProjectExplorerExpandedDirectoriesById: {},
     defaultAdvertisedEndpointKey: null,
     ...overrides,
   };
@@ -352,6 +356,10 @@ describe("uiStateStore pure functions", () => {
           "turn-2": false,
         },
       },
+      threadProjectExplorerExpandedDirectoriesById: {
+        [thread1]: ["src"],
+        [thread2]: ["docs"],
+      },
     });
 
     const next = syncThreads(initialState, [{ key: thread1 }]);
@@ -363,6 +371,9 @@ describe("uiStateStore pure functions", () => {
       [thread1]: {
         "turn-1": false,
       },
+    });
+    expect(next.threadProjectExplorerExpandedDirectoriesById).toEqual({
+      [thread1]: ["src"],
     });
   });
 
@@ -408,12 +419,16 @@ describe("uiStateStore pure functions", () => {
           "turn-1": false,
         },
       },
+      threadProjectExplorerExpandedDirectoriesById: {
+        [thread1]: ["src", "src/components"],
+      },
     });
 
     const next = clearThreadUi(initialState, thread1);
 
     expect(next.threadLastVisitedAtById).toEqual({});
     expect(next.threadChangedFilesExpandedById).toEqual({});
+    expect(next.threadProjectExplorerExpandedDirectoriesById).toEqual({});
   });
 
   it("setThreadChangedFilesExpanded stores collapsed turns per thread", () => {
@@ -442,6 +457,69 @@ describe("uiStateStore pure functions", () => {
     const next = setThreadChangedFilesExpanded(initialState, thread1, "turn-1", true);
 
     expect(next.threadChangedFilesExpandedById).toEqual({});
+  });
+
+  it("setThreadProjectExplorerExpandedDirectories stores sorted unique paths per thread", () => {
+    const thread1 = ThreadId.make("thread-1");
+    const initialState = makeUiState();
+
+    const next = setThreadProjectExplorerExpandedDirectories(initialState, thread1, [
+      "src/components",
+      "src",
+      "src",
+      "",
+    ]);
+
+    expect(next.threadProjectExplorerExpandedDirectoriesById).toEqual({
+      [thread1]: ["src", "src/components"],
+    });
+    expect(
+      setThreadProjectExplorerExpandedDirectories(next, thread1, ["src", "src/components"]),
+    ).toBe(next);
+  });
+
+  it("toggleThreadProjectExplorerDirectory toggles one stored path", () => {
+    const thread1 = ThreadId.make("thread-1");
+    const initialState = makeUiState({
+      threadProjectExplorerExpandedDirectoriesById: {
+        [thread1]: ["src"],
+      },
+    });
+
+    const withNestedPath = toggleThreadProjectExplorerDirectory(
+      initialState,
+      thread1,
+      "src/components",
+    );
+    const withoutRootPath = toggleThreadProjectExplorerDirectory(withNestedPath, thread1, "src");
+
+    expect(withNestedPath.threadProjectExplorerExpandedDirectoriesById[thread1]).toEqual([
+      "src",
+      "src/components",
+    ]);
+    expect(withoutRootPath.threadProjectExplorerExpandedDirectoriesById[thread1]).toEqual([
+      "src/components",
+    ]);
+  });
+
+  it("expandThreadProjectExplorerDirectories preserves existing paths", () => {
+    const thread1 = ThreadId.make("thread-1");
+    const initialState = makeUiState({
+      threadProjectExplorerExpandedDirectoriesById: {
+        [thread1]: ["src"],
+      },
+    });
+
+    const next = expandThreadProjectExplorerDirectories(initialState, thread1, [
+      "src/components",
+      "src/components/files-panel",
+    ]);
+
+    expect(next.threadProjectExplorerExpandedDirectoriesById[thread1]).toEqual([
+      "src",
+      "src/components",
+      "src/components/files-panel",
+    ]);
   });
 });
 
@@ -577,6 +655,24 @@ describe("uiStateStore persistence round-trip", () => {
       localStorageStub.getItem(PERSISTED_STATE_KEY) ?? "{}",
     ) as PersistedUiState;
     expect(persisted.defaultAdvertisedEndpointKey).toBe("desktop-core:lan:http");
+  });
+
+  it("persists thread project explorer expansion paths", () => {
+    const thread1 = ThreadId.make("thread-1");
+    const state = setThreadProjectExplorerExpandedDirectories(makeUiState(), thread1, [
+      "src",
+      "src/components",
+    ]);
+
+    persistState(state);
+
+    const persisted = JSON.parse(
+      localStorageStub.getItem(PERSISTED_STATE_KEY) ?? "{}",
+    ) as PersistedUiState;
+
+    expect(persisted.threadProjectExplorerExpandedDirectoriesById).toEqual({
+      [thread1]: ["src", "src/components"],
+    });
   });
 
   it("preserves expand state across restart when project's logical key changes", () => {

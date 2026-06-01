@@ -21,6 +21,7 @@ export interface PersistedUiState {
   projectOrderCwds?: string[];
   defaultAdvertisedEndpointKey?: string | null;
   threadChangedFilesExpandedById?: Record<string, Record<string, boolean>>;
+  threadProjectExplorerExpandedDirectoriesById?: Record<string, string[]>;
 }
 
 export interface UiProjectState {
@@ -31,6 +32,7 @@ export interface UiProjectState {
 export interface UiThreadState {
   threadLastVisitedAtById: Record<string, string>;
   threadChangedFilesExpandedById: Record<string, Record<string, boolean>>;
+  threadProjectExplorerExpandedDirectoriesById: Record<string, string[]>;
 }
 
 export interface UiEndpointState {
@@ -57,6 +59,7 @@ const initialState: UiState = {
   projectOrder: [],
   threadLastVisitedAtById: {},
   threadChangedFilesExpandedById: {},
+  threadProjectExplorerExpandedDirectoriesById: {},
   defaultAdvertisedEndpointKey: null,
 };
 
@@ -102,6 +105,10 @@ function readPersistedState(): UiState {
       threadChangedFilesExpandedById: sanitizePersistedThreadChangedFilesExpanded(
         parsed.threadChangedFilesExpandedById,
       ),
+      threadProjectExplorerExpandedDirectoriesById:
+        sanitizePersistedThreadProjectExplorerExpandedDirectories(
+          parsed.threadProjectExplorerExpandedDirectoriesById,
+        ),
     };
   } catch {
     return initialState;
@@ -130,6 +137,34 @@ function sanitizePersistedThreadChangedFilesExpanded(
 
     if (Object.keys(nextTurns).length > 0) {
       nextState[threadId] = nextTurns;
+    }
+  }
+
+  return nextState;
+}
+
+function sanitizeDirectoryPaths(paths: readonly string[]): string[] {
+  return [...new Set(paths.filter((pathValue) => pathValue.length > 0))].toSorted();
+}
+
+function sanitizePersistedThreadProjectExplorerExpandedDirectories(
+  value: PersistedUiState["threadProjectExplorerExpandedDirectoriesById"],
+): Record<string, string[]> {
+  if (!value || typeof value !== "object") {
+    return {};
+  }
+
+  const nextState: Record<string, string[]> = {};
+  for (const [threadId, paths] of Object.entries(value)) {
+    if (!threadId || !Array.isArray(paths)) {
+      continue;
+    }
+
+    const nextPaths = sanitizeDirectoryPaths(
+      paths.filter((pathValue): pathValue is string => typeof pathValue === "string"),
+    );
+    if (nextPaths.length > 0) {
+      nextState[threadId] = nextPaths;
     }
   }
 
@@ -184,6 +219,11 @@ export function persistState(state: UiState): void {
         return Object.keys(nextTurns).length > 0 ? [[threadId, nextTurns]] : [];
       }),
     );
+    const threadProjectExplorerExpandedDirectoriesById = Object.fromEntries(
+      Object.entries(state.threadProjectExplorerExpandedDirectoriesById).filter(
+        ([, directoryPaths]) => directoryPaths.length > 0,
+      ),
+    );
     window.localStorage.setItem(
       PERSISTED_STATE_KEY,
       JSON.stringify({
@@ -192,6 +232,7 @@ export function persistState(state: UiState): void {
         projectOrderCwds,
         defaultAdvertisedEndpointKey: state.defaultAdvertisedEndpointKey,
         threadChangedFilesExpandedById,
+        threadProjectExplorerExpandedDirectoriesById,
       } satisfies PersistedUiState),
     );
     if (!legacyKeysCleanedUp) {
@@ -238,6 +279,27 @@ function nestedBooleanRecordsEqual(
   }
   for (const [key, value] of leftEntries) {
     if (!(key in right) || !recordsEqual(value, right[key]!)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function stringArraysEqual(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+function stringArrayRecordsEqual(
+  left: Record<string, string[]>,
+  right: Record<string, string[]>,
+): boolean {
+  const leftEntries = Object.entries(left);
+  const rightEntries = Object.entries(right);
+  if (leftEntries.length !== rightEntries.length) {
+    return false;
+  }
+  for (const [key, value] of leftEntries) {
+    if (!(key in right) || !stringArraysEqual(value, right[key]!)) {
       return false;
     }
   }
@@ -416,11 +478,20 @@ export function syncThreads(state: UiState, threads: readonly SyncThreadInput[])
       retainedThreadIds.has(threadId),
     ),
   );
+  const nextThreadProjectExplorerExpandedDirectoriesById = Object.fromEntries(
+    Object.entries(state.threadProjectExplorerExpandedDirectoriesById).filter(([threadId]) =>
+      retainedThreadIds.has(threadId),
+    ),
+  );
   if (
     recordsEqual(state.threadLastVisitedAtById, nextThreadLastVisitedAtById) &&
     nestedBooleanRecordsEqual(
       state.threadChangedFilesExpandedById,
       nextThreadChangedFilesExpandedById,
+    ) &&
+    stringArrayRecordsEqual(
+      state.threadProjectExplorerExpandedDirectoriesById,
+      nextThreadProjectExplorerExpandedDirectoriesById,
     )
   ) {
     return state;
@@ -429,6 +500,7 @@ export function syncThreads(state: UiState, threads: readonly SyncThreadInput[])
     ...state,
     threadLastVisitedAtById: nextThreadLastVisitedAtById,
     threadChangedFilesExpandedById: nextThreadChangedFilesExpandedById,
+    threadProjectExplorerExpandedDirectoriesById: nextThreadProjectExplorerExpandedDirectoriesById,
   };
 }
 
@@ -481,17 +553,23 @@ export function markThreadUnread(
 export function clearThreadUi(state: UiState, threadId: string): UiState {
   const hasVisitedState = threadId in state.threadLastVisitedAtById;
   const hasChangedFilesState = threadId in state.threadChangedFilesExpandedById;
-  if (!hasVisitedState && !hasChangedFilesState) {
+  const hasProjectExplorerState = threadId in state.threadProjectExplorerExpandedDirectoriesById;
+  if (!hasVisitedState && !hasChangedFilesState && !hasProjectExplorerState) {
     return state;
   }
   const nextThreadLastVisitedAtById = { ...state.threadLastVisitedAtById };
   const nextThreadChangedFilesExpandedById = { ...state.threadChangedFilesExpandedById };
+  const nextThreadProjectExplorerExpandedDirectoriesById = {
+    ...state.threadProjectExplorerExpandedDirectoriesById,
+  };
   delete nextThreadLastVisitedAtById[threadId];
   delete nextThreadChangedFilesExpandedById[threadId];
+  delete nextThreadProjectExplorerExpandedDirectoriesById[threadId];
   return {
     ...state,
     threadLastVisitedAtById: nextThreadLastVisitedAtById,
     threadChangedFilesExpandedById: nextThreadChangedFilesExpandedById,
+    threadProjectExplorerExpandedDirectoriesById: nextThreadProjectExplorerExpandedDirectoriesById,
   };
 }
 
@@ -542,6 +620,59 @@ export function setThreadChangedFilesExpanded(
       },
     },
   };
+}
+
+export function setThreadProjectExplorerExpandedDirectories(
+  state: UiState,
+  threadId: string,
+  directoryPaths: readonly string[],
+): UiState {
+  const nextDirectories = sanitizeDirectoryPaths(directoryPaths);
+  const currentDirectories = state.threadProjectExplorerExpandedDirectoriesById[threadId] ?? [];
+  if (stringArraysEqual(currentDirectories, nextDirectories)) {
+    return state;
+  }
+
+  const nextState = { ...state.threadProjectExplorerExpandedDirectoriesById };
+  if (nextDirectories.length > 0) {
+    nextState[threadId] = nextDirectories;
+  } else {
+    delete nextState[threadId];
+  }
+
+  return {
+    ...state,
+    threadProjectExplorerExpandedDirectoriesById: nextState,
+  };
+}
+
+export function toggleThreadProjectExplorerDirectory(
+  state: UiState,
+  threadId: string,
+  directoryPath: string,
+): UiState {
+  if (directoryPath.length === 0) {
+    return state;
+  }
+  const nextDirectories = new Set(state.threadProjectExplorerExpandedDirectoriesById[threadId]);
+  if (nextDirectories.has(directoryPath)) {
+    nextDirectories.delete(directoryPath);
+  } else {
+    nextDirectories.add(directoryPath);
+  }
+  return setThreadProjectExplorerExpandedDirectories(state, threadId, [...nextDirectories]);
+}
+
+export function expandThreadProjectExplorerDirectories(
+  state: UiState,
+  threadId: string,
+  directoryPaths: readonly string[],
+): UiState {
+  const currentDirectories = state.threadProjectExplorerExpandedDirectoriesById[threadId] ?? [];
+  return setThreadProjectExplorerExpandedDirectories(state, threadId, [
+    ...currentDirectories,
+    ...directoryPaths,
+  ]);
 }
 
 export function setDefaultAdvertisedEndpointKey(state: UiState, key: string | null): UiState {
@@ -629,6 +760,15 @@ interface UiStateStore extends UiState {
   markThreadUnread: (threadId: string, latestTurnCompletedAt: string | null | undefined) => void;
   clearThreadUi: (threadId: string) => void;
   setThreadChangedFilesExpanded: (threadId: string, turnId: string, expanded: boolean) => void;
+  setThreadProjectExplorerExpandedDirectories: (
+    threadId: string,
+    directoryPaths: readonly string[],
+  ) => void;
+  toggleThreadProjectExplorerDirectory: (threadId: string, directoryPath: string) => void;
+  expandThreadProjectExplorerDirectories: (
+    threadId: string,
+    directoryPaths: readonly string[],
+  ) => void;
   setDefaultAdvertisedEndpointKey: (key: string | null) => void;
   toggleProject: (projectId: string) => void;
   setProjectExpanded: (projectId: string, expanded: boolean) => void;
@@ -649,6 +789,12 @@ export const useUiStateStore = create<UiStateStore>((set) => ({
   clearThreadUi: (threadId) => set((state) => clearThreadUi(state, threadId)),
   setThreadChangedFilesExpanded: (threadId, turnId, expanded) =>
     set((state) => setThreadChangedFilesExpanded(state, threadId, turnId, expanded)),
+  setThreadProjectExplorerExpandedDirectories: (threadId, directoryPaths) =>
+    set((state) => setThreadProjectExplorerExpandedDirectories(state, threadId, directoryPaths)),
+  toggleThreadProjectExplorerDirectory: (threadId, directoryPath) =>
+    set((state) => toggleThreadProjectExplorerDirectory(state, threadId, directoryPath)),
+  expandThreadProjectExplorerDirectories: (threadId, directoryPaths) =>
+    set((state) => expandThreadProjectExplorerDirectories(state, threadId, directoryPaths)),
   setDefaultAdvertisedEndpointKey: (key) =>
     set((state) => setDefaultAdvertisedEndpointKey(state, key)),
   toggleProject: (projectId) => set((state) => toggleProject(state, projectId)),

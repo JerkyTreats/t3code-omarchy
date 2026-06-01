@@ -1,4 +1,5 @@
 import { createFileRoute, retainSearchParams, useNavigate } from "@tanstack/react-router";
+import { scopedThreadKey } from "@t3tools/client-runtime";
 import { projectScriptCwd } from "@t3tools/shared/projectScripts";
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
 
@@ -231,7 +232,7 @@ function ChatThreadRouteView() {
         : null,
     [filesProject, filesThread?.worktreePath],
   );
-  const currentThreadKey = threadRef ? `${threadRef.environmentId}:${threadRef.threadId}` : null;
+  const currentThreadKey = threadRef ? scopedThreadKey(threadRef) : null;
   const [diffPanelMountState, setDiffPanelMountState] = useState(() => ({
     threadKey: currentThreadKey,
     hasOpenedDiff: diffOpen,
@@ -374,13 +375,29 @@ function ChatThreadRouteView() {
             ...rest,
             files: "1" as const,
             docPath: pathValue,
-            docExpanded: "1" as const,
+            docExpanded: undefined,
           };
         },
       });
     },
     [markFilesOpened, navigate, threadRef],
   );
+  const clearDocumentPath = useCallback(() => {
+    if (!threadRef) {
+      return;
+    }
+    markFilesOpened();
+    void navigate({
+      to: "/$environmentId/$threadId",
+      params: buildThreadRouteParams(threadRef),
+      search: (previous) => ({
+        ...stripDiffSearchParams(previous),
+        files: "1" as const,
+        docPath: undefined,
+        docExpanded: undefined,
+      }),
+    });
+  }, [markFilesOpened, navigate, threadRef]);
   const expandDocument = useCallback(() => {
     if (!threadRef || !search.docPath) {
       return;
@@ -407,6 +424,7 @@ function ChatThreadRouteView() {
         ...stripDiffSearchParams(previous),
         files: "1" as const,
         docPath: search.docPath,
+        docExpanded: undefined,
       }),
     });
   }, [navigate, search.docPath, threadRef]);
@@ -534,6 +552,7 @@ function ChatThreadRouteView() {
         <FilesPanelRouteAdapter
           environmentId={threadRef.environmentId}
           cwd={filesWorkspaceCwd}
+          threadKey={currentThreadKey}
           open={filesOpen}
           onCloseFiles={closeFiles}
           onOpenFiles={openFiles}
@@ -541,6 +560,7 @@ function ChatThreadRouteView() {
           docPath={search.docPath ?? null}
           expandedDocument={expandedFilesDocument}
           onSelectFile={selectDocumentPath}
+          onClearDocument={clearDocumentPath}
           onExpandDocument={expandDocument}
         />
       </>

@@ -1,4 +1,5 @@
 import type { EnvironmentId } from "@t3tools/contracts";
+import { ArrowLeftIcon } from "lucide-react";
 import { Suspense, lazy, useCallback, type CSSProperties } from "react";
 
 import { openInPreferredEditor } from "~/editorPreferences";
@@ -6,9 +7,10 @@ import { useMediaQuery } from "~/hooks/useMediaQuery";
 import { readLocalApi } from "~/localApi";
 import { resolvePathLinkTarget } from "~/terminal-links";
 import { DocumentShell } from "../DocumentShell";
-import { DiffPanelLoadingState } from "../DiffPanelShell";
+import { DiffPanelLoadingState, PanelTab } from "../DiffPanelShell";
 import { ProjectFilePreviewHeader, ProjectFilePreviewSurface } from "../ProjectFilePreviewSurface";
 import { RightPanelSheet } from "../RightPanelSheet";
+import { Button } from "../ui/button";
 import { Sidebar, SidebarProvider, SidebarRail } from "../ui/sidebar";
 
 const FILES_PANEL_INLINE_LAYOUT_MEDIA_QUERY = "(max-width: 1280px)";
@@ -25,9 +27,11 @@ const ProjectExplorerPanel = lazy(() =>
 function FilesPanelContent(props: {
   environmentId: EnvironmentId;
   cwd: string | null;
+  threadKey: string | null;
   docPath: string | null;
   expandedDocument: boolean;
   onSelectFile: (pathValue: string) => void;
+  onClearDocument: () => void;
   onExpandDocument: () => void;
 }) {
   const openProjectFileInEditor = useCallback(
@@ -48,13 +52,34 @@ function FilesPanelContent(props: {
     return (
       <div className="h-full min-h-0">
         <DocumentShell
-          header={
-            <ProjectFilePreviewHeader
-              environmentId={props.environmentId}
-              cwd={props.cwd}
-              filePath={props.docPath}
-              onOpenFileInEditor={openProjectFileInEditor}
+          panelTab={
+            <PanelTab
+              onClick={props.onExpandDocument}
+              ariaLabel="Show preview in conversation view"
+              title="Show in conversation view"
+              placement="outside-left"
             />
+          }
+          header={
+            <>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                onClick={props.onClearDocument}
+                aria-label="Back to file tree"
+                title="Back to file tree"
+                className="shrink-0 text-muted-foreground/70 hover:text-foreground"
+              >
+                <ArrowLeftIcon className="size-3.5" />
+              </Button>
+              <ProjectFilePreviewHeader
+                environmentId={props.environmentId}
+                cwd={props.cwd}
+                filePath={props.docPath}
+                onOpenFileInEditor={openProjectFileInEditor}
+              />
+            </>
           }
         >
           <ProjectFilePreviewSurface
@@ -65,13 +90,6 @@ function FilesPanelContent(props: {
             showHeader={false}
             onOpenFileInEditor={openProjectFileInEditor}
           />
-          <button
-            type="button"
-            className="absolute bottom-3 right-3 rounded-lg border border-border/70 bg-background/90 px-3 py-2 text-xs text-foreground shadow-sm transition-colors hover:bg-background"
-            onClick={props.onExpandDocument}
-          >
-            Expand preview
-          </button>
         </DocumentShell>
       </div>
     );
@@ -92,6 +110,7 @@ function FilesPanelContent(props: {
           <ProjectExplorerPanel
             environmentId={props.environmentId}
             cwd={props.cwd}
+            threadKey={props.threadKey}
             selectedPath={props.docPath}
             onSelectFile={props.onSelectFile}
           />
@@ -104,6 +123,7 @@ function FilesPanelContent(props: {
 interface FilesPanelRouteAdapterProps {
   environmentId: EnvironmentId;
   cwd: string | null;
+  threadKey: string | null;
   open: boolean;
   onCloseFiles: () => void;
   onOpenFiles: () => void;
@@ -111,6 +131,7 @@ interface FilesPanelRouteAdapterProps {
   docPath: string | null;
   expandedDocument: boolean;
   onSelectFile: (pathValue: string) => void;
+  onClearDocument: () => void;
   onExpandDocument: () => void;
 }
 
@@ -131,9 +152,11 @@ export function FilesPanelRouteAdapter(props: FilesPanelRouteAdapterProps) {
     <FilesPanelContent
       environmentId={props.environmentId}
       cwd={props.cwd}
+      threadKey={props.threadKey}
       docPath={shouldUseSheet && props.expandedDocument ? null : props.docPath}
       expandedDocument={props.expandedDocument}
       onSelectFile={props.onSelectFile}
+      onClearDocument={props.onClearDocument}
       onExpandDocument={props.onExpandDocument}
     />
   ) : null;

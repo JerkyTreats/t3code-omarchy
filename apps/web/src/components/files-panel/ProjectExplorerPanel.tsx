@@ -1,19 +1,60 @@
 import { useQuery } from "@tanstack/react-query";
 import type { EnvironmentId } from "@t3tools/contracts";
 import { RefreshCcwIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { useUiStateStore } from "~/uiStateStore";
 import { projectListDirectoryQueryOptions } from "~/lib/projectReactQuery";
 import { ProjectExplorerTree } from "./ProjectExplorerTree";
 import { ancestorDirectoryPaths } from "./ProjectExplorerTree.logic";
 
+const EMPTY_EXPANDED_DIRECTORIES: readonly string[] = [];
+
 export function ProjectExplorerPanel(props: {
   environmentId: EnvironmentId | null;
   cwd: string | null;
+  threadKey: string | null;
   selectedPath: string | null;
   onSelectFile: (pathValue: string) => void;
 }) {
-  const [expandedDirectories, setExpandedDirectories] = useState<Set<string>>(() => new Set());
+  const threadKey = props.threadKey;
+  const [fallbackExpandedDirectories, setFallbackExpandedDirectories] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const persistedExpandedDirectories = useUiStateStore((store) =>
+    threadKey
+      ? (store.threadProjectExplorerExpandedDirectoriesById[threadKey] ??
+        EMPTY_EXPANDED_DIRECTORIES)
+      : EMPTY_EXPANDED_DIRECTORIES,
+  );
+  const toggleThreadProjectExplorerDirectory = useUiStateStore(
+    (store) => store.toggleThreadProjectExplorerDirectory,
+  );
+  const expandThreadProjectExplorerDirectories = useUiStateStore(
+    (store) => store.expandThreadProjectExplorerDirectories,
+  );
+  const expandedDirectories = useMemo(
+    () => (threadKey ? new Set(persistedExpandedDirectories) : fallbackExpandedDirectories),
+    [fallbackExpandedDirectories, persistedExpandedDirectories, threadKey],
+  );
+  const toggleDirectory = useCallback(
+    (pathValue: string) => {
+      if (!threadKey) {
+        setFallbackExpandedDirectories((current) => {
+          const next = new Set(current);
+          if (next.has(pathValue)) {
+            next.delete(pathValue);
+          } else {
+            next.add(pathValue);
+          }
+          return next;
+        });
+        return;
+      }
+      toggleThreadProjectExplorerDirectory(threadKey, pathValue);
+    },
+    [threadKey, toggleThreadProjectExplorerDirectory],
+  );
   const rootQuery = useQuery(
     projectListDirectoryQueryOptions({
       environmentId: props.environmentId,
@@ -27,15 +68,24 @@ export function ProjectExplorerPanel(props: {
     if (!props.selectedPath) {
       return;
     }
-    const selectedPath = props.selectedPath;
-    setExpandedDirectories((current) => {
+    const ancestorPaths = ancestorDirectoryPaths(props.selectedPath);
+    if (ancestorPaths.length === 0) {
+      return;
+    }
+
+    if (threadKey) {
+      expandThreadProjectExplorerDirectories(threadKey, ancestorPaths);
+      return;
+    }
+
+    setFallbackExpandedDirectories((current) => {
       const next = new Set(current);
-      for (const pathValue of ancestorDirectoryPaths(selectedPath)) {
+      for (const pathValue of ancestorPaths) {
         next.add(pathValue);
       }
       return next;
     });
-  }, [props.selectedPath]);
+  }, [expandThreadProjectExplorerDirectories, props.selectedPath, threadKey]);
 
   if (!props.cwd || !props.environmentId) {
     return (
@@ -90,17 +140,7 @@ export function ProjectExplorerPanel(props: {
         expandedDirectories={expandedDirectories}
         selectedPath={props.selectedPath}
         onSelectFile={props.onSelectFile}
-        onToggleDirectory={(pathValue) => {
-          setExpandedDirectories((current) => {
-            const next = new Set(current);
-            if (next.has(pathValue)) {
-              next.delete(pathValue);
-            } else {
-              next.add(pathValue);
-            }
-            return next;
-          });
-        }}
+        onToggleDirectory={toggleDirectory}
       />
     </div>
   );

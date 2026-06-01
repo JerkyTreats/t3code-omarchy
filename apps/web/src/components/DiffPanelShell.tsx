@@ -1,3 +1,4 @@
+import { Code2Icon } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { isElectron } from "~/env";
@@ -14,6 +15,30 @@ function getDiffPanelHeaderRowClassName(mode: DiffPanelMode) {
     shouldUseDragRegion
       ? "drag-region h-[52px] border-b border-border wco:h-[env(titlebar-area-height)] wco:pr-[calc(100vw-env(titlebar-area-width)-env(titlebar-area-x)+1em)]"
       : "h-12 wco:max-h-[env(titlebar-area-height)]",
+  );
+}
+
+export function PanelTab(props: {
+  onClick: () => void;
+  ariaLabel: string;
+  title: string;
+  placement: "flush-left" | "outside-left";
+}) {
+  return (
+    <button
+      type="button"
+      className={cn(
+        "[-webkit-app-region:no-drag] absolute left-0 top-1/2 z-10 flex h-24 w-5 -translate-y-1/2 cursor-pointer items-center justify-center border border-border/70 bg-background/90 text-muted-foreground shadow-sm transition-colors hover:border-border hover:text-foreground",
+        props.placement === "outside-left"
+          ? "-translate-x-full rounded-l-md border-r-0"
+          : "rounded-r-md border-l-0",
+      )}
+      onClick={props.onClick}
+      aria-label={props.ariaLabel}
+      title={props.title}
+    >
+      <Code2Icon className="size-3.5" />
+    </button>
   );
 }
 
