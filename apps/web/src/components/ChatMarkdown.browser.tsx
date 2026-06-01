@@ -127,6 +127,31 @@ describe("ChatMarkdown", () => {
     }
   });
 
+  it("opens workspace code links through the rendered preview callback", async () => {
+    const onOpenMarkdownFilePreview = vi.fn();
+    const screen = await render(
+      <ChatMarkdown
+        text="[DocumentCodeRenderer.tsx](apps/web/src/components/DocumentCodeRenderer.tsx)"
+        cwd="/Users/yashsingh/p/t3code"
+        onOpenMarkdownFilePreview={onOpenMarkdownFilePreview}
+      />,
+    );
+
+    try {
+      const link = page.getByRole("link", { name: "DocumentCodeRenderer.tsx" });
+      await expect.element(link).toBeInTheDocument();
+
+      await link.click();
+
+      expect(onOpenMarkdownFilePreview).toHaveBeenCalledWith(
+        "apps/web/src/components/DocumentCodeRenderer.tsx",
+      );
+      expect(openInPreferredEditorMock).not.toHaveBeenCalled();
+    } finally {
+      await screen.unmount();
+    }
+  });
+
   it("disambiguates duplicate file basenames inline", async () => {
     const firstPath = "/Users/yashsingh/p/t3code/apps/web/src/components/chat/MessagesTimeline.tsx";
     const secondPath = "/Users/yashsingh/p/t3code/apps/web/src/components/MessagesTimeline.tsx";

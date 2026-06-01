@@ -195,6 +195,54 @@ function MarkdownCodeBlock({ code, children }: { code: string; children: ReactNo
   );
 }
 
+function HighlightedCodeBlockWithThemeName(props: {
+  className: string | undefined;
+  code: string;
+  isStreaming: boolean;
+  themeName: DiffThemeName;
+  fallback?: ReactNode;
+}) {
+  const fallback = props.fallback ?? (
+    <pre>
+      <code>{props.code}</code>
+    </pre>
+  );
+
+  return (
+    <MarkdownCodeBlock code={props.code}>
+      <CodeHighlightErrorBoundary fallback={fallback}>
+        <Suspense fallback={fallback}>
+          <SuspenseShikiCodeBlock
+            className={props.className}
+            code={props.code}
+            themeName={props.themeName}
+            isStreaming={props.isStreaming}
+          />
+        </Suspense>
+      </CodeHighlightErrorBoundary>
+    </MarkdownCodeBlock>
+  );
+}
+
+export function HighlightedCodeBlock(props: {
+  className: string | undefined;
+  code: string;
+  isStreaming?: boolean;
+  fallback?: ReactNode;
+}) {
+  const { resolvedTheme } = useTheme();
+
+  return (
+    <HighlightedCodeBlockWithThemeName
+      className={props.className}
+      code={props.code}
+      themeName={resolveDiffThemeName(resolvedTheme)}
+      isStreaming={props.isStreaming ?? false}
+      fallback={props.fallback}
+    />
+  );
+}
+
 interface SuspenseShikiCodeBlockProps {
   className: string | undefined;
   code: string;
@@ -610,11 +658,7 @@ function ChatMarkdown({
             targetPath={fileLinkMeta.targetPath}
             displayPath={fileLinkMeta.displayPath}
             filePath={fileLinkMeta.filePath}
-            previewPath={
-              fileLinkMeta.isMarkdown && fileLinkMeta.workspaceRelativePath
-                ? fileLinkMeta.workspaceRelativePath
-                : undefined
-            }
+            previewPath={fileLinkMeta.workspaceRelativePath}
             label={labelParts.join(" · ")}
             theme={resolvedTheme}
             className={props.className}
@@ -629,18 +673,13 @@ function ChatMarkdown({
         }
 
         return (
-          <MarkdownCodeBlock code={codeBlock.code}>
-            <CodeHighlightErrorBoundary fallback={<pre {...props}>{children}</pre>}>
-              <Suspense fallback={<pre {...props}>{children}</pre>}>
-                <SuspenseShikiCodeBlock
-                  className={codeBlock.className}
-                  code={codeBlock.code}
-                  themeName={diffThemeName}
-                  isStreaming={isStreaming}
-                />
-              </Suspense>
-            </CodeHighlightErrorBoundary>
-          </MarkdownCodeBlock>
+          <HighlightedCodeBlockWithThemeName
+            className={codeBlock.className}
+            code={codeBlock.code}
+            themeName={diffThemeName}
+            isStreaming={isStreaming}
+            fallback={<pre {...props}>{children}</pre>}
+          />
         );
       },
       table({ node: _node, ...props }) {

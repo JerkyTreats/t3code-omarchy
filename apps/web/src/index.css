@@ -975,6 +975,44 @@ label:has(> select#reasoning-effort) select {
   background: color-mix(in srgb, var(--background) 85%, transparent);
 }
 
+.document-code-renderer {
+  min-width: max-content;
+}
+
+.document-code-renderer .chat-markdown-codeblock {
+  min-height: 100%;
+  margin: 0;
+}
+
+.document-code-renderer .chat-markdown-codeblock pre {
+  min-height: 100%;
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  background: color-mix(in srgb, var(--muted) 56%, var(--background));
+  padding-right: calc(1rem + var(--chat-markdown-codeblock-copy-button-space));
+}
+
+.document-code-renderer .chat-markdown-shiki .shiki {
+  min-height: 100%;
+  margin: 0 !important;
+  padding: 1rem 1rem 1rem 1.05rem !important;
+  background: color-mix(in srgb, var(--muted) 56%, var(--background)) !important;
+  font-size: 0.75rem;
+  line-height: 1.55;
+}
+
+.document-code-renderer[data-word-wrap="true"] {
+  min-width: 0;
+}
+
+.document-code-renderer[data-word-wrap="true"] .shiki,
+.document-code-renderer[data-word-wrap="true"] .shiki code,
+.document-code-renderer[data-word-wrap="true"] .shiki span {
+  white-space: pre-wrap !important;
+  overflow-wrap: anywhere;
+}
+
 .document-preview-shell {
   min-width: 0;
 }

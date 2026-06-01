@@ -2,7 +2,7 @@ import { BinaryIcon, FileImageIcon, FileTextIcon, ImageIcon, PencilLineIcon } fr
 import { useState, type ReactNode } from "react";
 
 import type { ProjectReadFileResult } from "@t3tools/contracts";
-import { cn } from "~/lib/utils";
+import { DocumentCodeRenderer } from "./DocumentCodeRenderer";
 import { DocumentMarkdownRenderer } from "./DocumentMarkdownRenderer";
 import { ExpandedImageDialog } from "./chat/ExpandedImageDialog";
 
@@ -107,14 +107,11 @@ export function FilePreviewSurface(props: {
           />
         ) : null}
         {props.file.kind === "text" && !props.file.isMarkdown ? (
-          <pre
-            className={cn(
-              "h-full min-h-0 overflow-auto bg-background p-4 font-mono text-xs leading-relaxed text-foreground/85",
-              props.wordWrap ? "whitespace-pre-wrap break-words" : "whitespace-pre",
-            )}
-          >
-            <code>{props.file.text}</code>
-          </pre>
+          <DocumentCodeRenderer
+            code={props.file.text}
+            language={props.file.language}
+            wordWrap={props.wordWrap}
+          />
         ) : null}
         {props.file.kind === "image" ? (
           <div className="relative flex h-full items-center justify-center p-6">
