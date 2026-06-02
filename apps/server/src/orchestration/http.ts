@@ -2,21 +2,31 @@ import {
   ClientOrchestrationCommand,
   OrchestrationDispatchCommandError,
   OrchestrationGetSnapshotError,
+  OrchestrationReplayEventsError,
   type OrchestrationReadModel,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Stream from "effect/Stream";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 
 import { ServerAuth } from "../auth/Services/ServerAuth.ts";
+import { enrichOrchestrationEvents } from "./EventReplay.ts";
 import { normalizeDispatchCommand } from "./Normalizer.ts";
 import { OrchestrationEngineService } from "./Services/OrchestrationEngine.ts";
 import { ProjectionSnapshotQuery } from "./Services/ProjectionSnapshotQuery.ts";
 
 const respondToOrchestrationHttpError = (
-  error: OrchestrationDispatchCommandError | OrchestrationGetSnapshotError,
+  error:
+    | OrchestrationDispatchCommandError
+    | OrchestrationGetSnapshotError
+    | OrchestrationReplayEventsError,
 ) =>
   Effect.gen(function* () {
-    if (error._tag === "OrchestrationGetSnapshotError") {
+    if (
+      error._tag === "OrchestrationGetSnapshotError" ||
+      error._tag === "OrchestrationReplayEventsError"
+    ) {
       yield* Effect.logError("orchestration http route failed", {
         message: error.message,
         cause: error.cause,
@@ -39,6 +49,26 @@ const authenticateOwnerSession = Effect.gen(function* () {
   return session;
 });
 
+const parseFromSequenceExclusive = (request: HttpServerRequest.HttpServerRequest) =>
+  Effect.gen(function* () {
+    const url = HttpServerRequest.toURL(request);
+    if (Option.isNone(url)) {
+      return yield* new OrchestrationDispatchCommandError({
+        message: "Invalid orchestration events request.",
+      });
+    }
+
+    const rawValue = url.value.searchParams.get("fromSequenceExclusive") ?? "0";
+    const value = Number(rawValue);
+    if (!Number.isSafeInteger(value) || value < 0) {
+      return yield* new OrchestrationDispatchCommandError({
+        message: "Invalid fromSequenceExclusive query parameter.",
+      });
+    }
+
+    return value;
+  });
+
 export const orchestrationSnapshotRouteLayer = HttpRouter.add(
   "GET",
   "/api/orchestration/snapshot",
@@ -60,6 +90,34 @@ export const orchestrationSnapshotRouteLayer = HttpRouter.add(
   }).pipe(
     Effect.catchTag("OrchestrationDispatchCommandError", respondToOrchestrationHttpError),
     Effect.catchTag("OrchestrationGetSnapshotError", respondToOrchestrationHttpError),
+  ),
+);
+
+export const orchestrationEventsRouteLayer = HttpRouter.add(
+  "GET",
+  "/api/orchestration/events",
+  Effect.gen(function* () {
+    yield* authenticateOwnerSession;
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const fromSequenceExclusive = yield* parseFromSequenceExclusive(request);
+    const orchestrationEngine = yield* OrchestrationEngineService;
+    const events = yield* Stream.runCollect(
+      orchestrationEngine.readEvents(fromSequenceExclusive),
+    ).pipe(
+      Effect.map((events) => Array.from(events)),
+      Effect.flatMap(enrichOrchestrationEvents),
+      Effect.mapError(
+        (cause) =>
+          new OrchestrationReplayEventsError({
+            message: "Failed to replay orchestration events.",
+            cause,
+          }),
+      ),
+    );
+    return HttpServerResponse.jsonUnsafe(events, { status: 200 });
+  }).pipe(
+    Effect.catchTag("OrchestrationDispatchCommandError", respondToOrchestrationHttpError),
+    Effect.catchTag("OrchestrationReplayEventsError", respondToOrchestrationHttpError),
   ),
 );
 

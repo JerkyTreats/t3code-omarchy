@@ -3343,6 +3343,82 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
+  it.effect("replays orchestration events over HTTP", () =>
+    Effect.gen(function* () {
+      const repositoryIdentity = {
+        canonicalKey: "github.com/t3tools/t3code",
+        locator: {
+          source: "git-remote" as const,
+          remoteName: "origin",
+          remoteUrl: "git@github.com:T3Tools/t3code.git",
+        },
+        displayName: "T3Tools/t3code",
+        provider: "github",
+        owner: "T3Tools",
+        name: "t3code",
+      };
+      let requestedFromSequenceExclusive: number | null = null;
+
+      yield* buildAppUnderTest({
+        layers: {
+          orchestrationEngine: {
+            readEvents: (fromSequenceExclusive) => {
+              requestedFromSequenceExclusive = fromSequenceExclusive;
+              return Stream.make({
+                sequence: 4,
+                eventId: EventId.make("event-4"),
+                aggregateKind: "project",
+                aggregateId: defaultProjectId,
+                occurredAt: "2026-04-05T00:00:00.000Z",
+                commandId: null,
+                causationEventId: null,
+                correlationId: null,
+                metadata: {},
+                type: "project.created",
+                payload: {
+                  projectId: defaultProjectId,
+                  title: "Default Project",
+                  workspaceRoot: "/tmp/default-project",
+                  defaultModelSelection,
+                  scripts: [],
+                  createdAt: "2026-04-05T00:00:00.000Z",
+                  updatedAt: "2026-04-05T00:00:00.000Z",
+                },
+              } satisfies Extract<OrchestrationEvent, { type: "project.created" }>);
+            },
+          },
+          repositoryIdentityResolver: {
+            resolve: () => Effect.succeed(repositoryIdentity),
+          },
+        },
+      });
+
+      const bearerToken = yield* getAuthenticatedBearerSessionToken();
+      const url = yield* getHttpServerUrl("/api/orchestration/events?fromSequenceExclusive=3");
+      const response = yield* Effect.promise(() =>
+        fetch(url, {
+          headers: {
+            authorization: `Bearer ${bearerToken}`,
+          },
+        }),
+      );
+      const replayResult = (yield* Effect.promise(() =>
+        response.json(),
+      )) as ReadonlyArray<OrchestrationEvent>;
+
+      assert.equal(response.status, 200);
+      assert.equal(requestedFromSequenceExclusive, 3);
+      const replayedEvent = replayResult[0];
+      assert.equal(replayedEvent?.type, "project.created");
+      assert.deepEqual(
+        replayedEvent && replayedEvent.type === "project.created"
+          ? replayedEvent.payload.repositoryIdentity
+          : null,
+        repositoryIdentity,
+      );
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
   it.effect("enriches replayed project events with repository identity metadata", () =>
     Effect.gen(function* () {
       const repositoryIdentity = {

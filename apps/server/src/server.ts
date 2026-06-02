@@ -87,6 +87,7 @@ import {
 } from "./serverRuntimeState.ts";
 import {
   orchestrationDispatchRouteLayer,
+  orchestrationEventsRouteLayer,
   orchestrationSnapshotRouteLayer,
 } from "./orchestration/http.ts";
 import * as NetService from "@t3tools/shared/Net";
@@ -310,6 +311,7 @@ export const makeRoutesLayer = Layer.mergeAll(
   authWebSocketTokenRouteLayer,
   attachmentsRouteLayer,
   orchestrationDispatchRouteLayer,
+  orchestrationEventsRouteLayer,
   orchestrationSnapshotRouteLayer,
   otlpTracesProxyRouteLayer,
   projectFaviconRouteLayer,
