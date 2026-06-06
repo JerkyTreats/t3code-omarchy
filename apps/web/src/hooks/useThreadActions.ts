@@ -1,6 +1,5 @@
 import { parseScopedThreadKey, scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime";
 import { type ScopedThreadRef, ThreadId } from "@t3tools/contracts";
-import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
 import { useCallback, useRef } from "react";
 
@@ -8,7 +7,7 @@ import { getFallbackThreadIdAfterDelete } from "../components/Sidebar.logic";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { useNewThreadHandler } from "./useHandleNewThread";
 import { ensureEnvironmentApi, readEnvironmentApi } from "../environmentApi";
-import { invalidateGitQueries } from "../lib/gitReactQuery";
+import { invalidateSourceControlState } from "../lib/sourceControlActions";
 import { refreshArchivedThreadsForEnvironment } from "../lib/archivedThreadsState";
 import { newCommandId } from "../lib/utils";
 import { readLocalApi } from "../localApi";
@@ -19,7 +18,7 @@ import {
   selectThreadsForEnvironment,
   useStore,
 } from "../store";
-import { useTerminalStateStore } from "../terminalStateStore";
+import { useTerminalUiStateStore } from "../terminalUiStateStore";
 import { buildThreadRouteParams, resolveThreadRouteRef } from "../threadRoutes";
 import { formatWorktreePathForDisplay, getOrphanedWorktreePathForThread } from "../worktreeCleanup";
 import { stackedThreadToast, toastManager } from "../components/ui/toast";
@@ -32,7 +31,7 @@ export function useThreadActions() {
   const clearProjectDraftThreadById = useComposerDraftStore(
     (store) => store.clearProjectDraftThreadById,
   );
-  const clearTerminalState = useTerminalStateStore((state) => state.clearTerminalState);
+  const clearTerminalUiState = useTerminalUiStateStore((state) => state.clearTerminalUiState);
   const router = useRouter();
   const { handleNewThread } = useNewThreadHandler();
   // Keep a ref so archiveThread can call handleNewThread without appearing in
@@ -41,7 +40,6 @@ export function useThreadActions() {
   // sidebar row via archiveThread → attemptArchiveThread.
   const handleNewThreadRef = useRef(handleNewThread);
   handleNewThreadRef.current = handleNewThread;
-  const queryClient = useQueryClient();
 
   const resolveThreadTarget = useCallback((target: ScopedThreadRef) => {
     const state = useStore.getState();
@@ -204,7 +202,7 @@ export function useThreadActions() {
           scopeProjectRef(threadRef.environmentId, thread.projectId),
           threadRef,
         );
-        clearTerminalState(threadRef);
+        clearTerminalUiState(threadRef);
       };
       const navigateToFallback = shouldNavigateToFallback
         ? async () => {
@@ -237,7 +235,7 @@ export function useThreadActions() {
                 path: orphanedWorktreePath,
                 force: true,
               });
-              await invalidateGitQueries(queryClient, {
+              await invalidateSourceControlState({
                 environmentId: threadRef.environmentId,
               });
             }
@@ -276,10 +274,9 @@ export function useThreadActions() {
     [
       clearComposerDraftForThread,
       clearProjectDraftThreadById,
-      clearTerminalState,
+      clearTerminalUiState,
       getCurrentRouteThreadRef,
       router,
-      queryClient,
       resolveThreadTarget,
       sidebarThreadSortOrder,
     ],

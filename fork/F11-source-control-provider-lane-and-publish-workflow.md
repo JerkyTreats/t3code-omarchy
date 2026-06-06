@@ -24,15 +24,19 @@ Source control support exposes GitHub, GitLab, Azure DevOps, and Bitbucket throu
 - `packages/contracts/src/rpc.ts`
 - `packages/contracts/src/ipc.ts`
 - `apps/server/src/sourceControl`
-- `apps/server/src/git/Layers/GitCore.ts`
-- `apps/server/src/git/Layers/GitHubCli.ts`
-- `apps/server/src/git/Layers/GitManager.ts`
+- `apps/server/src/fork/sourceControlContextPolicy.ts`
+- `apps/server/src/git/GitManager.ts`
+- `apps/server/src/vcs/GitVcsDriverCore.ts`
 - `apps/server/src/server.ts`
 - `apps/server/src/ws.ts`
-- `apps/web/src/lib/sourceControlReactQuery.ts`
-- `apps/web/src/wsRpcClient.ts`
-- `apps/web/src/wsNativeApi.ts`
-- `apps/web/src/forkNativeApiAdapter.ts`
+- `packages/client-runtime/src/sourceControlDiscoveryState.ts`
+- `packages/client-runtime/src/vcsActionState.ts`
+- `packages/client-runtime/src/wsRpcClient.ts`
+- `apps/web/src/environmentApi.ts`
+- `apps/web/src/lib/sourceControlActions.ts`
+- `apps/web/src/lib/sourceControlDiscoveryState.ts`
+- `apps/web/src/lib/vcsStatusState.ts`
+- `apps/web/src/lib/vcsRefState.ts`
 - `apps/web/src/components/Sidebar.tsx`
 - `apps/web/src/components/GitActionsControl.tsx`
 - `apps/web/src/sourceControlPresentation.ts`
@@ -61,7 +65,7 @@ Source control support exposes GitHub, GitLab, Azure DevOps, and Bitbucket throu
 
 ## Verification
 
-- Source control provider registry, repository service, provider CLI and API, GitCore, GitManager, server, and web native and RPC tests pass.
+- Source control provider registry, repository service, provider CLI and API, GitManager, VCS driver, server, and web runtime tests pass.
 - Publishing with commits pushes to the remote returned by `ensureRemote`.
 - Publishing an empty repository returns `remote_added`.
 - Sidebar clone by provider and raw Git URL both create projects at the cloned cwd.

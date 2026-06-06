@@ -20,8 +20,11 @@ The composer owns its local draft state and preserves rich draft behavior under 
 - `apps/web/src/fork/composerScreenshot.ts`
 - `apps/web/src/fork/composerRichDraft.ts`
 - `apps/web/src/components/chat/ChatComposer.tsx`
+- `apps/web/src/components/chat/ComposerTopActions.tsx`
 - `apps/web/src/components/chat/ComposerRichDraftToolbar.tsx`
 - `apps/web/src/composerDraftStore.ts`
+- `apps/web/src/lib/composerPathSearchState.ts`
+- `packages/client-runtime/src/composerPathSearchState.ts`
 
 ## Fork Seams
 
@@ -40,6 +43,7 @@ The composer owns its local draft state and preserves rich draft behavior under 
 ## Upstream Replay Rule
 
 - Replay upstream composer improvements into the fork layout and ownership model.
+- Accept upstream client-runtime path search primitives when they preserve active draft ownership.
 - Override upstream composer simplifications that remove fork specific draft affordances or move ownership away from the active draft.
 
 ## Verification

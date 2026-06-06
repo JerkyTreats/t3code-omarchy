@@ -23,6 +23,7 @@ Screenshot capture and attach flows are tuned for Omarchy tooling and Linux desk
 - `apps/desktop/src/ipc/channels.ts`
 - `apps/desktop/src/ipc/methods/window.ts`
 - `apps/web/src/fork/composerScreenshot.ts`
+- `apps/web/src/components/chat/ComposerTopActions.tsx`
 - `apps/web/src/components/chat/ChatComposer.tsx`
 
 ## Fork Seams

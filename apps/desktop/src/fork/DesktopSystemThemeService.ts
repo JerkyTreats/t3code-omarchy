@@ -16,7 +16,7 @@ export interface DesktopSystemThemeServiceShape {
 export class DesktopSystemThemeService extends Context.Service<
   DesktopSystemThemeService,
   DesktopSystemThemeServiceShape
->()("t3/desktop/fork/SystemThemeService") {}
+>()("@t3tools/desktop/fork/DesktopSystemThemeService") {}
 
 export const layer = Layer.succeed(
   DesktopSystemThemeService,

@@ -24,6 +24,7 @@ Use it together with [Upstream Merge Policy](governance/upstream_merge_policy.md
 - Update this file in the same change whenever fork owned behavior changes.
 - Keep each feature spec current for intent, owner modules, fork seams, required behavior, replay notes, and verification.
 - Classify upstream behavior against the relevant feature spec as `accept`, `replay`, or `override`.
+- Use the pnpm verification gate: `pnpm fmt`, `pnpm lint`, `pnpm typecheck`, and `pnpm test`.
 - If code and this file drift, fix the drift before merge.
 - Treat this file as a current state guide, not a release log.
 

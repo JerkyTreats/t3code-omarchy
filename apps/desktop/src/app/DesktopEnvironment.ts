@@ -84,7 +84,7 @@ export interface DesktopEnvironmentShape {
 export class DesktopEnvironment extends Context.Service<
   DesktopEnvironment,
   DesktopEnvironmentShape
->()("t3/desktop/Environment") {}
+>()("@t3tools/desktop/app/DesktopEnvironment") {}
 
 function resolveDesktopAppStageLabel(input: {
   readonly isDevelopment: boolean;

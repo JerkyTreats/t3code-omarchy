@@ -8,6 +8,7 @@ vi.mock("../environmentApi", () => ({
 vi.mock("../environments/runtime", () => ({
   readEnvironmentConnection: vi.fn(),
   requireEnvironmentConnection: vi.fn(),
+  subscribeEnvironmentConnections: vi.fn(() => () => undefined),
 }));
 
 vi.mock("../wsRpcClient", () => ({

@@ -1,5 +1,8 @@
-import { EnvironmentId } from "@t3tools/contracts";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { EnvironmentAuthInvalidError, EnvironmentId } from "@t3tools/contracts";
+import * as Schema from "effect/Schema";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+
+const decodeEnvironmentAuthInvalidError = Schema.decodeUnknownSync(EnvironmentAuthInvalidError);
 
 let mockSavedRecords: Array<Record<string, unknown>> = [];
 
@@ -7,8 +10,8 @@ const mockResolveRemotePairingTarget = vi.fn();
 const mockFetchRemoteEnvironmentDescriptor = vi.fn();
 const mockBootstrapRemoteBearerSession = vi.fn();
 const mockFetchRemoteSessionState = vi.fn();
-const mockIsRemoteEnvironmentAuthHttpError = vi.fn((_: unknown) => false);
 const mockResolveRemoteWebSocketConnectionUrl = vi.fn();
+const mockRemoteHttpRunPromise = vi.fn((effect: Promise<unknown>) => effect);
 const mockBootstrapSshBearerSession = vi.fn();
 const mockFetchSshSessionState = vi.fn();
 const mockPersistSavedEnvironmentRecord = vi.fn();
@@ -56,16 +59,15 @@ const mockClientGetConfig = vi.fn(async () => ({
   },
 }));
 
-vi.mock("../remote/target", () => ({
+vi.mock("@t3tools/shared/remote", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@t3tools/shared/remote")>()),
   resolveRemotePairingTarget: mockResolveRemotePairingTarget,
 }));
 
-vi.mock("../remote/api", () => ({
-  bootstrapRemoteBearerSession: mockBootstrapRemoteBearerSession,
-  fetchRemoteEnvironmentDescriptor: mockFetchRemoteEnvironmentDescriptor,
-  fetchRemoteSessionState: mockFetchRemoteSessionState,
-  isRemoteEnvironmentAuthHttpError: mockIsRemoteEnvironmentAuthHttpError,
-  resolveRemoteWebSocketConnectionUrl: mockResolveRemoteWebSocketConnectionUrl,
+vi.mock("../../lib/runtime", () => ({
+  remoteHttpRuntime: {
+    runPromise: mockRemoteHttpRunPromise,
+  },
 }));
 
 vi.mock("~/localApi", () => ({
@@ -105,20 +107,32 @@ vi.mock("./catalog", () => ({
   writeSavedEnvironmentBearerToken: mockWriteSavedEnvironmentBearerToken,
 }));
 
-vi.mock("./connection", () => ({
+vi.mock("./connection", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./connection")>()),
   createEnvironmentConnection: mockCreateEnvironmentConnection,
 }));
 
-vi.mock("../../rpc/wsRpcClient", () => ({
-  createWsRpcClient: vi.fn(() => ({
-    server: {
-      getConfig: mockClientGetConfig,
-    },
-    orchestration: {
-      subscribeThread: vi.fn(() => () => {}),
-    },
-  })),
-}));
+vi.mock("@t3tools/client-runtime", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@t3tools/client-runtime")>();
+  return {
+    ...actual,
+    bootstrapRemoteBearerSession: mockBootstrapRemoteBearerSession,
+    createWsRpcClient: vi.fn(() => ({
+      server: {
+        getConfig: mockClientGetConfig,
+      },
+      terminal: {
+        onMetadata: vi.fn(() => () => undefined),
+      },
+      orchestration: {
+        subscribeThread: vi.fn(() => () => {}),
+      },
+    })),
+    fetchRemoteEnvironmentDescriptor: mockFetchRemoteEnvironmentDescriptor,
+    fetchRemoteSessionState: mockFetchRemoteSessionState,
+    resolveRemoteWebSocketConnectionUrl: mockResolveRemoteWebSocketConnectionUrl,
+  };
+});
 
 vi.mock("../../rpc/wsTransport", () => ({
   WsTransport: vi.fn(),
@@ -140,7 +154,7 @@ describe("addSavedEnvironment", () => {
         fetchSshEnvironmentDescriptor: mockFetchSshEnvironmentDescriptor,
         bootstrapSshBearerSession: mockBootstrapSshBearerSession,
         fetchSshSessionState: mockFetchSshSessionState,
-        issueSshWebSocketToken: vi.fn(),
+        issueSshWebSocketTicket: vi.fn(),
       },
     });
     mockResolveRemotePairingTarget.mockImplementation(
@@ -163,24 +177,23 @@ describe("addSavedEnvironment", () => {
       label: "Remote environment",
     });
     mockBootstrapRemoteBearerSession.mockResolvedValue({
-      sessionToken: "bearer-token",
-      role: "owner",
+      access_token: "bearer-token",
+      scope: "orchestration:read orchestration:operate terminal:operate review:write relay:read",
     });
     mockFetchRemoteSessionState.mockResolvedValue({
       authenticated: true,
-      role: "owner",
+      scopes: ["orchestration:read", "access:write"],
     });
-    mockIsRemoteEnvironmentAuthHttpError.mockReturnValue(false);
     mockResolveRemoteWebSocketConnectionUrl.mockResolvedValue(
-      "wss://remote.example.com/?wsToken=remote-token",
+      "wss://remote.example.com/?wsTicket=remote-token",
     );
     mockFetchSshEnvironmentDescriptor.mockResolvedValue({
       environmentId: EnvironmentId.make("environment-1"),
       label: "Remote environment",
     });
     mockBootstrapSshBearerSession.mockResolvedValue({
-      sessionToken: "ssh-bearer-token",
-      role: "owner",
+      access_token: "ssh-bearer-token",
+      scope: "orchestration:read orchestration:operate terminal:operate review:write relay:read",
     });
     mockPersistSavedEnvironmentRecord.mockResolvedValue(undefined);
     mockWriteSavedEnvironmentBearerToken.mockResolvedValue(false);
@@ -189,7 +202,7 @@ describe("addSavedEnvironment", () => {
     mockRemoveSavedEnvironmentBearerToken.mockResolvedValue(undefined);
     mockFetchSshSessionState.mockResolvedValue({
       authenticated: true,
-      role: "owner",
+      scopes: ["orchestration:read", "access:write"],
     });
     mockCreateEnvironmentConnection.mockImplementation(
       (input: { knownEnvironment: { environmentId: EnvironmentId }; client: unknown }) => ({
@@ -368,18 +381,18 @@ describe("addSavedEnvironment", () => {
     mockWriteSavedEnvironmentBearerToken.mockResolvedValue(true);
     mockBootstrapSshBearerSession
       .mockResolvedValueOnce({
-        sessionToken: "ssh-bearer-token",
-        role: "owner",
+        access_token: "ssh-bearer-token",
+        scope: "orchestration:read orchestration:operate terminal:operate review:write relay:read",
       })
       .mockResolvedValueOnce({
-        sessionToken: "ssh-bearer-token-2",
-        role: "owner",
+        access_token: "ssh-bearer-token-2",
+        scope: "orchestration:read orchestration:operate terminal:operate review:write relay:read",
       });
     mockFetchSshSessionState
       .mockRejectedValueOnce(new Error("[ssh_http:401] Unauthorized"))
       .mockResolvedValueOnce({
         authenticated: true,
-        role: "owner",
+        scopes: ["orchestration:read", "access:write"],
       });
 
     const { connectDesktopSshEnvironment, resetEnvironmentServiceForTests } =
@@ -405,14 +418,13 @@ describe("addSavedEnvironment", () => {
 
   it("does not attempt desktop ssh bearer recovery for non-ssh saved environments", async () => {
     mockWriteSavedEnvironmentBearerToken.mockResolvedValue(true);
-    const authError = {
-      status: 401,
-      message: "Unauthorized",
-    };
+    const authError = decodeEnvironmentAuthInvalidError({
+      _tag: "EnvironmentAuthInvalidError",
+      code: "auth_invalid",
+      reason: "invalid_credential",
+      traceId: "trace-auth-test",
+    });
     mockFetchRemoteSessionState.mockRejectedValueOnce(authError);
-    mockIsRemoteEnvironmentAuthHttpError.mockImplementation(
-      (error: unknown) => error === authError,
-    );
 
     const { addSavedEnvironment, resetEnvironmentServiceForTests } = await import("./service");
 
@@ -437,18 +449,18 @@ describe("addSavedEnvironment", () => {
     mockWriteSavedEnvironmentBearerToken.mockResolvedValue(true);
     mockBootstrapSshBearerSession
       .mockResolvedValueOnce({
-        sessionToken: "ssh-bearer-token",
-        role: "owner",
+        access_token: "ssh-bearer-token",
+        scope: "orchestration:read orchestration:operate terminal:operate review:write relay:read",
       })
       .mockResolvedValueOnce({
-        sessionToken: "ssh-bearer-token-2",
-        role: "owner",
+        access_token: "ssh-bearer-token-2",
+        scope: "orchestration:read orchestration:operate terminal:operate review:write relay:read",
       });
     mockFetchSshSessionState
       .mockRejectedValueOnce(new Error("[ssh_http:401] Unauthorized"))
       .mockResolvedValueOnce({
         authenticated: true,
-        role: "owner",
+        scopes: ["orchestration:read", "access:write"],
       });
 
     const createdConnections: Array<{
@@ -501,7 +513,11 @@ describe("addSavedEnvironment", () => {
       knownEnvironment: {
         environmentId: EnvironmentId.make("environment-1"),
       },
-      client: {},
+      client: {
+        terminal: {
+          onMetadata: vi.fn(() => () => undefined),
+        },
+      },
       ensureBootstrapped: async () => undefined,
       reconnect: vi.fn(async () => {
         throw new Error("socket closed");
@@ -728,7 +744,7 @@ describe("addSavedEnvironment", () => {
     );
     let resolveSessionState!: (value: {
       readonly authenticated: true;
-      readonly role: "owner";
+      readonly scopes: ReadonlyArray<"orchestration:read" | "access:write">;
     }) => void;
     mockFetchRemoteSessionState.mockReturnValue(
       new Promise((resolve) => {
@@ -751,7 +767,7 @@ describe("addSavedEnvironment", () => {
     await disconnectSavedEnvironment(EnvironmentId.make("environment-1"));
     resolveSessionState({
       authenticated: true,
-      role: "owner",
+      scopes: ["orchestration:read", "access:write"],
     });
     await expect(reconnectPromise).resolves.toBeUndefined();
 

@@ -19,7 +19,9 @@ Local Git workflow semantics favor fork safety and explicit promotion behavior o
 
 ## Owner Modules
 
-- `apps/server/src/git/Layers/GitManager.ts`
+- `apps/server/src/git/GitManager.ts`
+- `apps/server/src/vcs/GitVcsDriverCore.ts`
+- `apps/web/src/lib/sourceControlActions.ts`
 - `apps/web/src/components/GitActionsControl.tsx`
 
 ## Fork Seams

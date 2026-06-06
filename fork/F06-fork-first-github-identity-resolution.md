@@ -15,8 +15,10 @@ GitHub context resolves to the fork remote first so repo, issue, and panel actio
 
 ## Owner Modules
 
-- `apps/server/src/git/Layers/GitHubCli.ts`
-- `apps/server/src/git/Layers/GitManager.ts`
+- `apps/server/src/sourceControl/GitHubCli.ts`
+- `apps/server/src/sourceControl/SourceControlProviderRegistry.ts`
+- `apps/server/src/fork/sourceControlContextPolicy.ts`
+- `apps/server/src/git/GitManager.ts`
 
 ## Fork Seams
 

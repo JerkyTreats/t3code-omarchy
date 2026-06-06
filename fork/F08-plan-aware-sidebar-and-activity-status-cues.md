@@ -22,6 +22,8 @@ Thread and sidebar status cues reflect plan state directly instead of collapsing
 - `apps/web/src/components/Sidebar.tsx`
 - `apps/web/src/components/PlanSidebar.tsx`
 - `apps/web/src/components/ChatView.tsx`
+- `apps/web/src/session-logic.ts`
+- `packages/client-runtime/src/threadDetailState.ts`
 
 ## Fork Seams
 

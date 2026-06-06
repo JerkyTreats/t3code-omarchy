@@ -240,7 +240,7 @@ A base rebuild is not ready to replace fork `main` until:
 - no protected behavior is implemented by wholesale preservation of stale fork internals
 - `patch.md` reflects the new fork seam owner modules
 - active drafts, screenshots, attachments, local Git context, sidebar cues, panel workflows, and Omarchy desktop flows have been verified
-- `bun fmt`, `bun lint`, and `bun typecheck` pass
+- `pnpm fmt`, `pnpm lint`, `pnpm typecheck`, and `pnpm test` pass
 - focused automated tests for affected web, server, desktop, contracts, and shared packages pass
 
 ## Commit Discipline

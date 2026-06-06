@@ -78,7 +78,7 @@ import {
   selectThreadsForEnvironment,
   useStore,
 } from "~/store";
-import { useTerminalStateStore } from "~/terminalStateStore";
+import { useTerminalUiStateStore } from "~/terminalUiStateStore";
 import { useGitStatus } from "~/lib/gitStatusState";
 import { GitHubAuthSection } from "./GitHubAuthSection";
 import { GitHubCreateIssueDialog } from "./GitHubCreateIssueDialog";
@@ -185,7 +185,7 @@ function GitPanelContent({
   const clearProjectDraftThreadById = useComposerDraftStore(
     (store) => store.clearProjectDraftThreadById,
   );
-  const clearTerminalState = useTerminalStateStore((store) => store.clearTerminalState);
+  const clearTerminalUiState = useTerminalUiStateStore((store) => store.clearTerminalUiState);
   const activeServerThread = useMemo(
     () =>
       activeThreadId ? (threads.find((thread) => thread.id === activeThreadId) ?? null) : null,
@@ -276,9 +276,9 @@ function GitPanelContent({
 
   const clearTerminalStateForThreadId = useCallback(
     (threadId: ThreadId) => {
-      clearTerminalState(scopeThreadRef(environmentId, threadId));
+      clearTerminalUiState(scopeThreadRef(environmentId, threadId));
     },
-    [clearTerminalState, environmentId],
+    [clearTerminalUiState, environmentId],
   );
 
   const clearComposerDraftForThreadId = useCallback(

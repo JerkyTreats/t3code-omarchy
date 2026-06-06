@@ -9,6 +9,7 @@ import { toastManager } from "~/components/ui/toast";
 import { buildTemporaryWorktreeBranchName } from "@t3tools/shared/git";
 import { ensureEnvironmentApi } from "~/environmentApi";
 import { ensureLocalApi } from "~/localApi";
+import { randomHex } from "~/lib/utils";
 import { discardDedicatedWorktree, releaseDedicatedWorktree } from "~/worktreeLifecycle";
 import { formatWorktreePathForDisplay } from "~/worktreeCleanup";
 import { buildPrimaryWorkspaceResolutionPrompt } from "./GitPanel.logic";
@@ -75,7 +76,7 @@ export function useGitPanelWorkspaceActions({
       const result = await createWorktree({
         cwd: repoCwd,
         refName: activeWorkspaceBranch,
-        newRefName: buildTemporaryWorktreeBranchName(),
+        newRefName: buildTemporaryWorktreeBranchName(randomHex),
         path: null,
       });
       await focusDraftThread(result.worktree.refName, result.worktree.path);

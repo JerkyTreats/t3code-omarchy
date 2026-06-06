@@ -42,6 +42,10 @@ Project level management gives each concrete project a first class workspace pag
 - `apps/web/src/components/ProjectScriptsControl.tsx`
 - `apps/web/src/components/git-panel/GitPanel.tsx`
 - `apps/web/src/components/git-panel/GitPanelRouteAdapter.tsx`
+- `apps/web/src/lib/projectReactQuery.ts`
+- `apps/web/src/lib/gitStatusState.ts`
+- `packages/client-runtime/src/vcsStatusState.ts`
+- `packages/client-runtime/src/projectPaths.ts`
 - `apps/web/src/components/Sidebar.tsx`
 - `apps/web/src/components/CommandPalette.tsx`
 - `apps/web/src/hooks/useHandleNewThread.ts`

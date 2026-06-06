@@ -15,6 +15,7 @@ import {
 import { ensureEnvironmentApi } from "../environmentApi";
 import { requireEnvironmentConnection } from "../environments/runtime";
 import { refreshGitStatus } from "./gitStatusState";
+import { randomUUID } from "./utils";
 
 const GIT_BRANCHES_STALE_TIME_MS = 15_000;
 const GIT_BRANCHES_REFETCH_INTERVAL_MS = 60_000;
@@ -229,7 +230,7 @@ export function gitRunStackedActionMutationOptions(input: {
       return requireEnvironmentConnection(input.environmentId).client.git.runStackedAction(
         {
           action,
-          actionId: actionId ?? crypto.randomUUID(),
+          actionId: actionId ?? randomUUID(),
           cwd: input.cwd,
           ...(commitMessage ? { commitMessage } : {}),
           ...(featureBranch ? { featureBranch: true } : {}),

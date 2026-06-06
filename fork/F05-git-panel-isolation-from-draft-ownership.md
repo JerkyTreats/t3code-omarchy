@@ -19,13 +19,20 @@ Git panel flows must not take ownership of the active composer draft or silently
 
 - `apps/web/src/components/GitActionsControl.tsx`
 - `apps/web/src/components/GitActionsControl.logic.ts`
+- `apps/web/src/components/git-panel/GitPanel.tsx`
+- `apps/web/src/lib/vcsStatusState.ts`
+- `apps/web/src/lib/vcsRefState.ts`
+- `apps/web/src/lib/gitStatusState.ts`
 - `apps/web/src/composerDraftStore.ts`
 - `apps/web/src/components/ChatView.browser.tsx`
 - `apps/web/src/lib/threadDeletionWorkflow.ts`
+- `packages/client-runtime/src/vcsStatusState.ts`
+- `packages/client-runtime/src/vcsRefState.ts`
 
 ## Fork Seams
 
 - Git action logic
+- VCS runtime state adapters
 - composer draft store
 - thread deletion workflow
 - worktree lifecycle helpers

@@ -3,6 +3,7 @@ import { DesktopSshPasswordPromptResolutionInputSchema } from "@t3tools/contract
 import { PRODUCT_BASE_NAME } from "@t3tools/shared/productIdentity";
 import type { SshPasswordRequest } from "@t3tools/ssh/auth";
 import * as Context from "effect/Context";
+import * as Crypto from "effect/Crypto";
 import * as Data from "effect/Data";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
@@ -10,7 +11,6 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import * as Random from "effect/Random";
 import * as Ref from "effect/Ref";
 
 import * as IpcChannels from "../ipc/channels.ts";
@@ -130,7 +130,7 @@ export interface DesktopSshPasswordPromptsShape {
 export class DesktopSshPasswordPrompts extends Context.Service<
   DesktopSshPasswordPrompts,
   DesktopSshPasswordPromptsShape
->()("t3/desktop/SshPasswordPrompts") {}
+>()("@t3tools/desktop/ssh/DesktopSshPasswordPrompts") {}
 
 interface PendingSshPasswordPrompt {
   readonly requestId: string;
@@ -164,6 +164,7 @@ const failPending = (
 
 const make = Effect.fn("desktop.sshPasswordPrompts.make")(function* (options: LayerOptions = {}) {
   const electronWindow = yield* ElectronWindow.ElectronWindow;
+  const crypto = yield* Crypto.Crypto;
   const pendingRef = yield* Ref.make(new Map<string, PendingSshPasswordPrompt>());
   const passwordPromptTimeoutMs =
     options.passwordPromptTimeoutMs ?? DEFAULT_SSH_PASSWORD_PROMPT_TIMEOUT_MS;
@@ -231,7 +232,11 @@ const make = Effect.fn("desktop.sshPasswordPrompts.make")(function* (options: La
       });
     }
 
-    const requestId = yield* Random.nextUUIDv4;
+    const requestId = yield* crypto.randomUUIDv4.pipe(
+      Effect.mapError(
+        () => new DesktopSshPromptUnavailableError({ reason: "Secure randomness is unavailable." }),
+      ),
+    );
     const now = yield* DateTime.now;
     const expiresAt = DateTime.formatIso(
       DateTime.add(now, { milliseconds: passwordPromptTimeoutMs }),

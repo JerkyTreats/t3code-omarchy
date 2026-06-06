@@ -9,7 +9,7 @@ Auth access management is exposed through the fork native API and Connections se
 
 ## Required Behavior
 
-- The server exposes auth access snapshot, pairing link creation, pairing link revocation, client session revocation, and other-client session revocation through additive WebSocket RPC methods.
+- The server exposes auth access snapshot through WebSocket stream methods and exposes pairing link creation, pairing link revocation, client session revocation, and other-client session revocation through Environment HttpApi methods.
 - RPC errors use the shared auth access error contract instead of leaking server-only auth service errors.
 - NativeApi exposes the auth access surface through the RPC-backed adapter.
 - Native API capability detection reports access management availability and disables controls when the active transport cannot support it.
@@ -20,20 +20,23 @@ Auth access management is exposed through the fork native API and Connections se
 ## Owner Modules
 
 - `packages/contracts/src/auth.ts`
+- `packages/contracts/src/environmentHttp.ts`
 - `packages/contracts/src/rpc.ts`
 - `packages/contracts/src/ipc.ts`
+- `apps/server/src/auth/http.ts`
 - `apps/server/src/ws.ts`
-- `apps/web/src/wsRpcClient.ts`
-- `apps/web/src/wsNativeApi.ts`
-- `apps/web/src/forkNativeApiAdapter.ts`
+- `packages/client-runtime/src/wsRpcClient.ts`
+- `apps/web/src/environmentApi.ts`
+- `apps/web/src/environments/primary/httpClient.ts`
 - `apps/web/src/components/settings/ConnectionsSettings.tsx`
 - `apps/web/src/environments`
 
 ## Fork Seams
 
 - auth access contracts
-- WebSocket RPC auth access methods
-- native API adapter
+- Environment HttpApi auth access methods
+- WebSocket auth access stream methods
+- web EnvironmentApi adapter
 - Connections settings access management UI
 - saved environment connection flows
 
