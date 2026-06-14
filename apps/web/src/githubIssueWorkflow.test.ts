@@ -1,6 +1,6 @@
 import type { VcsStatusResult } from "@t3tools/contracts";
 import { EnvironmentId, ProjectId, ProviderInstanceId, ThreadId } from "@t3tools/contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@effect/vitest";
 
 import { resolveGitHubIssueWorkflowState } from "./githubIssueWorkflow";
 import type { Thread } from "./types";

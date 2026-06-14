@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@effect/vitest";
 import {
   FORK_FEATURE_CONTRACTS,
   FORK_FEATURE_IDS,

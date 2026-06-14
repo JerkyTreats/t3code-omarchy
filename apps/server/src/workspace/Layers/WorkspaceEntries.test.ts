@@ -1,7 +1,8 @@
 // @effect-diagnostics nodeBuiltinImport:off
 import fsPromises from "node:fs/promises";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { it, afterEach, describe, expect, vi } from "@effect/vitest";
+import { it, afterEach, describe, expect } from "@effect/vitest";
+import { vi } from "vitest";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
@@ -390,6 +391,21 @@ it.layer(TestLayer)("WorkspaceEntriesLive", (it) => {
           .pipe(Effect.flip);
 
         expect(error.detail).toBe("Relative filesystem browse paths require a current project.");
+      }),
+    );
+
+    it.effect("returns an empty listing when the OS denies directory access", () =>
+      Effect.gen(function* () {
+        const workspaceEntries = yield* WorkspaceEntries;
+        const cwd = yield* makeTempDir({ prefix: "t3code-workspace-browse-eacces-" });
+
+        const denied = Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" });
+        vi.spyOn(fsPromises, "readdir").mockRejectedValueOnce(denied);
+
+        const result = yield* workspaceEntries.browse({
+          partialPath: appendSeparator(cwd),
+        });
+        expect(result).toEqual({ parentPath: cwd, entries: [] });
       }),
     );
   });

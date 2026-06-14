@@ -204,9 +204,11 @@ const makeDesktopEnvironment = Effect.fn("desktop.environment.make")(function* (
     otlpExportIntervalMs: config.otlpExportIntervalMs,
     branding,
     displayName,
-    appUserModelId: isDevelopment
-      ? PRODUCT_TECHNICAL_IDENTITY.developmentAppId
-      : PRODUCT_TECHNICAL_IDENTITY.appId,
+    appUserModelId: Option.getOrElse(config.appUserModelIdOverride, () =>
+      isDevelopment
+        ? PRODUCT_TECHNICAL_IDENTITY.developmentAppId
+        : PRODUCT_TECHNICAL_IDENTITY.appId,
+    ),
     linuxDesktopEntryName: isDevelopment
       ? PRODUCT_TECHNICAL_IDENTITY.developmentLinuxDesktopEntryName
       : PRODUCT_TECHNICAL_IDENTITY.linuxDesktopEntryName,

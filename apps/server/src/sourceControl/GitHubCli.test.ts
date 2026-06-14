@@ -1,4 +1,5 @@
-import { assert, it, afterEach, describe, expect, vi } from "@effect/vitest";
+import { assert, it, afterEach, describe, expect } from "@effect/vitest";
+import { vi } from "vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { ChildProcessSpawner } from "effect/unstable/process";

@@ -1,7 +1,8 @@
 import type { EnvironmentApi } from "@t3tools/contracts";
 import { EnvironmentId } from "@t3tools/contracts";
 import { QueryClient } from "@tanstack/react-query";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "@effect/vitest";
+import { vi } from "vitest";
 
 vi.mock("../environmentApi", () => ({
   ensureEnvironmentApi: vi.fn(),

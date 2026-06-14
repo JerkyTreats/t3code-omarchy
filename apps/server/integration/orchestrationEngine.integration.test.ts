@@ -49,6 +49,7 @@ const APPROVAL_REQUEST_ID = asApprovalRequestId("req-approval-1");
 type IntegrationProvider = ProviderDriverKind;
 const CODEX_PROVIDER = ProviderDriverKind.make("codex");
 const CLAUDE_AGENT_PROVIDER = ProviderDriverKind.make("claudeAgent");
+const RUN_REAL_CODEX_INTEGRATION = process.env.T3CODE_RUN_REAL_CODEX_INTEGRATION_TESTS === "1";
 
 function nowIso() {
   return "2026-05-01T00:00:00.000Z";
@@ -266,7 +267,7 @@ it.live("runs a single turn end-to-end and persists checkpoint state in sqlite +
   ),
 );
 
-it.live.skipIf(!process.env.CODEX_BINARY_PATH)(
+it.live.skipIf(!process.env.CODEX_BINARY_PATH || !RUN_REAL_CODEX_INTEGRATION)(
   "keeps the same Codex provider thread across runtime mode switches",
   () =>
     withRealCodexHarness((harness) =>
@@ -359,6 +360,7 @@ it.live.skipIf(!process.env.CODEX_BINARY_PATH)(
         assert.equal(secondThread.session?.threadId, "thread-1");
       }),
     ),
+  420_000,
 );
 
 it.live("runs multi-turn file edits and persists checkpoint diffs", () =>

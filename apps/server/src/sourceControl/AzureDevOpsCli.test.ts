@@ -1,5 +1,6 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { assert, it, afterEach, describe, expect, vi } from "@effect/vitest";
+import { assert, it, afterEach, describe, expect } from "@effect/vitest";
+import { vi } from "vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -64,6 +65,7 @@ describe("AzureDevOpsCli.layer", () => {
 
       assert.strictEqual(result.number, 42);
       assert.strictEqual(result.title, "Add Azure provider");
+      assert.strictEqual(result.url, "https://dev.azure.com/acme/project/_git/repo/pullrequest/42");
       assert.strictEqual(result.baseRefName, "main");
       assert.strictEqual(result.headRefName, "feature/source-control");
       assert.strictEqual(result.state, "open");
@@ -86,6 +88,43 @@ describe("AzureDevOpsCli.layer", () => {
         cwd: "/repo",
         timeoutMs: 30_000,
       });
+    }).pipe(Effect.provide(layer)),
+  );
+
+  it.effect("builds a web URL when Azure returns only the pull request REST URL", () =>
+    Effect.gen(function* () {
+      mockRun.mockReturnValueOnce(
+        Effect.succeed(
+          processOutput(
+            // @effect-diagnostics-next-line preferSchemaOverJson:off
+            JSON.stringify({
+              pullRequestId: 863,
+              title: "Fix Azure link",
+              url: "https://dev.azure.com/saplyai/a8fe4088-ad76-4eda-aaaa-e3329713a097/_apis/git/repositories/16108a25-93a3-4eff-b77d-85e894ee0fe4/pullRequests/863",
+              repository: {
+                name: "CV-engine",
+                project: {
+                  name: "CV-engine",
+                },
+              },
+              sourceRefName: "refs/heads/feature/azure-pr-link",
+              targetRefName: "refs/heads/main",
+              status: "active",
+            }),
+          ),
+        ),
+      );
+
+      const az = yield* AzureDevOpsCli.AzureDevOpsCli;
+      const result = yield* az.getPullRequest({
+        cwd: "/repo",
+        reference: "863",
+      });
+
+      assert.strictEqual(
+        result.url,
+        "https://dev.azure.com/saplyai/CV-engine/_git/CV-engine/pullrequest/863",
+      );
     }).pipe(Effect.provide(layer)),
   );
 

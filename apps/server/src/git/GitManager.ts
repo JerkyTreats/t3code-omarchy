@@ -732,7 +732,7 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
 
   const tempDir = process.env.TMPDIR ?? process.env.TEMP ?? process.env.TMP ?? "/tmp";
   const canonicalizeExistingPath = (value: string) =>
-    fileSystem.realPath(value).pipe(Effect.catch(() => Effect.succeed(value)));
+    fileSystem.realPath(value).pipe(Effect.orElseSucceed(() => value));
   const normalizeStatusCacheKey = canonicalizeExistingPath;
   const nonRepositoryStatusDetails = {
     isRepo: false,
@@ -797,7 +797,7 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
               if (details.isDefaultBranch && latest.state !== "open") return null;
               return toStatusPr(latest);
             }),
-            Effect.catch(() => Effect.succeed(null)),
+            Effect.orElseSucceed(() => null),
           )
         : null;
 
@@ -820,7 +820,7 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
     );
 
   const readConfigValueNullable = (cwd: string, key: string) =>
-    gitCore.readConfigValue(cwd, key).pipe(Effect.catch(() => Effect.succeed(null)));
+    gitCore.readConfigValue(cwd, key).pipe(Effect.orElseSucceed(() => null));
 
   const resolveHostingProvider = Effect.fn("resolveHostingProvider")(function* (
     cwd: string,
@@ -1007,7 +1007,7 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
   ) {
     const terms = yield* sourceControlProvider(cwd).pipe(
       Effect.map((provider) => getChangeRequestTerminologyForKind(provider.kind)),
-      Effect.catch(() => Effect.succeed(getChangeRequestTerminologyForKind("unknown"))),
+      Effect.orElseSucceed(() => getChangeRequestTerminologyForKind("unknown")),
     );
     const summary = summarizeGitActionResult(result, terms);
     let latestOpenPr: PullRequestInfo | null = null;
@@ -1051,7 +1051,7 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
         upstreamRef: finalBranchContext.upstreamRef,
       }).pipe(
         Effect.flatMap((headContext) => findOpenPr(cwd, headContext)),
-        Effect.catch(() => Effect.succeed(null)),
+        Effect.orElseSucceed(() => null),
       );
     }
 
@@ -1115,7 +1115,7 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
 
     const defaultFromProvider = yield* sourceControlProvider(cwd).pipe(
       Effect.flatMap((provider) => provider.getDefaultBranch({ cwd })),
-      Effect.catch(() => Effect.succeed(null)),
+      Effect.orElseSucceed(() => null),
     );
     if (defaultFromProvider) {
       return defaultFromProvider;
@@ -1975,7 +1975,7 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
         const changeRequestTerms = wantsPr
           ? yield* sourceControlProvider(input.cwd).pipe(
               Effect.map((provider) => getChangeRequestTerminologyForKind(provider.kind)),
-              Effect.catch(() => Effect.succeed(getChangeRequestTerminologyForKind("unknown"))),
+              Effect.orElseSucceed(() => getChangeRequestTerminologyForKind("unknown")),
             )
           : null;
 

@@ -20,7 +20,8 @@ import {
 } from "@t3tools/contracts";
 import { createModelSelection } from "@t3tools/shared/model";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { it, vi } from "@effect/vitest";
+import { it } from "@effect/vitest";
+import { vi } from "vitest";
 
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";

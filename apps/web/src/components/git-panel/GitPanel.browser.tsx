@@ -9,7 +9,8 @@ import {
   type OrchestrationReadModel,
 } from "@t3tools/contracts";
 import { page } from "vitest/browser";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "@effect/vitest";
+import { vi } from "vitest";
 import { render } from "vitest-browser-react";
 
 const ENVIRONMENT_ID = EnvironmentId.make("environment-git-panel-browser");

@@ -20,7 +20,8 @@ import {
   TurnId,
 } from "@t3tools/contracts";
 import { createModelSelection } from "@t3tools/shared/model";
-import { it, assert, vi } from "@effect/vitest";
+import { it, assert } from "@effect/vitest";
+import { vi } from "vitest";
 
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";

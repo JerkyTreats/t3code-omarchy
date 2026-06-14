@@ -3,7 +3,8 @@ import {
   ProviderDriverKind,
   type ServerProvider,
 } from "@t3tools/contracts";
-import { it, assert, vi } from "@effect/vitest";
+import { it, assert } from "@effect/vitest";
+import { vi } from "vitest";
 
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
