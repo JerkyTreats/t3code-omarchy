@@ -1,0 +1,129 @@
+name: Build Desktop Artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_version:
+        description: "Optional desktop artifact version. Defaults to the server package version."
+        required: false
+        type: string
+      build_macos:
+        description: "Build macOS DMG artifacts."
+        required: true
+        type: boolean
+        default: true
+      build_linux:
+        description: "Build Linux AppImage artifacts."
+        required: true
+        type: boolean
+        default: true
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-artifacts-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos-dmg:
+    name: Build macOS DMG ${{ matrix.arch }}
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.build_macos }}
+    runs-on: macos-15
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - arm64
+          - x64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.24.0
+          run_install: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24.13.1
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build DMG
+        env:
+          INPUT_BUILD_VERSION: ${{ inputs.build_version || '' }}
+          T3CODE_DESKTOP_OUTPUT_DIR: release/macos-${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          if [[ -n "${INPUT_BUILD_VERSION:-}" ]]; then
+            export T3CODE_DESKTOP_VERSION="${INPUT_BUILD_VERSION}"
+          fi
+
+          pnpm dist:desktop:dmg:${{ matrix.arch }}
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: t3code-macos-${{ matrix.arch }}
+          path: release/macos-${{ matrix.arch }}/**
+          if-no-files-found: error
+
+  linux-appimage:
+    name: Build Linux AppImage x64
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.build_linux }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends python3 make g++ libarchive-tools
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.24.0
+          run_install: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24.13.1
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build AppImage
+        env:
+          INPUT_BUILD_VERSION: ${{ inputs.build_version || '' }}
+          T3CODE_DESKTOP_OUTPUT_DIR: release/linux-x64
+        run: |
+          set -euo pipefail
+          if [[ -n "${INPUT_BUILD_VERSION:-}" ]]; then
+            export T3CODE_DESKTOP_VERSION="${INPUT_BUILD_VERSION}"
+          fi
+
+          pnpm dist:desktop:linux
+
+      - name: Upload AppImage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: t3code-linux-x64
+          path: release/linux-x64/**
+          if-no-files-found: error
