@@ -578,6 +578,10 @@ async function captureWithOmarchy(command: string): Promise<DesktopScreenshotCap
       directoryWatcher = FSNative.watch(outputDirectory, () => {
         void checkForArtifact();
       });
+      directoryWatcher.on("error", () => {
+        directoryWatcher?.close();
+        directoryWatcher = null;
+      });
     } catch {
       directoryWatcher = null;
     }

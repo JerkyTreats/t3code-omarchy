@@ -25,7 +25,7 @@ const repoRoot = resolve(desktopDir, "..", "..");
 export const APP_DISPLAY_NAME = isDevelopment ? "T3 Code Omarchy (Dev)" : "T3 Code Omarchy (Alpha)";
 export const APP_BUNDLE_ID = isDevelopment ? "com.t3tools.t3code.dev" : "com.t3tools.t3code";
 const APP_PROTOCOL_SCHEMES = isDevelopment ? ["t3code-dev"] : ["t3code"];
-const LAUNCHER_VERSION = 10;
+const LAUNCHER_VERSION = 11;
 const defaultIconPath = join(desktopDir, "resources", "icon.icns");
 const developmentMacIconPngPath = join(repoRoot, "assets", "dev", "blueprint-macos-1024.png");
 
@@ -90,10 +90,9 @@ function shellSingleQuote(value) {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
-function writeDevelopmentLauncherScript(targetBinaryPath, electronBinaryPath) {
-  const mainEntryPath = join(desktopDir, "dist-electron", "main.cjs");
+function resolveDevelopmentLauncherEnvEntries() {
   const protocolCallbackUrl = `http://127.0.0.1:${resolveDevelopmentProtocolCallbackPort()}/auth/callback`;
-  const envEntries = [
+  return [
     ["VITE_DEV_SERVER_URL", process.env.VITE_DEV_SERVER_URL],
     ["T3CODE_PORT", process.env.T3CODE_PORT],
     ["T3CODE_HOME", process.env.T3CODE_HOME],
@@ -104,6 +103,11 @@ function writeDevelopmentLauncherScript(targetBinaryPath, electronBinaryPath) {
     ["T3CODE_DESKTOP_PROTOCOL_REGISTRATION_MANAGED", "1"],
     ["T3CODE_DESKTOP_PROTOCOL_CALLBACK_URL", protocolCallbackUrl],
   ].filter((entry) => typeof entry[1] === "string" && entry[1].trim().length > 0);
+}
+
+function writeDevelopmentLauncherScript(targetBinaryPath, electronBinaryPath) {
+  const mainEntryPath = join(desktopDir, "dist-electron", "main.cjs");
+  const envEntries = resolveDevelopmentLauncherEnvEntries();
   writeFileSync(
     targetBinaryPath,
     [
@@ -277,6 +281,9 @@ function buildMacLauncher(electronBinaryPath) {
     iconMtimeMs: statSync(iconPath).mtimeMs,
     appBundleId: APP_BUNDLE_ID,
     appProtocolSchemes: APP_PROTOCOL_SCHEMES,
+    ...(isDevelopment
+      ? { developmentLauncherEnvEntries: resolveDevelopmentLauncherEnvEntries() }
+      : {}),
   };
 
   const currentMetadata = readJson(metadataPath);
@@ -290,7 +297,7 @@ function buildMacLauncher(electronBinaryPath) {
   }
 
   rmSync(targetAppBundlePath, { recursive: true, force: true });
-  cpSync(sourceAppBundlePath, targetAppBundlePath, { recursive: true });
+  cpSync(sourceAppBundlePath, targetAppBundlePath, { recursive: true, verbatimSymlinks: true });
   patchMainBundleInfoPlist(targetAppBundlePath, iconPath);
   patchHelperBundleInfoPlists(targetAppBundlePath);
   if (isDevelopment) {

@@ -15,6 +15,8 @@ const { mockedHomedir, readImageMock, spawnMock } = vi.hoisted(() => ({
   spawnMock: vi.fn(),
 }));
 
+const originalPlatform = process.platform;
+
 vi.mock("electron", () => ({
   clipboard: {
     readImage: readImageMock,
@@ -102,6 +104,10 @@ describe("captureDesktopScreenshot", () => {
   const tempDirectories: string[] = [];
 
   beforeEach(() => {
+    Object.defineProperty(process, "platform", {
+      configurable: true,
+      value: "linux",
+    });
     vi.resetModules();
     mockedHomedir.mockReset();
     readImageMock.mockReset();
@@ -141,6 +147,10 @@ describe("captureDesktopScreenshot", () => {
         .splice(0)
         .map((directoryPath) => FS.rm(directoryPath, { recursive: true, force: true })),
     );
+    Object.defineProperty(process, "platform", {
+      configurable: true,
+      value: originalPlatform,
+    });
   });
 
   it("uses Omarchy smart mode and the configured screenshot directory", async () => {

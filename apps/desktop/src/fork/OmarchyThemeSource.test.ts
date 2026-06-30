@@ -10,6 +10,8 @@ const { mockedHomedir } = vi.hoisted(() => ({
   mockedHomedir: vi.fn(),
 }));
 
+const originalPlatform = process.platform;
+
 vi.mock("node:os", async () => {
   const actual = await vi.importActual<typeof import("node:os")>("node:os");
   return {
@@ -22,6 +24,10 @@ describe("OmarchyThemeSource", () => {
   const tempDirectories: string[] = [];
 
   beforeEach(() => {
+    Object.defineProperty(process, "platform", {
+      configurable: true,
+      value: "linux",
+    });
     vi.resetModules();
     mockedHomedir.mockReset();
   });
@@ -32,6 +38,10 @@ describe("OmarchyThemeSource", () => {
         .splice(0)
         .map((directoryPath) => FS.rm(directoryPath, { recursive: true, force: true })),
     );
+    Object.defineProperty(process, "platform", {
+      configurable: true,
+      value: originalPlatform,
+    });
   });
 
   async function writeTheme(
